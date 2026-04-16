@@ -20,14 +20,14 @@ struct TodoListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Image(systemName: "checklist").font(.caption).foregroundStyle(.secondary)
+                Image(systemName: "checklist").font(.caption).foregroundStyle(.primary)
                 Text("Tasks").font(.caption).fontWeight(.medium).foregroundStyle(.secondary)
             }
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 HStack(spacing: 8) {
                     Image(systemName: item.icon)
                         .font(.caption)
-                        .foregroundStyle(item.icon == "checkmark.circle.fill" ? .green : item.icon == "arrow.triangle.2.circlepath" ? .orange : .secondary)
+                        .foregroundStyle(.primary)
                     Text(item.label)
                         .font(.subheadline)
                         .strikethrough(item.icon == "checkmark.circle.fill")
@@ -37,6 +37,6 @@ struct TodoListView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+        .liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: false)
     }
 }

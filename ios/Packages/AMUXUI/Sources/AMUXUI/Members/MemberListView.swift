@@ -116,7 +116,7 @@ public struct MemberListView: View {
         } label: {
             HStack {
                 Image(systemName: selectedIDs.contains(member.memberId) ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selectedIDs.contains(member.memberId) ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(.primary)
                     .font(.title3)
                 MemberRow(member: member)
             }
@@ -138,7 +138,7 @@ private struct MemberRow: View {
             }
             Spacer()
             if member.isOwner {
-                Image(systemName: "crown.fill").foregroundStyle(.orange).font(.caption)
+                Image(systemName: "crown.fill").foregroundStyle(.primary).font(.caption)
             }
         }
     }

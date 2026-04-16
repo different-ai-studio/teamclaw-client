@@ -20,7 +20,7 @@ public struct PermissionBannerView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "lock.shield").foregroundStyle(.orange)
+                Image(systemName: "lock.shield").foregroundStyle(.primary)
                 Text("Permission Request").font(.subheadline).fontWeight(.semibold)
             }
             Text("\(toolName): \(description)").font(.caption).foregroundStyle(.secondary)
@@ -28,7 +28,7 @@ public struct PermissionBannerView: View {
             if isResolved {
                 HStack(spacing: 6) {
                     Image(systemName: wasGranted == true ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundStyle(wasGranted == true ? .green : .red)
+                        .foregroundStyle(.primary)
                     Text(wasGranted == true ? "Allowed" : "Denied")
                         .font(.subheadline).fontWeight(.medium)
                         .foregroundStyle(wasGranted == true ? .green : .red)
@@ -37,17 +37,17 @@ public struct PermissionBannerView: View {
                 HStack(spacing: 12) {
                     Button { onDeny?(requestId) } label: {
                         Text("Deny").font(.subheadline).fontWeight(.medium).frame(maxWidth: .infinity)
-                            .padding(.vertical, 8).background(Color.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
-                            .foregroundStyle(.red)
+                            .padding(.vertical, 8)
+                            .liquidGlass(in: RoundedRectangle(cornerRadius: 8), interactive: false)
                     }
                     Button { onGrant?(requestId) } label: {
                         Text("Allow").font(.subheadline).fontWeight(.medium).frame(maxWidth: .infinity)
-                            .padding(.vertical, 8).background(Color.green.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
-                            .foregroundStyle(.green)
+                            .padding(.vertical, 8)
+                            .liquidGlass(in: RoundedRectangle(cornerRadius: 8), interactive: false)
                     }
                 }
             }
         }
-        .padding(12).background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .padding(12).liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: false)
     }
 }

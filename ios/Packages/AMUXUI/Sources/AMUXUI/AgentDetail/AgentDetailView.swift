@@ -47,10 +47,10 @@ public struct AgentDetailView: View {
                     Image(systemName: "wifi.slash").font(.caption)
                     Text("Daemon offline").font(.caption)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
-                .background(Color.orange)
+                .liquidGlass(in: Rectangle(), interactive: false)
             }
 
             ScrollViewReader { proxy in
@@ -128,7 +128,7 @@ public struct AgentDetailView: View {
                 if viewModel.agent.isActive {
                     Button { Task { try? await viewModel.cancelTask() } } label: {
                         Image(systemName: "stop.fill")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(.primary)
                     }
                 } else {
                     Button { showReplySheet = true } label: {
@@ -162,6 +162,7 @@ public struct AgentDetailView: View {
                 collaborators = selected
             }
         }
+        .tint(.primary)
         .task { viewModel.start(modelContext: modelContext) }
         .onDisappear { viewModel.stop() }
     }
@@ -243,7 +244,7 @@ private struct ReplySheet: View {
                                 }
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
-                                .background(Color(.systemGray5), in: Capsule())
+                                .liquidGlass(in: Capsule(), interactive: false)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -289,7 +290,7 @@ private struct ReplySheet: View {
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(canSend ? .orange : Color(.systemGray4))
+                            .foregroundStyle(canSend ? .primary : Color(.systemGray4))
                     }
                     .disabled(!canSend)
                 }

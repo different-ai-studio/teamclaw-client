@@ -67,7 +67,7 @@ public struct CollabSessionView: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .liquidGlass(in: Capsule(), interactive: false)
                 }
             }
             .padding(.horizontal)
@@ -82,7 +82,7 @@ public struct CollabSessionView: View {
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+                .liquidGlass(in: RoundedRectangle(cornerRadius: 20))
 
             Button {
                 guard !promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
@@ -116,11 +116,7 @@ struct CollabMessageBubble: View {
                 Text(message.content)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(
-                        message.isSystem ? Color.yellow.opacity(0.15) :
-                        isMe ? Color.blue.opacity(0.15) : Color(.systemGray5),
-                        in: RoundedRectangle(cornerRadius: 16)
-                    )
+                    .liquidGlass(in: RoundedRectangle(cornerRadius: 16), interactive: false)
                     .font(message.isSystem ? .callout.italic() : .body)
             }
 

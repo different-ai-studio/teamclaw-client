@@ -25,11 +25,11 @@ public struct ToolCallView: View {
                     Image(systemName: "chevron.right")
                         .font(.caption2)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary)
 
                     Image(systemName: toolIcon)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary)
 
                     Text(displayName)
                         .font(.caption)
@@ -72,8 +72,7 @@ public struct ToolCallView: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .liquidGlass(in: RoundedRectangle(cornerRadius: 8), interactive: false)
     }
 
     private var toolIcon: String {
@@ -105,11 +104,11 @@ public struct ToolCallView: View {
         case "completed":
             Image(systemName: "checkmark.circle.fill")
                 .font(.caption2)
-                .foregroundStyle(.green)
+                .foregroundStyle(.primary)
         case "failed":
             Image(systemName: "xmark.circle.fill")
                 .font(.caption2)
-                .foregroundStyle(.red)
+                .foregroundStyle(.primary)
         default:
             EmptyView()
         }

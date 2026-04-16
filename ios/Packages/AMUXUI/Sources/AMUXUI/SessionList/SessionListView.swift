@@ -165,7 +165,7 @@ private struct SessionListContent: View {
         HStack(spacing: 10) {
             if isEditing {
                 Image(systemName: selectedIDs.contains(agent.agentId) ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selectedIDs.contains(agent.agentId) ? .blue : .secondary)
+                    .foregroundStyle(.primary)
                     .font(.title3)
                     .onTapGesture { toggleSelection(agent.agentId) }
             }
@@ -306,10 +306,10 @@ struct ConnectionBanner: View {
             Image(systemName: icon).font(.caption)
             Text(text).font(.caption).fontWeight(.medium)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(.primary)
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
-        .liquidGlass(in: Capsule(), tint: color)
+        .liquidGlass(in: Capsule())
         .padding(.vertical, 4)
     }
 }
@@ -323,7 +323,7 @@ public struct StatusBadge: View {
         Text(label).font(.caption2).fontWeight(.medium)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .foregroundStyle(color)
-            .liquidGlass(in: Capsule(), tint: color, interactive: false)
+            .liquidGlass(in: Capsule(), interactive: false)
     }
     private var label: String {
         switch status { case 1: "Starting"; case 2: "Active"; case 3: "Idle"; case 4: "Error"; case 5: "Stopped"; default: "Unknown" }
@@ -364,7 +364,7 @@ private struct MailStyleBottomBar: View {
             // Center: search capsule
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
                     .font(.subheadline)
                 TextField("Search", text: $searchText)
                     .font(.subheadline)

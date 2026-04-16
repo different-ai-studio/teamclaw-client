@@ -212,12 +212,12 @@ public struct NewSessionSheet: View {
                                 .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
-                        .liquidGlass(in: Circle(), tint: .green)
+                        .liquidGlass(in: Circle())
                         .padding(.trailing, 6)
                         .padding(.bottom, 6)
                     }
                 }
-                .liquidGlass(in: Capsule(), interactive: false)
+                .liquidGlass(in: Capsule())
             }
         }
         .padding(.horizontal, 16)

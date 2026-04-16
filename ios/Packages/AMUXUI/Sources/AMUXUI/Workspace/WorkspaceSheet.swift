@@ -70,7 +70,7 @@ public struct WorkspaceSheet: View {
                         .autocorrectionDisabled()
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .background(Color(.systemGray6), in: Capsule())
+                        .liquidGlass(in: Capsule())
 
                     if !newPath.trimmingCharacters(in: .whitespaces).isEmpty {
                         Button(action: addWorkspace) {
