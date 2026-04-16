@@ -9,6 +9,7 @@ public final class TeamclawService {
     public var isConnected = false
 
     private var mqtt: MQTTService?
+    public var mqttRef: MQTTService? { mqtt }
     private var teamId: String = ""
     private var deviceId: String = ""
     private var peerId: String = ""
@@ -213,7 +214,32 @@ public final class TeamclawService {
 
     private func handleInvite(_ invite: Teamclaw_Invite) {
         print("[TeamclawService] received invite for session: \(invite.sessionID)")
-        subscribeToSession(invite.sessionID)
+        guard let mqtt else { return }
+        let sid = invite.sessionID
+        subscribeToSession(sid)
+
+        // Send JoinSessionRequest RPC to session host
+        var participant = Teamclaw_Participant()
+        participant.actorID = peerId
+        participant.actorType = .human
+        participant.displayName = peerId
+        participant.joinedAt = Int64(Date().timeIntervalSince1970)
+
+        var joinReq = Teamclaw_JoinSessionRequest()
+        joinReq.sessionID = sid
+        joinReq.participant = participant
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8).lowercased())
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .joinSession(joinReq)
+
+        let topic = "teamclaw/\(teamId)/rpc/\(invite.hostDeviceID)/\(rpcReq.requestID)/req"
+        if let data = try? rpcReq.serializedData() {
+            Task {
+                try? await mqtt.publish(topic: topic, payload: data, retain: false)
+            }
+        }
     }
 
     private func syncWorkItemEvent(_ event: Teamclaw_WorkItemEvent, modelContext: ModelContext) {
