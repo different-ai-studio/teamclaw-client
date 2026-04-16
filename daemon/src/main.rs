@@ -6,6 +6,7 @@ mod daemon;
 mod error;
 mod mqtt;
 mod proto;
+mod teamclaw;
 
 use clap::Parser;
 use cli::{Cli, Commands, MemberAction, TestClientAction};

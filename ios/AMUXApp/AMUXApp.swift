@@ -10,6 +10,6 @@ struct AMUXApp: App {
         WindowGroup {
             ContentView(pairing: pairing)
         }
-        .modelContainer(for: [Agent.self, AgentEvent.self, Member.self, Workspace.self])
+        .modelContainer(for: [Agent.self, AgentEvent.self, Member.self, Workspace.self, CollabSession.self, SessionMessage.self, WorkItem.self])
     }
 }
