@@ -1,0 +1,252 @@
+syntax = "proto3";
+package teamclaw;
+
+// --- Enums ---
+
+enum SessionType {
+  SESSION_TYPE_UNKNOWN = 0;
+  CONTROL = 1;
+  COLLAB = 2;
+}
+
+enum ActorType {
+  ACTOR_TYPE_UNKNOWN = 0;
+  HUMAN = 1;
+  PERSONAL_AGENT = 2;
+  ROLE_AGENT = 3;
+}
+
+enum MessageKind {
+  MESSAGE_KIND_UNKNOWN = 0;
+  TEXT = 1;
+  SYSTEM = 2;
+  WORK_EVENT = 3;
+}
+
+enum WorkItemStatus {
+  WORK_ITEM_STATUS_UNKNOWN = 0;
+  OPEN = 1;
+  IN_PROGRESS = 2;
+  DONE = 3;
+}
+
+// --- Core Types ---
+
+message Actor {
+  string actor_id = 1;
+  ActorType actor_type = 2;
+  string display_name = 3;
+  string owner_member_id = 4;
+  string host_device_id = 5;
+}
+
+message SessionInfo {
+  string session_id = 1;
+  SessionType session_type = 2;
+  string team_id = 3;
+  string title = 4;
+  string host_device_id = 5;
+  string created_by = 6;
+  int64 created_at = 7;
+  repeated Participant participants = 8;
+  string summary = 9;
+}
+
+message Participant {
+  string actor_id = 1;
+  ActorType actor_type = 2;
+  string display_name = 3;
+  int64 joined_at = 4;
+}
+
+message SessionIndexEntry {
+  string session_id = 1;
+  SessionType session_type = 2;
+  string title = 3;
+  string host_device_id = 4;
+  int64 created_at = 5;
+  int32 participant_count = 6;
+  string last_message_preview = 7;
+  int64 last_message_at = 8;
+}
+
+message SessionIndex {
+  repeated SessionIndexEntry sessions = 1;
+}
+
+message Message {
+  string message_id = 1;
+  string session_id = 2;
+  string sender_actor_id = 3;
+  MessageKind kind = 4;
+  string content = 5;
+  int64 created_at = 6;
+  string reply_to_message_id = 7;
+  repeated string mentions = 8;
+}
+
+message WorkItem {
+  string work_item_id = 1;
+  string session_id = 2;
+  string title = 3;
+  string description = 4;
+  WorkItemStatus status = 5;
+  string parent_id = 6;
+  string created_by = 7;
+  int64 created_at = 8;
+  repeated Claim claims = 9;
+  repeated Submission submissions = 10;
+}
+
+message Claim {
+  string claim_id = 1;
+  string work_item_id = 2;
+  string actor_id = 3;
+  int64 claimed_at = 4;
+}
+
+message Submission {
+  string submission_id = 1;
+  string work_item_id = 2;
+  string actor_id = 3;
+  string content = 4;
+  int64 submitted_at = 5;
+}
+
+message Invite {
+  string invite_id = 1;
+  string session_id = 2;
+  string team_id = 3;
+  string host_device_id = 4;
+  string invited_by = 5;
+  string invited_actor_id = 6;
+  string session_title = 7;
+  string summary = 8;
+  int64 created_at = 9;
+}
+
+// --- MQTT Messages ---
+
+message SessionMessageEnvelope {
+  Message message = 1;
+}
+
+message SessionMetaEnvelope {
+  SessionInfo session = 1;
+}
+
+message WorkItemEvent {
+  oneof event {
+    WorkItem created = 1;
+    WorkItem updated = 2;
+    Claim claimed = 3;
+    Submission submitted = 4;
+  }
+}
+
+message PresenceList {
+  repeated PresenceEntry entries = 1;
+}
+
+message PresenceEntry {
+  string actor_id = 1;
+  bool online = 2;
+  int64 last_seen = 3;
+}
+
+message InviteEnvelope {
+  Invite invite = 1;
+}
+
+message TeamMemberList {
+  string team_id = 1;
+  repeated Actor members = 2;
+}
+
+// --- RPC ---
+
+message RpcRequest {
+  string request_id = 1;
+  string sender_device_id = 2;
+  oneof method {
+    CreateSessionRequest create_session = 10;
+    JoinSessionRequest join_session = 11;
+    FetchSessionRequest fetch_session = 12;
+    AddParticipantRequest add_participant = 13;
+    RemoveParticipantRequest remove_participant = 14;
+    CreateWorkItemRequest create_work_item = 15;
+    ClaimWorkItemRequest claim_work_item = 16;
+    SubmitWorkItemRequest submit_work_item = 17;
+    UpdateWorkItemRequest update_work_item = 18;
+    RegisterSessionRequest register_session = 19;
+  }
+}
+
+message RpcResponse {
+  string request_id = 1;
+  bool success = 2;
+  string error = 3;
+  oneof result {
+    SessionInfo session_info = 10;
+    WorkItem work_item = 11;
+    Claim claim = 12;
+    Submission submission = 13;
+  }
+}
+
+message CreateSessionRequest {
+  SessionType session_type = 1;
+  string team_id = 2;
+  string title = 3;
+  string summary = 4;
+  repeated string invite_actor_ids = 5;
+}
+
+message JoinSessionRequest {
+  string session_id = 1;
+  Participant participant = 2;
+}
+
+message FetchSessionRequest {
+  string session_id = 1;
+}
+
+message AddParticipantRequest {
+  string session_id = 1;
+  Participant participant = 2;
+}
+
+message RemoveParticipantRequest {
+  string session_id = 1;
+  string actor_id = 2;
+}
+
+message CreateWorkItemRequest {
+  string session_id = 1;
+  string title = 2;
+  string description = 3;
+  string parent_id = 4;
+}
+
+message ClaimWorkItemRequest {
+  string session_id = 1;
+  string work_item_id = 2;
+}
+
+message SubmitWorkItemRequest {
+  string session_id = 1;
+  string work_item_id = 2;
+  string content = 3;
+}
+
+message UpdateWorkItemRequest {
+  string session_id = 1;
+  string work_item_id = 2;
+  WorkItemStatus status = 3;
+  string title = 4;
+  string description = 5;
+}
+
+message RegisterSessionRequest {
+  SessionIndexEntry entry = 1;
+}

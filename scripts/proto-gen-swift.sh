@@ -7,5 +7,6 @@ protoc \
   --swift_out="$OUT_DIR" \
   --swift_opt=Visibility=Public \
   --proto_path="$PROTO_DIR" \
-  "$PROTO_DIR/amux.proto"
+  "$PROTO_DIR/amux.proto" \
+  "$PROTO_DIR/teamclaw.proto"
 echo "✓ Swift proto generated in $OUT_DIR"

@@ -30,6 +30,20 @@ impl_encode!(
     amux::WorkspaceList
 );
 
+pub mod teamclaw {
+    include!(concat!(env!("OUT_DIR"), "/teamclaw.rs"));
+}
+
+impl_encode!(teamclaw::SessionMessageEnvelope);
+impl_encode!(teamclaw::SessionMetaEnvelope);
+impl_encode!(teamclaw::WorkItemEvent);
+impl_encode!(teamclaw::PresenceList);
+impl_encode!(teamclaw::InviteEnvelope);
+impl_encode!(teamclaw::TeamMemberList);
+impl_encode!(teamclaw::SessionIndex);
+impl_encode!(teamclaw::RpcRequest);
+impl_encode!(teamclaw::RpcResponse);
+
 impl amux::CommandEnvelope {
     pub fn decode_from(buf: &[u8]) -> crate::error::Result<Self> {
         Ok(Self::decode(buf)?)
