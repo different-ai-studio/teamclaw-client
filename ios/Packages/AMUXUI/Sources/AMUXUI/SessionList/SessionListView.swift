@@ -413,24 +413,13 @@ private struct MailStyleBottomBar: View {
 
 private struct GlassToolbarButtonModifier: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.glassEffect(.regular.interactive(), in: .circle)
-        } else {
-            content
-        }
+        content.liquidGlass(in: Circle(), interactive: true)
     }
 }
 
 private struct GlassCapsuleModifier: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-                .background(.clear)
-                .glassEffect(.regular.interactive(), in: .capsule)
-        } else {
-            content
-                .background(Color(.systemGray5), in: Capsule())
-        }
+        content.liquidGlass(in: Capsule(), interactive: true)
     }
 }
 

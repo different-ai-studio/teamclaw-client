@@ -8,6 +8,7 @@ extension View {
         in shape: S,
         interactive: Bool = true
     ) -> some View {
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             if interactive {
                 self.glassEffect(.regular.interactive(), in: shape)
@@ -23,6 +24,15 @@ extension View {
                 }
                 .shadow(color: .black.opacity(0.08), radius: 10, y: 3)
         }
+        #else
+        self
+            .background {
+                shape
+                    .fill(.gray.opacity(0.14))
+                    .background(.ultraThinMaterial, in: shape)
+            }
+            .shadow(color: .black.opacity(0.08), radius: 10, y: 3)
+        #endif
     }
 }
 
@@ -39,6 +49,7 @@ struct LiquidGlassContainer<Content: View>: View {
 
     @ViewBuilder
     var body: some View {
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             GlassEffectContainer(spacing: spacing) {
                 content
@@ -46,6 +57,9 @@ struct LiquidGlassContainer<Content: View>: View {
         } else {
             content
         }
+        #else
+        content
+        #endif
     }
 }
 
