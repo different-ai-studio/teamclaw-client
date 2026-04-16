@@ -27,7 +27,7 @@ public struct EventBubbleView: View {
         case "tool_use":
             toolUseBlock
         case "tool_result":
-            toolResultBlock
+            EmptyView()
         case "error":
             errorBlock
         case "permission_request":

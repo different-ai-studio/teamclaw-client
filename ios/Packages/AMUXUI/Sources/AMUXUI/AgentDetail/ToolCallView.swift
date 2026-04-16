@@ -35,6 +35,7 @@ public struct ToolCallView: View {
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
+                        .lineLimit(1)
 
                     if !description.isEmpty && !isExpanded {
                         Text(description)
@@ -88,10 +89,12 @@ public struct ToolCallView: View {
 
     private var displayName: String {
         let name = toolName.isEmpty ? toolId : toolName
+        // Extract last segment after "__" (e.g. mcp__plugin__tool_name → tool_name)
         if let range = name.range(of: "__", options: .backwards) {
-            return String(name[range.upperBound...])
+            let short = String(name[range.upperBound...])
+            return String(short.prefix(30))
         }
-        return name
+        return String(name.prefix(30))
     }
 
     @ViewBuilder
@@ -104,11 +107,11 @@ public struct ToolCallView: View {
         case "completed":
             Image(systemName: "checkmark.circle.fill")
                 .font(.caption2)
-                .foregroundStyle(.primary)
+                .foregroundStyle(.green)
         case "failed":
             Image(systemName: "xmark.circle.fill")
                 .font(.caption2)
-                .foregroundStyle(.primary)
+                .foregroundStyle(.red)
         default:
             EmptyView()
         }
