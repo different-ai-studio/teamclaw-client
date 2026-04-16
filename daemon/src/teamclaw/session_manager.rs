@@ -13,9 +13,9 @@ pub struct SessionManager {
     topics: TeamclawTopics,
     client: AsyncClient,
     rpc_server: RpcServer,
-    sessions: TeamclawSessionStore,
+    pub(crate) sessions: TeamclawSessionStore,
     sessions_path: PathBuf,
-    config_dir: PathBuf,
+    pub(crate) config_dir: PathBuf,
     device_id: String,
     team_id: String,
     is_team_host: bool,
@@ -1013,4 +1013,311 @@ fn work_item_status_to_string(status: i32) -> String {
         _ => "unknown",
     }
     .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::teamclaw::{StoredClaim, StoredCollabSession, StoredParticipant, WorkItemStore};
+    use chrono::Utc;
+    use std::path::Path;
+    use tempfile::TempDir;
+
+    fn dummy_session_manager(config_dir: &Path) -> SessionManager {
+        let (client, _eventloop) = rumqttc::AsyncClient::new(
+            rumqttc::MqttOptions::new("test", "localhost", 1883),
+            10,
+        );
+        SessionManager::new(
+            client,
+            "team1",
+            "dev-a",
+            config_dir.to_path_buf(),
+            false,
+            None,
+        )
+        .unwrap()
+    }
+
+    fn make_session(id: &str) -> StoredCollabSession {
+        StoredCollabSession {
+            session_id: id.to_string(),
+            session_type: "collab".to_string(),
+            team_id: "team1".to_string(),
+            title: format!("Session {}", id),
+            host_device_id: "dev-a".to_string(),
+            created_by: "user1".to_string(),
+            created_at: Utc::now(),
+            summary: String::new(),
+            participants: vec![],
+        }
+    }
+
+    fn make_agent_participant(actor_id: &str) -> StoredParticipant {
+        StoredParticipant {
+            actor_id: actor_id.to_string(),
+            actor_type: "personal_agent".to_string(),
+            display_name: actor_id.to_string(),
+            joined_at: Utc::now(),
+        }
+    }
+
+    fn make_human_participant(actor_id: &str) -> StoredParticipant {
+        StoredParticipant {
+            actor_id: actor_id.to_string(),
+            actor_type: "human".to_string(),
+            display_name: actor_id.to_string(),
+            joined_at: Utc::now(),
+        }
+    }
+
+    fn make_message(session_id: &str, mentions: Vec<String>) -> teamclaw::Message {
+        teamclaw::Message {
+            message_id: "msg1".to_string(),
+            session_id: session_id.to_string(),
+            sender_actor_id: "human1".to_string(),
+            kind: teamclaw::MessageKind::Text as i32,
+            content: "hello".to_string(),
+            created_at: Utc::now().timestamp(),
+            mentions,
+            ..Default::default()
+        }
+    }
+
+    // --- agents_to_activate tests ---
+
+    #[test]
+    fn test_agents_to_activate_no_session() {
+        let tmp = TempDir::new().unwrap();
+        let sm = dummy_session_manager(tmp.path());
+        let msg = make_message("nonexistent", vec![]);
+        let result = sm.agents_to_activate("nonexistent", &msg);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_agents_to_activate_session_no_agents() {
+        let tmp = TempDir::new().unwrap();
+        let mut sm = dummy_session_manager(tmp.path());
+
+        let mut session = make_session("s1");
+        session.participants.push(make_human_participant("human1"));
+        sm.sessions.upsert(session);
+
+        let msg = make_message("s1", vec![]);
+        let result = sm.agents_to_activate("s1", &msg);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_agents_to_activate_sole_agent_gets_all_messages() {
+        let tmp = TempDir::new().unwrap();
+        let mut sm = dummy_session_manager(tmp.path());
+
+        let mut session = make_session("s1");
+        session.participants.push(make_human_participant("human1"));
+        session.participants.push(make_agent_participant("agent1"));
+        sm.sessions.upsert(session);
+
+        // No mentions — sole agent still receives it
+        let msg = make_message("s1", vec![]);
+        let result = sm.agents_to_activate("s1", &msg);
+        assert_eq!(result, vec!["agent1".to_string()]);
+    }
+
+    #[test]
+    fn test_agents_to_activate_two_agents_mentioned_one() {
+        let tmp = TempDir::new().unwrap();
+        let mut sm = dummy_session_manager(tmp.path());
+
+        let mut session = make_session("s1");
+        session.participants.push(make_agent_participant("agent1"));
+        session.participants.push(make_agent_participant("agent2"));
+        sm.sessions.upsert(session);
+
+        let msg = make_message("s1", vec!["agent1".to_string()]);
+        let result = sm.agents_to_activate("s1", &msg);
+        assert_eq!(result, vec!["agent1".to_string()]);
+    }
+
+    #[test]
+    fn test_agents_to_activate_two_agents_no_mention_returns_empty() {
+        let tmp = TempDir::new().unwrap();
+        let mut sm = dummy_session_manager(tmp.path());
+
+        let mut session = make_session("s1");
+        session.participants.push(make_agent_participant("agent1"));
+        session.participants.push(make_agent_participant("agent2"));
+        sm.sessions.upsert(session);
+
+        let msg = make_message("s1", vec![]);
+        let result = sm.agents_to_activate("s1", &msg);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_agents_to_activate_sender_is_agent_still_returned() {
+        // Filtering out the sender happens in server.rs, not here.
+        // The method should still return the agent even if they sent the message.
+        let tmp = TempDir::new().unwrap();
+        let mut sm = dummy_session_manager(tmp.path());
+
+        let mut session = make_session("s1");
+        session.participants.push(make_agent_participant("agent1"));
+        sm.sessions.upsert(session);
+
+        let mut msg = make_message("s1", vec![]);
+        msg.sender_actor_id = "agent1".to_string();
+
+        let result = sm.agents_to_activate("s1", &msg);
+        assert_eq!(result, vec!["agent1".to_string()]);
+    }
+
+    // --- agents_to_activate_for_work_item tests ---
+
+    #[test]
+    fn test_work_item_claimed_returns_claimant() {
+        let tmp = TempDir::new().unwrap();
+        let sm = dummy_session_manager(tmp.path());
+
+        let claim = teamclaw::Claim {
+            claim_id: "c1".to_string(),
+            work_item_id: "w1".to_string(),
+            actor_id: "agent1".to_string(),
+            claimed_at: Utc::now().timestamp(),
+        };
+        let event = teamclaw::WorkItemEvent {
+            event: Some(teamclaw::work_item_event::Event::Claimed(claim)),
+        };
+
+        let result = sm.agents_to_activate_for_work_item("s1", &event);
+        assert_eq!(result, vec!["agent1".to_string()]);
+    }
+
+    #[test]
+    fn test_work_item_updated_returns_all_claimants() {
+        let tmp = TempDir::new().unwrap();
+        let sm = dummy_session_manager(tmp.path());
+
+        // Set up WorkItemStore on disk with two claims for "w1"
+        let mut store = WorkItemStore::default();
+        store.claims.push(StoredClaim {
+            claim_id: "c1".to_string(),
+            work_item_id: "w1".to_string(),
+            actor_id: "agent1".to_string(),
+            claimed_at: Utc::now(),
+        });
+        store.claims.push(StoredClaim {
+            claim_id: "c2".to_string(),
+            work_item_id: "w1".to_string(),
+            actor_id: "agent2".to_string(),
+            claimed_at: Utc::now(),
+        });
+        store.save(tmp.path(), "s1").unwrap();
+
+        let work_item = teamclaw::WorkItem {
+            work_item_id: "w1".to_string(),
+            session_id: "s1".to_string(),
+            ..Default::default()
+        };
+        let event = teamclaw::WorkItemEvent {
+            event: Some(teamclaw::work_item_event::Event::Updated(work_item)),
+        };
+
+        let mut result = sm.agents_to_activate_for_work_item("s1", &event);
+        result.sort();
+        assert_eq!(result, vec!["agent1".to_string(), "agent2".to_string()]);
+    }
+
+    #[test]
+    fn test_work_item_submitted_returns_other_claimants() {
+        let tmp = TempDir::new().unwrap();
+        let sm = dummy_session_manager(tmp.path());
+
+        // agent1 and agent2 claimed w1; agent1 submits — only agent2 should be notified
+        let mut store = WorkItemStore::default();
+        store.claims.push(StoredClaim {
+            claim_id: "c1".to_string(),
+            work_item_id: "w1".to_string(),
+            actor_id: "agent1".to_string(),
+            claimed_at: Utc::now(),
+        });
+        store.claims.push(StoredClaim {
+            claim_id: "c2".to_string(),
+            work_item_id: "w1".to_string(),
+            actor_id: "agent2".to_string(),
+            claimed_at: Utc::now(),
+        });
+        store.save(tmp.path(), "s1").unwrap();
+
+        let submission = teamclaw::Submission {
+            submission_id: "sub1".to_string(),
+            work_item_id: "w1".to_string(),
+            actor_id: "agent1".to_string(), // submitter
+            content: "done".to_string(),
+            submitted_at: Utc::now().timestamp(),
+        };
+        let event = teamclaw::WorkItemEvent {
+            event: Some(teamclaw::work_item_event::Event::Submitted(submission)),
+        };
+
+        let result = sm.agents_to_activate_for_work_item("s1", &event);
+        assert_eq!(result, vec!["agent2".to_string()]);
+    }
+
+    #[test]
+    fn test_work_item_created_returns_empty() {
+        let tmp = TempDir::new().unwrap();
+        let sm = dummy_session_manager(tmp.path());
+
+        let work_item = teamclaw::WorkItem {
+            work_item_id: "w1".to_string(),
+            session_id: "s1".to_string(),
+            ..Default::default()
+        };
+        let event = teamclaw::WorkItemEvent {
+            event: Some(teamclaw::work_item_event::Event::Created(work_item)),
+        };
+
+        let result = sm.agents_to_activate_for_work_item("s1", &event);
+        assert!(result.is_empty());
+    }
+
+    // --- sessions_for_agent tests ---
+
+    #[test]
+    fn test_sessions_for_agent_in_two_sessions() {
+        let tmp = TempDir::new().unwrap();
+        let mut sm = dummy_session_manager(tmp.path());
+
+        let mut s1 = make_session("s1");
+        s1.participants.push(make_agent_participant("agent1"));
+        sm.sessions.upsert(s1);
+
+        let mut s2 = make_session("s2");
+        s2.participants.push(make_agent_participant("agent1"));
+        sm.sessions.upsert(s2);
+
+        // s3 does not have agent1
+        let mut s3 = make_session("s3");
+        s3.participants.push(make_agent_participant("agent2"));
+        sm.sessions.upsert(s3);
+
+        let mut result = sm.sessions_for_agent("agent1");
+        result.sort();
+        assert_eq!(result, vec!["s1".to_string(), "s2".to_string()]);
+    }
+
+    #[test]
+    fn test_sessions_for_agent_not_in_any_session() {
+        let tmp = TempDir::new().unwrap();
+        let mut sm = dummy_session_manager(tmp.path());
+
+        let mut s1 = make_session("s1");
+        s1.participants.push(make_agent_participant("agent2"));
+        sm.sessions.upsert(s1);
+
+        let result = sm.sessions_for_agent("agent1");
+        assert!(result.is_empty());
+    }
 }
