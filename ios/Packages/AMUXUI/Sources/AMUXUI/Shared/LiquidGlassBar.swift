@@ -6,20 +6,29 @@ extension View {
     @ViewBuilder
     func liquidGlass<S: Shape>(
         in shape: S,
+        tint: Color? = nil,
         interactive: Bool = true
     ) -> some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             if interactive {
-                self.glassEffect(.regular.interactive(), in: shape)
+                if let tint {
+                    self.glassEffect(.regular.interactive().tint(tint), in: shape)
+                } else {
+                    self.glassEffect(.regular.interactive(), in: shape)
+                }
             } else {
-                self.glassEffect(.regular, in: shape)
+                if let tint {
+                    self.glassEffect(.regular.tint(tint), in: shape)
+                } else {
+                    self.glassEffect(.regular, in: shape)
+                }
             }
         } else {
             self
                 .background {
                     shape
-                        .fill(.gray.opacity(0.14))
+                        .fill((tint ?? .gray).opacity(0.14))
                         .background(.ultraThinMaterial, in: shape)
                 }
                 .shadow(color: .black.opacity(0.08), radius: 10, y: 3)
@@ -28,7 +37,7 @@ extension View {
         self
             .background {
                 shape
-                    .fill(.gray.opacity(0.14))
+                    .fill((tint ?? .gray).opacity(0.14))
                     .background(.ultraThinMaterial, in: shape)
             }
             .shadow(color: .black.opacity(0.08), radius: 10, y: 3)

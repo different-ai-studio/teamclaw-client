@@ -63,7 +63,7 @@ public struct NewSessionSheet: View {
                     Color.black.opacity(0.15).ignoresSafeArea()
                     ProgressView("Starting session…")
                         .padding(24)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: false)
                 }
             }
             .allowsHitTesting(!isSending)
@@ -182,36 +182,38 @@ public struct NewSessionSheet: View {
     // MARK: - Input bar
 
     private var inputBar: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            Button {} label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 20, weight: .medium))
-                    .frame(width: 40, height: 40)
-                    .liquidGlass(in: Circle())
-            }
-
-            HStack(alignment: .bottom, spacing: 4) {
-                TextField("Message", text: $messageText, axis: .vertical)
-                    .font(.body)
-                    .lineLimit(1...5)
-                    .focused($isInputFocused)
-                    .padding(.leading, 14)
-                    .padding(.trailing, 4)
-                    .padding(.vertical, 10)
-
-                if canSend {
-                    Button(action: sendAndCreate) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 32, height: 32)
-                            .background(Color.green, in: Circle())
-                    }
-                    .padding(.trailing, 6)
-                    .padding(.bottom, 6)
+        LiquidGlassContainer(spacing: 8) {
+            HStack(alignment: .bottom, spacing: 8) {
+                Button {} label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 20, weight: .medium))
+                        .frame(width: 40, height: 40)
+                        .liquidGlass(in: Circle())
                 }
+
+                HStack(alignment: .bottom, spacing: 4) {
+                    TextField("Message", text: $messageText, axis: .vertical)
+                        .font(.body)
+                        .lineLimit(1...5)
+                        .focused($isInputFocused)
+                        .padding(.leading, 14)
+                        .padding(.trailing, 4)
+                        .padding(.vertical, 10)
+
+                    if canSend {
+                        Button(action: sendAndCreate) {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 32, height: 32)
+                                .liquidGlass(in: Circle(), tint: .green)
+                        }
+                        .padding(.trailing, 6)
+                        .padding(.bottom, 6)
+                    }
+                }
+                .liquidGlass(in: Capsule(), interactive: false)
             }
-            .background(Color(.systemGray6), in: Capsule())
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -310,7 +312,7 @@ private struct CollaboratorChip: View {
         .padding(.leading, 10)
         .padding(.trailing, 6)
         .padding(.vertical, 5)
-        .background(Color(.systemGray5), in: Capsule())
         .foregroundStyle(.primary)
+        .liquidGlass(in: Capsule(), interactive: false)
     }
 }

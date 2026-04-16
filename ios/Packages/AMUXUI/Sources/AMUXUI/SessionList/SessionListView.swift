@@ -59,19 +59,28 @@ public struct SessionListView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button { showSettings = true } label: {
                         Image(systemName: "gearshape")
+                            .font(.body)
+                            .frame(width: 36, height: 36)
                     }
+                    .liquidGlass(in: Circle())
                 }
                 // Right: Workspaces
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showWorkspaces = true } label: {
                         Image(systemName: "folder")
+                            .font(.body)
+                            .frame(width: 36, height: 36)
                     }
+                    .liquidGlass(in: Circle())
                 }
-                // Right: Member
+                // Right: Members
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showMembers = true } label: {
                         Image(systemName: "person.2.fill")
+                            .font(.body)
+                            .frame(width: 36, height: 36)
                     }
+                    .liquidGlass(in: Circle())
                 }
             }
             // Bottom bar: iOS Mail style with animated search expansion
@@ -310,12 +319,13 @@ struct ConnectionBanner: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: icon).font(.caption)
-            Text(text).font(.caption)
+            Text(text).font(.caption).fontWeight(.medium)
         }
         .foregroundStyle(.white)
-        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 14)
         .padding(.vertical, 6)
-        .background(color)
+        .liquidGlass(in: Capsule(), tint: color)
+        .padding(.vertical, 4)
     }
 }
 
@@ -327,8 +337,8 @@ public struct StatusBadge: View {
     public var body: some View {
         Text(label).font(.caption2).fontWeight(.medium)
             .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(color.opacity(0.15), in: Capsule())
             .foregroundStyle(color)
+            .liquidGlass(in: Capsule(), tint: color, interactive: false)
     }
     private var label: String {
         switch status { case 1: "Starting"; case 2: "Active"; case 3: "Idle"; case 4: "Error"; case 5: "Stopped"; default: "Unknown" }
