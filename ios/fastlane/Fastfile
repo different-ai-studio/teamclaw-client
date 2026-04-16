@@ -27,6 +27,7 @@ platform :ios do
     build_app(
       project: "AMUX.xcodeproj",
       scheme: "AMUX",
+      destination: "generic/platform=iOS",
       export_method: "app-store",
       export_options: {
         provisioningProfiles: {
