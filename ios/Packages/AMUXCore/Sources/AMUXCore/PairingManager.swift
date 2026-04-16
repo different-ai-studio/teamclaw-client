@@ -43,7 +43,8 @@ public final class PairingManager {
             .replacingOccurrences(of: "mqtt://", with: "")
         let parts = hostPart.split(separator: ":")
         let host = String(parts[0])
-        let port = parts.count > 1 ? Int(parts[1]) ?? 8883 : 8883
+        let defaultPort = tls ? 8883 : 1883
+        let port = parts.count > 1 ? Int(parts[1]) ?? defaultPort : defaultPort
 
         let user = params["username"] ?? ""
         let pass = params["password"] ?? ""
