@@ -19,6 +19,15 @@ platform :ios do
 
     match(type: "appstore", readonly: true, api_key: api_key)
 
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "AMUX.xcodeproj",
+      team_id: "43G5A6G9QV",
+      bundle_identifier: "tech.teamclaw.mobile",
+      code_sign_identity: "Apple Distribution",
+      profile_name: ENV["sigh_tech.teamclaw.mobile_appstore_profile-name"],
+    )
+
     increment_build_number(
       build_number: ENV["GITHUB_RUN_NUMBER"],
       xcodeproj: "AMUX.xcodeproj",
