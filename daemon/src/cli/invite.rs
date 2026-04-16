@@ -18,6 +18,7 @@ pub fn run_invite(name: &str, expires_hours: u32, is_owner: bool) -> anyhow::Res
         display_name: name.into(),
         created_at: chrono::Utc::now(),
         expires_at,
+        role: if is_owner { "owner".into() } else { "member".into() },
     };
     store.add_invite(invite);
     store.save(&MemberStore::default_path())?;

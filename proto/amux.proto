@@ -116,7 +116,15 @@ message AcpCommand {
     AcpDenyPermission deny_permission = 4;
     AcpStartAgent start_agent = 5;
     AcpStopAgent stop_agent = 6;
+    AcpRequestHistory request_history = 7;
   }
+}
+
+// Request historical events for an agent session (incremental sync)
+message AcpRequestHistory {
+  uint64 after_sequence = 1;   // Send events with sequence > this (0 = from beginning)
+  uint32 page_size = 2;        // Max events per batch (default 50)
+  string request_id = 3;       // For correlation
 }
 
 message AcpSendPrompt {
@@ -152,7 +160,16 @@ message CollabEvent {
     PromptAccepted prompt_accepted = 1;
     PromptRejected prompt_rejected = 2;
     PermissionResolved permission_resolved = 3;
+    HistoryBatch history_batch = 4;
   }
+}
+
+// Response to AcpRequestHistory — a page of historical events
+message HistoryBatch {
+  string request_id = 1;
+  repeated Envelope events = 2;   // Ordered by sequence
+  bool has_more = 3;              // More pages available
+  uint64 next_after_sequence = 4; // Use as after_sequence for next page
 }
 
 // Device-level collab events (flow through {deviceId}/collab topic)

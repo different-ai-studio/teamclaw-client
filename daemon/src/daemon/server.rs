@@ -6,6 +6,7 @@ use crate::mqtt::{MqttClient, publisher::Publisher, subscriber};
 use std::path::PathBuf;
 use crate::agent::AgentManager;
 use crate::collab::{AuthManager, AuthResult, PeerTracker, PeerState, PermissionManager};
+use crate::history::EventHistory;
 use crate::proto::amux;
 
 pub struct DaemonServer {
@@ -19,6 +20,7 @@ pub struct DaemonServer {
     workspaces_path: PathBuf,
     sessions: SessionStore,
     sessions_path: PathBuf,
+    history: EventHistory,
     teamclaw: Option<crate::teamclaw::SessionManager>,
 }
 
@@ -66,7 +68,12 @@ impl DaemonServer {
             None
         };
 
-        Ok(Self { config, mqtt, agents, auth, peers, permissions, workspaces, workspaces_path, sessions, sessions_path, teamclaw })
+        let history_dir = config_path.parent()
+            .unwrap_or(std::path::Path::new("."))
+            .join("history");
+        let history = EventHistory::new(&history_dir);
+
+        Ok(Self { config, mqtt, agents, auth, peers, permissions, workspaces, workspaces_path, sessions, sessions_path, history, teamclaw })
     }
 
     pub async fn run(mut self) -> crate::error::Result<()> {
@@ -187,6 +194,7 @@ impl DaemonServer {
                         sequence: seq,
                         payload: Some(amux::envelope::Payload::AcpEvent(update_event)),
                     };
+                    self.history.append(agent_id, &envelope);
                     let publisher = Publisher::new(&self.mqtt);
                     let _ = publisher.publish_agent_event(agent_id, &envelope).await;
                 }
@@ -252,6 +260,7 @@ impl DaemonServer {
             payload: Some(amux::envelope::Payload::AcpEvent(acp_event)),
         };
 
+        self.history.append(agent_id, &envelope);
         let publisher = Publisher::new(&self.mqtt);
         if let Err(e) = publisher.publish_agent_event(agent_id, &envelope).await {
             warn!(agent_id, "failed to publish agent event: {}", e);
@@ -499,6 +508,22 @@ impl DaemonServer {
                         })),
                     }).await;
                 }
+            }
+
+            amux::acp_command::Command::RequestHistory(req) => {
+                let page_size = if req.page_size == 0 { 50 } else { req.page_size };
+                let (events, has_more) = self.history.read_page(agent_id, req.after_sequence, page_size);
+                let next_seq = events.last().map(|e| e.sequence).unwrap_or(req.after_sequence);
+                info!(agent_id, peer_id, after_seq = req.after_sequence, count = events.len(), has_more, "history requested");
+                let batch = amux::HistoryBatch {
+                    request_id: req.request_id,
+                    events,
+                    has_more,
+                    next_after_sequence: next_seq,
+                };
+                self.publish_collab_event(agent_id, amux::CollabEvent {
+                    event: Some(amux::collab_event::Event::HistoryBatch(batch)),
+                }).await;
             }
         }
     }

@@ -25,6 +25,12 @@ pub struct PendingInvite {
     pub display_name: String,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
+    #[serde(default = "default_role")]
+    pub role: String,
+}
+
+fn default_role() -> String {
+    "member".into()
 }
 
 impl StoredMember {

@@ -9,20 +9,25 @@ public struct StreamingTextView: View {
     }
 
     public var body: some View {
-        Text(content + (cursorVisible ? " ▊" : ""))
-            .font(.body)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 18))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 4)
-            .animation(nil, value: content) // prevent text change animation
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
-                    cursorVisible.toggle()
-                }
+        HStack(alignment: .bottom, spacing: 0) {
+            Text(content)
+                .font(.body)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("▊")
+                .font(.body)
+                .opacity(cursorVisible ? 1 : 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+        .transaction { t in t.animation = nil }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+                cursorVisible.toggle()
             }
+        }
     }
 }

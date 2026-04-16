@@ -4,6 +4,7 @@ mod collab;
 mod config;
 mod daemon;
 mod error;
+mod history;
 mod mqtt;
 mod proto;
 mod teamclaw;

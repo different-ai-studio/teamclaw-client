@@ -557,6 +557,14 @@ public struct Amux_AcpCommand: Sendable {
     set {command = .stopAgent(newValue)}
   }
 
+  public var requestHistory: Amux_AcpRequestHistory {
+    get {
+      if case .requestHistory(let v)? = command {return v}
+      return Amux_AcpRequestHistory()
+    }
+    set {command = .requestHistory(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Command: Equatable, Sendable {
@@ -566,8 +574,29 @@ public struct Amux_AcpCommand: Sendable {
     case denyPermission(Amux_AcpDenyPermission)
     case startAgent(Amux_AcpStartAgent)
     case stopAgent(Amux_AcpStopAgent)
+    case requestHistory(Amux_AcpRequestHistory)
 
   }
+
+  public init() {}
+}
+
+/// Request historical events for an agent session (incremental sync)
+public struct Amux_AcpRequestHistory: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Send events with sequence > this (0 = from beginning)
+  public var afterSequence: UInt64 = 0
+
+  /// Max events per batch (default 50)
+  public var pageSize: UInt32 = 0
+
+  /// For correlation
+  public var requestID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 }
@@ -678,14 +707,45 @@ public struct Amux_CollabEvent: Sendable {
     set {event = .permissionResolved(newValue)}
   }
 
+  public var historyBatch: Amux_HistoryBatch {
+    get {
+      if case .historyBatch(let v)? = event {return v}
+      return Amux_HistoryBatch()
+    }
+    set {event = .historyBatch(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Event: Equatable, Sendable {
     case promptAccepted(Amux_PromptAccepted)
     case promptRejected(Amux_PromptRejected)
     case permissionResolved(Amux_PermissionResolved)
+    case historyBatch(Amux_HistoryBatch)
 
   }
+
+  public init() {}
+}
+
+/// Response to AcpRequestHistory — a page of historical events
+public struct Amux_HistoryBatch: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var requestID: String = String()
+
+  /// Ordered by sequence
+  public var events: [Amux_Envelope] = []
+
+  /// More pages available
+  public var hasMore_p: Bool = false
+
+  /// Use as after_sequence for next page
+  public var nextAfterSequence: UInt64 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 }
@@ -2045,7 +2105,7 @@ extension Amux_AcpRawJson: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
 
 extension Amux_AcpCommand: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AcpCommand"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}send_prompt\0\u{1}cancel\0\u{3}grant_permission\0\u{3}deny_permission\0\u{3}start_agent\0\u{3}stop_agent\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}send_prompt\0\u{1}cancel\0\u{3}grant_permission\0\u{3}deny_permission\0\u{3}start_agent\0\u{3}stop_agent\0\u{3}request_history\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2131,6 +2191,19 @@ extension Amux_AcpCommand: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
           self.command = .stopAgent(v)
         }
       }()
+      case 7: try {
+        var v: Amux_AcpRequestHistory?
+        var hadOneofValue = false
+        if let current = self.command {
+          hadOneofValue = true
+          if case .requestHistory(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.command = .requestHistory(v)
+        }
+      }()
       default: break
       }
     }
@@ -2166,6 +2239,10 @@ extension Amux_AcpCommand: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
       guard case .stopAgent(let v)? = self.command else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
     }()
+    case .requestHistory?: try {
+      guard case .requestHistory(let v)? = self.command else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -2173,6 +2250,46 @@ extension Amux_AcpCommand: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
 
   public static func ==(lhs: Amux_AcpCommand, rhs: Amux_AcpCommand) -> Bool {
     if lhs.command != rhs.command {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Amux_AcpRequestHistory: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AcpRequestHistory"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}after_sequence\0\u{3}page_size\0\u{3}request_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.afterSequence) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.pageSize) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.requestID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.afterSequence != 0 {
+      try visitor.visitSingularUInt64Field(value: self.afterSequence, fieldNumber: 1)
+    }
+    if self.pageSize != 0 {
+      try visitor.visitSingularUInt32Field(value: self.pageSize, fieldNumber: 2)
+    }
+    if !self.requestID.isEmpty {
+      try visitor.visitSingularStringField(value: self.requestID, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Amux_AcpRequestHistory, rhs: Amux_AcpRequestHistory) -> Bool {
+    if lhs.afterSequence != rhs.afterSequence {return false}
+    if lhs.pageSize != rhs.pageSize {return false}
+    if lhs.requestID != rhs.requestID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2353,7 +2470,7 @@ extension Amux_AcpStopAgent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
 
 extension Amux_CollabEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CollabEvent"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}prompt_accepted\0\u{3}prompt_rejected\0\u{3}permission_resolved\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}prompt_accepted\0\u{3}prompt_rejected\0\u{3}permission_resolved\0\u{3}history_batch\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2400,6 +2517,19 @@ extension Amux_CollabEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
           self.event = .permissionResolved(v)
         }
       }()
+      case 4: try {
+        var v: Amux_HistoryBatch?
+        var hadOneofValue = false
+        if let current = self.event {
+          hadOneofValue = true
+          if case .historyBatch(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.event = .historyBatch(v)
+        }
+      }()
       default: break
       }
     }
@@ -2423,6 +2553,10 @@ extension Amux_CollabEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       guard case .permissionResolved(let v)? = self.event else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
     }()
+    case .historyBatch?: try {
+      guard case .historyBatch(let v)? = self.event else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -2430,6 +2564,51 @@ extension Amux_CollabEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
   public static func ==(lhs: Amux_CollabEvent, rhs: Amux_CollabEvent) -> Bool {
     if lhs.event != rhs.event {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Amux_HistoryBatch: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".HistoryBatch"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}events\0\u{3}has_more\0\u{3}next_after_sequence\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.requestID) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.events) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.hasMore_p) }()
+      case 4: try { try decoder.decodeSingularUInt64Field(value: &self.nextAfterSequence) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.requestID.isEmpty {
+      try visitor.visitSingularStringField(value: self.requestID, fieldNumber: 1)
+    }
+    if !self.events.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.events, fieldNumber: 2)
+    }
+    if self.hasMore_p != false {
+      try visitor.visitSingularBoolField(value: self.hasMore_p, fieldNumber: 3)
+    }
+    if self.nextAfterSequence != 0 {
+      try visitor.visitSingularUInt64Field(value: self.nextAfterSequence, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Amux_HistoryBatch, rhs: Amux_HistoryBatch) -> Bool {
+    if lhs.requestID != rhs.requestID {return false}
+    if lhs.events != rhs.events {return false}
+    if lhs.hasMore_p != rhs.hasMore_p {return false}
+    if lhs.nextAfterSequence != rhs.nextAfterSequence {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

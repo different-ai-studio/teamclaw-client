@@ -37,19 +37,16 @@ public final class AgentDetailViewModel {
             let stream = mqtt.messages()
             try? await mqtt.subscribe(eventsTopic)
             print("[AgentDetailVM] subscribed to \(eventsTopic)")
-            // Clear stale events from previous sessions for this agent
+            // Load existing events for this agent from SwiftData
             let agentId = agent.agentId
-            let oldDescriptor = FetchDescriptor<AgentEvent>(
-                predicate: #Predicate { $0.agentId == agentId }
+            let descriptor = FetchDescriptor<AgentEvent>(
+                predicate: #Predicate { $0.agentId == agentId },
+                sortBy: [SortDescriptor(\.sequence)]
             )
-            for old in (try? modelContext.fetch(oldDescriptor)) ?? [] {
-                modelContext.delete(old)
-            }
-            try? modelContext.save()
-            events = []
+            events = (try? modelContext.fetch(descriptor)) ?? []
 
-            // Insert initial prompt as first user bubble
-            if !agent.currentPrompt.isEmpty {
+            // Insert initial prompt as first user bubble if not already present
+            if !agent.currentPrompt.isEmpty && !events.contains(where: { $0.eventType == "user_prompt" && $0.text == agent.currentPrompt }) {
                 let promptEvent = AgentEvent(agentId: agentId, sequence: 0, eventType: "user_prompt")
                 promptEvent.text = agent.currentPrompt
                 events.insert(promptEvent, at: 0)
@@ -173,9 +170,55 @@ public final class AgentDetailViewModel {
                 events[idx].isComplete = true
                 events[idx].success = resolved.granted
             }
+        case .historyBatch(let batch):
+            handleHistoryBatch(batch)
         case .none:
             break
         }
+    }
+
+    private var syncModelContext: ModelContext?
+    public var isSyncing = false
+
+    private func handleHistoryBatch(_ batch: Amux_HistoryBatch) {
+        guard let modelContext = syncModelContext else { return }
+        let existingSeqs = Set(events.compactMap { $0.sequence != 0 ? $0.sequence : nil })
+
+        for envelope in batch.events {
+            let seq = Int(envelope.sequence)
+            guard !existingSeqs.contains(seq) else { continue }
+
+            if case .acpEvent(let acp) = envelope.payload {
+                handleAcpEvent(acp, sequence: seq, modelContext: modelContext)
+            }
+        }
+
+        // Sort events by sequence to maintain order
+        events.sort { ($0.sequence ) < ($1.sequence ) }
+
+        if batch.hasMore_p {
+            // Request next page
+            Task {
+                try? await requestHistoryPage(afterSequence: batch.nextAfterSequence)
+            }
+        } else {
+            isSyncing = false
+        }
+    }
+
+    public func requestFullSync(modelContext: ModelContext) async throws {
+        self.syncModelContext = modelContext
+        isSyncing = true
+        let maxSeq = events.compactMap({ $0.sequence != 0 ? $0.sequence : nil }).max() ?? 0
+        try await requestHistoryPage(afterSequence: UInt64(maxSeq))
+    }
+
+    private func requestHistoryPage(afterSequence: UInt64) async throws {
+        var req = Amux_AcpRequestHistory()
+        req.afterSequence = afterSequence
+        req.pageSize = 50
+        req.requestID = UUID().uuidString
+        try await sendCommand { $0.command = .requestHistory(req) }
     }
 
     private func sendCommand(_ makeCommand: (inout Amux_AcpCommand) -> Void) async throws {

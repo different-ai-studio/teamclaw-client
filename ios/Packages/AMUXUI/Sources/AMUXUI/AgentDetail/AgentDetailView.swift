@@ -149,8 +149,12 @@ public struct AgentDetailView: View {
                 .presentationDetents([.medium])
         }
         .sheet(isPresented: $showSettings) {
-            AgentSettingsSheet(agent: viewModel.agent)
-                .presentationDetents([.medium])
+            AgentSettingsSheet(
+                agent: viewModel.agent,
+                onSync: { Task { try? await viewModel.requestFullSync(modelContext: modelContext) } },
+                isSyncing: viewModel.isSyncing
+            )
+            .presentationDetents([.medium])
         }
         .sheet(isPresented: $showMembers) {
             MemberListView(mqtt: viewModel.mqttRef, deviceId: viewModel.deviceIdRef, peerId: viewModel.peerIdRef,
@@ -309,6 +313,8 @@ private struct ReplySheet: View {
 
 private struct AgentSettingsSheet: View {
     let agent: Agent
+    let onSync: () -> Void
+    var isSyncing: Bool
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -324,6 +330,20 @@ private struct AgentSettingsSheet: View {
                     Section("Git") {
                         LabeledContent("Branch", value: agent.branch)
                     }
+                }
+                Section {
+                    Button {
+                        onSync()
+                    } label: {
+                        HStack {
+                            Label("Sync History", systemImage: "arrow.clockwise")
+                            Spacer()
+                            if isSyncing {
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(isSyncing)
                 }
             }
             .navigationTitle("Settings")

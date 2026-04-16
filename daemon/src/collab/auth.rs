@@ -29,8 +29,8 @@ impl AuthManager {
             let invite = self.store.consume_invite(token).unwrap();
             let member = StoredMember {
                 member_id: Uuid::new_v4().to_string(),
-                display_name: invite.display_name,
-                role: "member".into(),
+                display_name: invite.display_name.clone(),
+                role: invite.role.clone(),
                 token: Uuid::new_v4().to_string(),
                 joined_at: Utc::now(),
             };
@@ -50,6 +50,7 @@ impl AuthManager {
             display_name: display_name.into(),
             created_at: Utc::now(),
             expires_at: Utc::now() + Duration::hours(expires_hours as i64),
+            role: "member".into(),
         };
         self.store.add_invite(invite.clone());
         self.store.save(&self.store_path)?;
