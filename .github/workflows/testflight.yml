@@ -20,6 +20,8 @@ jobs:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+      FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: 60
+      FASTLANE_XCODEBUILD_SETTINGS_RETRIES: 6
 
     steps:
       - uses: actions/checkout@v4
