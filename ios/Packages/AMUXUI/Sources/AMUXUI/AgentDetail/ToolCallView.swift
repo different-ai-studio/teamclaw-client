@@ -25,11 +25,11 @@ public struct ToolCallView: View {
                     Image(systemName: "chevron.right")
                         .font(.caption2)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(.secondary)
 
                     Image(systemName: toolIcon)
                         .font(.caption)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(.secondary)
 
                     Text(displayName)
                         .font(.caption)
@@ -73,7 +73,8 @@ public struct ToolCallView: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .liquidGlass(in: RoundedRectangle(cornerRadius: 8), interactive: false)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private var toolIcon: String {

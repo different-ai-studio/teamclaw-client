@@ -100,7 +100,7 @@ public struct ChatInputBar: View {
                             .padding(.bottom, 6)
                     }
                 }
-                .liquidGlass(in: Capsule(), interactive: false)
+                .background(Color(.systemGray6), in: Capsule())
 
                 // Dismiss text input mode
                 Button {

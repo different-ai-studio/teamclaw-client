@@ -28,7 +28,7 @@ public struct InviteSheet: View {
                     Spacer()
                     if selectedIds.contains(member.memberId) {
                         Image(systemName: "checkmark")
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(.blue)
                     }
                 }
                 .contentShape(Rectangle())

@@ -19,7 +19,8 @@ public struct StreamingTextView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .liquidGlass(in: RoundedRectangle(cornerRadius: 18), interactive: false)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
         .transaction { t in t.animation = nil }

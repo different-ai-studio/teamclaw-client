@@ -165,7 +165,7 @@ private struct SessionListContent: View {
         HStack(spacing: 10) {
             if isEditing {
                 Image(systemName: selectedIDs.contains(agent.agentId) ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(selectedIDs.contains(agent.agentId) ? .blue : .secondary)
                     .font(.title3)
                     .onTapGesture { toggleSelection(agent.agentId) }
             }

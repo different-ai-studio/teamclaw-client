@@ -58,9 +58,11 @@ public struct EventBubbleView: View {
             Spacer()
             Text(event.text ?? "")
                 .font(.subheadline)
+                .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .liquidGlass(in: RoundedRectangle(cornerRadius: 18), interactive: false)
+                .background(Color.blue)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
                 .frame(maxWidth: sizeClass == .regular ? 500 : 260, alignment: .trailing)
         }
         .padding(.horizontal, 16)
@@ -78,7 +80,8 @@ public struct EventBubbleView: View {
                     .padding(.vertical, 10)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .liquidGlass(in: RoundedRectangle(cornerRadius: 18), interactive: false)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
@@ -144,10 +147,8 @@ struct ThinkingBlockView: View {
                     Image(systemName: "chevron.right")
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .font(.caption2)
-                        .foregroundStyle(.primary)
                     Image(systemName: "brain")
                         .font(.caption)
-                        .foregroundStyle(.primary)
                     Text("Thinking")
                         .font(.caption)
                         .fontWeight(.medium)
@@ -169,7 +170,7 @@ struct ThinkingBlockView: View {
                     .textSelection(.enabled)
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .liquidGlass(in: RoundedRectangle(cornerRadius: 10), interactive: false)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -186,14 +187,14 @@ struct ErrorBlockView: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.primary)
+                .foregroundStyle(.red)
             Text(message)
                 .font(.caption)
                 .foregroundStyle(.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
-        .liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: false)
+        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
     }
@@ -216,7 +217,7 @@ struct TypingIndicatorView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .liquidGlass(in: RoundedRectangle(cornerRadius: 18), interactive: false)
+        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 18))
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
