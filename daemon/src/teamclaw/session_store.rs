@@ -141,3 +141,132 @@ fn actor_type_to_proto(s: &str) -> teamclaw::ActorType {
         _ => teamclaw::ActorType::Unknown,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use tempfile::TempDir;
+
+    fn make_session(id: &str, session_type: &str, host: &str) -> StoredCollabSession {
+        StoredCollabSession {
+            session_id: id.to_string(),
+            session_type: session_type.to_string(),
+            team_id: "team1".to_string(),
+            title: format!("Session {}", id),
+            host_device_id: host.to_string(),
+            created_by: "user1".to_string(),
+            created_at: Utc::now(),
+            summary: String::new(),
+            participants: vec![],
+        }
+    }
+
+    fn make_participant(actor_id: &str, actor_type: &str) -> StoredParticipant {
+        StoredParticipant {
+            actor_id: actor_id.to_string(),
+            actor_type: actor_type.to_string(),
+            display_name: actor_id.to_string(),
+            joined_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn test_upsert_insert() {
+        let mut store = TeamclawSessionStore::default();
+        store.upsert(make_session("s1", "collab", "dev-a"));
+        assert_eq!(store.sessions.len(), 1);
+        assert_eq!(store.sessions[0].session_id, "s1");
+    }
+
+    #[test]
+    fn test_upsert_update() {
+        let mut store = TeamclawSessionStore::default();
+        store.upsert(make_session("s1", "collab", "dev-a"));
+        let mut updated = make_session("s1", "collab", "dev-a");
+        updated.title = "Updated Title".to_string();
+        store.upsert(updated);
+        assert_eq!(store.sessions.len(), 1);
+        assert_eq!(store.sessions[0].title, "Updated Title");
+    }
+
+    #[test]
+    fn test_find_by_id() {
+        let mut store = TeamclawSessionStore::default();
+        store.upsert(make_session("s1", "collab", "dev-a"));
+        store.upsert(make_session("s2", "control", "dev-b"));
+        assert!(store.find_by_id("s1").is_some());
+        assert!(store.find_by_id("s3").is_none());
+    }
+
+    #[test]
+    fn test_remove() {
+        let mut store = TeamclawSessionStore::default();
+        store.upsert(make_session("s1", "collab", "dev-a"));
+        store.upsert(make_session("s2", "control", "dev-b"));
+        assert!(store.remove("s1"));
+        assert_eq!(store.sessions.len(), 1);
+        assert!(!store.remove("s1")); // already removed
+    }
+
+    #[test]
+    fn test_hosted_sessions() {
+        let mut store = TeamclawSessionStore::default();
+        store.upsert(make_session("s1", "collab", "dev-a"));
+        store.upsert(make_session("s2", "collab", "dev-b"));
+        store.upsert(make_session("s3", "control", "dev-a"));
+        let hosted = store.hosted_sessions("dev-a");
+        assert_eq!(hosted.len(), 2);
+    }
+
+    #[test]
+    fn test_save_and_load() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("sessions.toml");
+
+        let mut store = TeamclawSessionStore::default();
+        store.upsert(make_session("s1", "collab", "dev-a"));
+        store.save(&path).unwrap();
+
+        let loaded = TeamclawSessionStore::load(&path).unwrap();
+        assert_eq!(loaded.sessions.len(), 1);
+        assert_eq!(loaded.sessions[0].session_id, "s1");
+    }
+
+    #[test]
+    fn test_load_nonexistent_returns_default() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("nonexistent.toml");
+        let store = TeamclawSessionStore::load(&path).unwrap();
+        assert!(store.sessions.is_empty());
+    }
+
+    #[test]
+    fn test_to_proto_index() {
+        let mut store = TeamclawSessionStore::default();
+        let mut s = make_session("s1", "collab", "dev-a");
+        s.participants = vec![make_participant("p1", "human"), make_participant("p2", "personal_agent")];
+        store.upsert(s);
+
+        let index = store.to_proto_index();
+        assert_eq!(index.sessions.len(), 1);
+        assert_eq!(index.sessions[0].session_id, "s1");
+        assert_eq!(index.sessions[0].participant_count, 2);
+    }
+
+    #[test]
+    fn test_to_proto_session_info() {
+        let mut store = TeamclawSessionStore::default();
+        let mut s = make_session("s1", "collab", "dev-a");
+        s.participants = vec![make_participant("p1", "human")];
+        s.summary = "test summary".to_string();
+        store.upsert(s);
+
+        let info = store.to_proto_session_info("s1").unwrap();
+        assert_eq!(info.session_id, "s1");
+        assert_eq!(info.summary, "test summary");
+        assert_eq!(info.participants.len(), 1);
+
+        assert!(store.to_proto_session_info("nonexistent").is_none());
+    }
+}

@@ -90,3 +90,83 @@ fn message_kind_to_proto(s: &str) -> teamclaw::MessageKind {
         _ => teamclaw::MessageKind::Unknown,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use tempfile::TempDir;
+
+    fn make_message(id: &str, session_id: &str, content: &str) -> StoredMessage {
+        StoredMessage {
+            message_id: id.to_string(),
+            session_id: session_id.to_string(),
+            sender_actor_id: "user1".to_string(),
+            kind: "text".to_string(),
+            content: content.to_string(),
+            created_at: Utc::now(),
+            reply_to_message_id: String::new(),
+            mentions: vec![],
+        }
+    }
+
+    #[test]
+    fn test_append_and_recent() {
+        let mut store = MessageStore::default();
+        store.append(make_message("m1", "s1", "hello"));
+        store.append(make_message("m2", "s1", "world"));
+        store.append(make_message("m3", "s1", "foo"));
+
+        assert_eq!(store.messages.len(), 3);
+
+        let recent = store.recent(2);
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent[0].message_id, "m2");
+        assert_eq!(recent[1].message_id, "m3");
+    }
+
+    #[test]
+    fn test_recent_more_than_available() {
+        let mut store = MessageStore::default();
+        store.append(make_message("m1", "s1", "hello"));
+        let recent = store.recent(10);
+        assert_eq!(recent.len(), 1);
+    }
+
+    #[test]
+    fn test_save_and_load() {
+        let tmp = TempDir::new().unwrap();
+        let mut store = MessageStore::default();
+        store.append(make_message("m1", "s1", "hello"));
+        store.append(make_message("m2", "s1", "world"));
+        store.save(tmp.path(), "s1").unwrap();
+
+        let loaded = MessageStore::load(tmp.path(), "s1").unwrap();
+        assert_eq!(loaded.messages.len(), 2);
+        assert_eq!(loaded.messages[0].content, "hello");
+    }
+
+    #[test]
+    fn test_load_nonexistent_returns_default() {
+        let tmp = TempDir::new().unwrap();
+        let store = MessageStore::load(tmp.path(), "nonexistent").unwrap();
+        assert!(store.messages.is_empty());
+    }
+
+    #[test]
+    fn test_to_proto() {
+        let msg = make_message("m1", "s1", "hello");
+        let proto = MessageStore::to_proto(&msg);
+        assert_eq!(proto.message_id, "m1");
+        assert_eq!(proto.content, "hello");
+        assert_eq!(proto.kind, teamclaw::MessageKind::Text as i32);
+    }
+
+    #[test]
+    fn test_to_proto_system_kind() {
+        let mut msg = make_message("m1", "s1", "system msg");
+        msg.kind = "system".to_string();
+        let proto = MessageStore::to_proto(&msg);
+        assert_eq!(proto.kind, teamclaw::MessageKind::System as i32);
+    }
+}

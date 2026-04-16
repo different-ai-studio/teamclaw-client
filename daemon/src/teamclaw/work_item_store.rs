@@ -161,3 +161,137 @@ fn work_item_status_to_proto(s: &str) -> teamclaw::WorkItemStatus {
         _ => teamclaw::WorkItemStatus::Unknown,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use tempfile::TempDir;
+
+    fn make_work_item(id: &str, session_id: &str) -> StoredWorkItem {
+        StoredWorkItem {
+            work_item_id: id.to_string(),
+            session_id: session_id.to_string(),
+            title: format!("Item {}", id),
+            description: "desc".to_string(),
+            status: "open".to_string(),
+            parent_id: String::new(),
+            created_by: "user1".to_string(),
+            created_at: Utc::now(),
+        }
+    }
+
+    fn make_claim(id: &str, work_item_id: &str, actor_id: &str) -> StoredClaim {
+        StoredClaim {
+            claim_id: id.to_string(),
+            work_item_id: work_item_id.to_string(),
+            actor_id: actor_id.to_string(),
+            claimed_at: Utc::now(),
+        }
+    }
+
+    fn make_submission(id: &str, work_item_id: &str, actor_id: &str) -> StoredSubmission {
+        StoredSubmission {
+            submission_id: id.to_string(),
+            work_item_id: work_item_id.to_string(),
+            actor_id: actor_id.to_string(),
+            content: "result".to_string(),
+            submitted_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn test_add_and_find_item() {
+        let mut store = WorkItemStore::default();
+        store.add_item(make_work_item("w1", "s1"));
+        assert!(store.find_item("w1").is_some());
+        assert!(store.find_item("w2").is_none());
+    }
+
+    #[test]
+    fn test_add_claim_updates_status() {
+        let mut store = WorkItemStore::default();
+        store.add_item(make_work_item("w1", "s1"));
+        assert_eq!(store.find_item("w1").unwrap().status, "open");
+
+        store.add_claim(make_claim("c1", "w1", "agent1"));
+        assert_eq!(store.find_item("w1").unwrap().status, "in_progress");
+        assert_eq!(store.claims.len(), 1);
+    }
+
+    #[test]
+    fn test_add_claim_no_matching_item() {
+        let mut store = WorkItemStore::default();
+        // Claim for nonexistent item should still be stored
+        store.add_claim(make_claim("c1", "w999", "agent1"));
+        assert_eq!(store.claims.len(), 1);
+    }
+
+    #[test]
+    fn test_claims_for_item() {
+        let mut store = WorkItemStore::default();
+        store.add_item(make_work_item("w1", "s1"));
+        store.add_claim(make_claim("c1", "w1", "agent1"));
+        store.add_claim(make_claim("c2", "w1", "agent2"));
+        store.add_claim(make_claim("c3", "w2", "agent1")); // different item
+
+        let claims = store.claims_for_item("w1");
+        assert_eq!(claims.len(), 2);
+    }
+
+    #[test]
+    fn test_submissions_for_item() {
+        let mut store = WorkItemStore::default();
+        store.add_submission(make_submission("s1", "w1", "agent1"));
+        store.add_submission(make_submission("s2", "w1", "agent2"));
+        store.add_submission(make_submission("s3", "w2", "agent1"));
+
+        let subs = store.submissions_for_item("w1");
+        assert_eq!(subs.len(), 2);
+    }
+
+    #[test]
+    fn test_items_claimed_by() {
+        let mut store = WorkItemStore::default();
+        store.add_item(make_work_item("w1", "s1"));
+        store.add_item(make_work_item("w2", "s1"));
+        store.add_item(make_work_item("w3", "s1"));
+        store.add_claim(make_claim("c1", "w1", "agent1"));
+        store.add_claim(make_claim("c2", "w3", "agent1"));
+        store.add_claim(make_claim("c3", "w2", "agent2"));
+
+        let items = store.items_claimed_by("agent1");
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn test_save_and_load() {
+        let tmp = TempDir::new().unwrap();
+        let mut store = WorkItemStore::default();
+        store.add_item(make_work_item("w1", "s1"));
+        store.add_claim(make_claim("c1", "w1", "agent1"));
+        store.add_submission(make_submission("sub1", "w1", "agent1"));
+        store.save(tmp.path(), "s1").unwrap();
+
+        let loaded = WorkItemStore::load(tmp.path(), "s1").unwrap();
+        assert_eq!(loaded.items.len(), 1);
+        assert_eq!(loaded.claims.len(), 1);
+        assert_eq!(loaded.submissions.len(), 1);
+        // Verify claim updated status was persisted
+        assert_eq!(loaded.items[0].status, "in_progress");
+    }
+
+    #[test]
+    fn test_to_proto_work_item() {
+        let mut store = WorkItemStore::default();
+        store.add_item(make_work_item("w1", "s1"));
+        store.add_claim(make_claim("c1", "w1", "agent1"));
+        store.add_submission(make_submission("sub1", "w1", "agent1"));
+
+        let proto = store.to_proto_work_item(store.find_item("w1").unwrap());
+        assert_eq!(proto.work_item_id, "w1");
+        assert_eq!(proto.status, teamclaw::WorkItemStatus::InProgress as i32);
+        assert_eq!(proto.claims.len(), 1);
+        assert_eq!(proto.submissions.len(), 1);
+    }
+}
