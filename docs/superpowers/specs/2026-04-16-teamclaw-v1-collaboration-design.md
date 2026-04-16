@@ -27,6 +27,7 @@ It is not an autonomous agent network. It is not a Slack replacement. It is a sy
 - Knowledge board / debate board / autonomous orchestration
 - Full Slack/Feishu replacement
 - Host migration or failover
+- Per-role-agent access control (v1: all team members can use all role agents)
 
 ---
 
@@ -80,9 +81,11 @@ iOS/Mac Client A          iOS/Mac Client B
 |---|---|---|---|
 | `human` | Real person using a client | N/A | Visible to team |
 | `personal_agent` | A person's private agent | Owner's amuxd | Private by default; visible in collab sessions it joins |
-| `role_agent` | Team-shared agent (e.g. "dev agent", "marketing agent") | Fixed host amuxd, configured by team owner | Visible to all members with permission |
+| `role_agent` | Team-shared agent (e.g. "dev agent", "marketing agent") | Fixed host amuxd, configured by team owner | Visible to all team members |
 
 **Role agent hosting rule (v1):** Each role agent runs on a fixed amuxd designated by the team owner. No migration in v1. If that amuxd goes offline, the role agent is unavailable.
+
+**Role agent permission rule (v1 simplification):** All team members can interact with all role agents. Fine-grained per-role-agent permissions (e.g. only marketing team can use the marketing agent) are deferred to v2.
 
 ### Session Types
 
@@ -110,7 +113,7 @@ Three distinct host roles, all must be explicitly defined:
 
 **Failure behavior (v1):**
 - Team host offline → member list updates blocked; cached copies still readable
-- Session host offline → session metadata and new messages unavailable; cached state still viewable
+- Session host offline → messages still flow via MQTT (broker accepts publishes), but host is not persisting them; metadata mutations (add participant, create work item) fail; cached state still viewable; when host recovers there will be a gap in stored history
 - Role agent host offline → role agent unavailable
 
 ### Message
@@ -128,8 +131,10 @@ The fundamental unit of communication within a session.
 | `reply_to_message_id` | string? | Optional thread/reply reference |
 | `mentions` | string[] | Actor IDs mentioned in this message |
 
+**Write path:** Participants publish messages directly to the session MQTT topic. The session host amuxd subscribes and persists them. The host is the authoritative persister, not a write mediator — it does not gate message delivery. If the host is offline, messages still flow between online participants via the broker but are not durably stored. When the host recovers, there will be a gap in stored history. V1 accepts this trade-off.
+
 **Storage rules:**
-- Session host amuxd stores full message history for sessions it hosts
+- Session host amuxd subscribes to its sessions' message topics and persists all received messages
 - Participant clients cache recent messages locally
 - New participants joining a collab session receive: session summary + new messages from join point
 - V1 does not expose full history to late joiners
@@ -196,14 +201,21 @@ Agent reply → owner's amuxd → session MQTT topic → all participants
 
 **How it works:**
 1. amuxd subscribes to session topics for sessions where its agents participate
-2. When a relevant message arrives (mentions the agent, or is a direct message), amuxd forwards it to the local agent process
+2. When a relevant message arrives, amuxd forwards it to the local agent process
 3. Agent produces a response through the normal ACP event stream
 4. amuxd wraps the response and publishes it back to the session topic
+
+**Agent activation triggers — a message is forwarded to an agent when any of the following are true:**
+- The message explicitly @mentions the agent
+- A work item is assigned to or claimed by the agent
+- A work item the agent has claimed receives a status change, new claim, or submission
+- The message is a direct message to the agent
+- The session has only one agent participant (implicit: all messages are relevant)
 
 **Context provided to agents (v1):**
 - Session summary
 - Last N messages (configurable, reasonable default)
-- Messages that explicitly @mention the agent
+- Work items assigned to or claimed by the agent
 - Not full session history
 
 ---
@@ -238,23 +250,27 @@ amux/{deviceId}/status
 ### Teamclaw Namespace (new)
 
 ```
-# Team-level
+# Team-level (owned by team host amuxd)
 teamclaw/{teamId}/members                         # MemberList (retained)
-teamclaw/{teamId}/sessions                         # SessionList summary (retained)
+teamclaw/{teamId}/sessions                         # SessionList index (retained, maintained by team host)
 
 # Session-level
 teamclaw/{teamId}/session/{sessionId}/messages     # Message stream (QoS 1)
-teamclaw/{teamId}/session/{sessionId}/meta         # Session metadata (retained)
+teamclaw/{teamId}/session/{sessionId}/meta         # Session metadata (retained, published by session host)
 teamclaw/{teamId}/session/{sessionId}/presence     # Participant presence (retained)
 teamclaw/{teamId}/session/{sessionId}/workitems    # WorkItem updates (QoS 1)
 
 # User-level
 teamclaw/{teamId}/user/{userId}/invites            # Invite delivery (QoS 1)
 
-# Request/reply (metadata fetch)
-teamclaw/{teamId}/rpc/{requestId}/req              # Request
-teamclaw/{teamId}/rpc/{requestId}/res              # Response
+# Request/reply (routed to specific host amuxd by deviceId)
+teamclaw/{teamId}/rpc/{targetDeviceId}/{requestId}/req   # Request (targeted)
+teamclaw/{teamId}/rpc/{targetDeviceId}/{requestId}/res   # Response
 ```
+
+**Session index rule:** The team host amuxd owns `teamclaw/{teamId}/sessions`. When any amuxd creates a new collab session, it publishes a `SessionCreated` event to the team host (via RPC). The team host adds it to the index and republishes the retained topic. Each index entry contains: session_id, title, host_device_id, created_at, participant_count. The team host does not store full session metadata — only enough for the client to render a list and know where to fetch details.
+
+**RPC routing rule:** Each amuxd subscribes to `teamclaw/{teamId}/rpc/{ownDeviceId}/+/req`. Clients learn the target `host_device_id` from the invite payload (for joining) or from the session index / cached session metadata (for subsequent fetches). RPC requests include `host_device_id` in the topic path so only the target amuxd processes them.
 
 **Rule:** Runtime topics stay device/agent-oriented. Collaboration topics are session-oriented.
 
