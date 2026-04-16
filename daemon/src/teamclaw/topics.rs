@@ -72,3 +72,46 @@ impl TeamclawTopics {
         format!("teamclaw/{}/session/+/workitems", self.team_id)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_team_level_topics() {
+        let t = TeamclawTopics::new("team1", "dev-a");
+        assert_eq!(t.members(), "teamclaw/team1/members");
+        assert_eq!(t.sessions(), "teamclaw/team1/sessions");
+    }
+
+    #[test]
+    fn test_session_level_topics() {
+        let t = TeamclawTopics::new("team1", "dev-a");
+        assert_eq!(t.session_messages("s1"), "teamclaw/team1/session/s1/messages");
+        assert_eq!(t.session_meta("s1"), "teamclaw/team1/session/s1/meta");
+        assert_eq!(t.session_presence("s1"), "teamclaw/team1/session/s1/presence");
+        assert_eq!(t.session_workitems("s1"), "teamclaw/team1/session/s1/workitems");
+    }
+
+    #[test]
+    fn test_user_level_topics() {
+        let t = TeamclawTopics::new("team1", "dev-a");
+        assert_eq!(t.user_invites("user1"), "teamclaw/team1/user/user1/invites");
+    }
+
+    #[test]
+    fn test_rpc_topics() {
+        let t = TeamclawTopics::new("team1", "dev-a");
+        assert_eq!(t.rpc_request("dev-b", "req123"), "teamclaw/team1/rpc/dev-b/req123/req");
+        assert_eq!(t.rpc_response("dev-b", "req123"), "teamclaw/team1/rpc/dev-b/req123/res");
+    }
+
+    #[test]
+    fn test_wildcard_patterns() {
+        let t = TeamclawTopics::new("team1", "dev-a");
+        assert_eq!(t.rpc_incoming_requests(), "teamclaw/team1/rpc/dev-a/+/req");
+        assert_eq!(t.all_session_messages(), "teamclaw/team1/session/+/messages");
+        assert_eq!(t.all_session_meta(), "teamclaw/team1/session/+/meta");
+        assert_eq!(t.all_session_workitems(), "teamclaw/team1/session/+/workitems");
+    }
+}

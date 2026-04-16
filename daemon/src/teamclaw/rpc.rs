@@ -118,3 +118,124 @@ impl RpcClient {
         Uuid::new_v4().to_string()[..8].to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use prost::Message as ProstMessage;
+
+    #[test]
+    fn test_parse_request_valid() {
+        let req = RpcRequest {
+            request_id: "req123".to_string(),
+            sender_device_id: "dev-b".to_string(),
+            method: Some(crate::proto::teamclaw::rpc_request::Method::FetchSession(
+                crate::proto::teamclaw::FetchSessionRequest {
+                    session_id: "s1".to_string(),
+                },
+            )),
+        };
+        let payload = req.encode_to_vec();
+        let topic = "teamclaw/team1/rpc/dev-a/req123/req";
+
+        let result = RpcServer::parse_request(topic, &payload);
+        assert!(result.is_some());
+        let (request_id, parsed) = result.unwrap();
+        assert_eq!(request_id, "req123");
+        assert_eq!(parsed.sender_device_id, "dev-b");
+    }
+
+    #[test]
+    fn test_parse_request_wrong_suffix() {
+        let topic = "teamclaw/team1/rpc/dev-a/req123/res"; // "res" not "req"
+        assert!(RpcServer::parse_request(topic, &[]).is_none());
+    }
+
+    #[test]
+    fn test_parse_request_wrong_part_count() {
+        let topic = "teamclaw/team1/rpc/dev-a/req"; // only 5 parts
+        assert!(RpcServer::parse_request(topic, &[]).is_none());
+    }
+
+    #[test]
+    fn test_parse_request_invalid_payload() {
+        let topic = "teamclaw/team1/rpc/dev-a/req123/req";
+        assert!(RpcServer::parse_request(topic, b"not protobuf").is_none());
+    }
+
+    #[test]
+    fn test_handle_response_valid() {
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        rt.block_on(async {
+            let (client, _eventloop) = rumqttc::AsyncClient::new(
+                rumqttc::MqttOptions::new("test", "localhost", 1883),
+                10,
+            );
+            let mut rpc_client = RpcClient::new(client, "team1".to_string(), "dev-a".to_string());
+
+            // Manually insert a pending request
+            let (tx, rx) = oneshot::channel();
+            rpc_client.pending.insert("req123".to_string(), tx);
+
+            let response = RpcResponse {
+                request_id: "req123".to_string(),
+                success: true,
+                error: String::new(),
+                result: None,
+            };
+            let payload = response.encode_to_vec();
+            let topic = "teamclaw/team1/rpc/dev-a/req123/res";
+
+            let matched = rpc_client.handle_response(topic, &payload);
+            assert!(matched);
+            assert!(rpc_client.pending.is_empty());
+
+            let received = rx.await.unwrap();
+            assert!(received.success);
+        });
+    }
+
+    #[test]
+    fn test_handle_response_no_pending() {
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        rt.block_on(async {
+            let (client, _eventloop) = rumqttc::AsyncClient::new(
+                rumqttc::MqttOptions::new("test", "localhost", 1883),
+                10,
+            );
+            let mut rpc_client = RpcClient::new(client, "team1".to_string(), "dev-a".to_string());
+
+            let response = RpcResponse {
+                request_id: "req999".to_string(),
+                success: true,
+                error: String::new(),
+                result: None,
+            };
+            let payload = response.encode_to_vec();
+            let topic = "teamclaw/team1/rpc/dev-a/req999/res";
+
+            let matched = rpc_client.handle_response(topic, &payload);
+            assert!(!matched); // no pending request
+        });
+    }
+
+    #[test]
+    fn test_handle_response_wrong_topic() {
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        rt.block_on(async {
+            let (client, _eventloop) = rumqttc::AsyncClient::new(
+                rumqttc::MqttOptions::new("test", "localhost", 1883),
+                10,
+            );
+            let mut rpc_client = RpcClient::new(client, "team1".to_string(), "dev-a".to_string());
+            let matched = rpc_client.handle_response("bad/topic", &[]);
+            assert!(!matched);
+        });
+    }
+
+    #[test]
+    fn test_new_request_id_format() {
+        let id = RpcClient::new_request_id();
+        assert_eq!(id.len(), 8);
+    }
+}
