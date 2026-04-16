@@ -6,6 +6,7 @@ struct MarkdownRenderer: View {
 
     var body: some View {
         Text(attributedContent)
+            .font(.subheadline)
             .textSelection(.enabled)
     }
 

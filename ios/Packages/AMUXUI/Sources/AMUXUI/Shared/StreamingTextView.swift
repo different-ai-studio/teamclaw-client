@@ -11,10 +11,10 @@ public struct StreamingTextView: View {
     public var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
             Text(content)
-                .font(.body)
+                .font(.subheadline)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text("▊")
-                .font(.body)
+                .font(.subheadline)
                 .opacity(cursorVisible ? 1 : 0)
         }
         .padding(.horizontal, 14)

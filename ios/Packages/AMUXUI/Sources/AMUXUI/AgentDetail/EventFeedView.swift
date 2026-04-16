@@ -57,6 +57,7 @@ public struct EventBubbleView: View {
         HStack {
             Spacer()
             Text(event.text ?? "")
+                .font(.subheadline)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -188,7 +189,7 @@ struct ErrorBlockView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red)
             Text(message)
-                .font(.subheadline)
+                .font(.caption)
                 .foregroundStyle(.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
