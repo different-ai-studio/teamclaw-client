@@ -19,6 +19,7 @@ pub struct DaemonServer {
     workspaces_path: PathBuf,
     sessions: SessionStore,
     sessions_path: PathBuf,
+    teamclaw: Option<crate::teamclaw::SessionManager>,
 }
 
 impl DaemonServer {
@@ -51,7 +52,20 @@ impl DaemonServer {
             .join("sessions.toml");
         let sessions = SessionStore::load(&sessions_path)?;
 
-        Ok(Self { config, mqtt, agents, auth, peers, permissions, workspaces, workspaces_path, sessions, sessions_path })
+        let teamclaw = if let Some(team_id) = &config.team_id {
+            let is_team_host = config.is_team_host.unwrap_or(false);
+            Some(crate::teamclaw::SessionManager::new(
+                mqtt.client.clone(),
+                team_id,
+                &config.device.id,
+                crate::config::DaemonConfig::config_dir(),
+                is_team_host,
+            )?)
+        } else {
+            None
+        };
+
+        Ok(Self { config, mqtt, agents, auth, peers, permissions, workspaces, workspaces_path, sessions, sessions_path, teamclaw })
     }
 
     pub async fn run(mut self) -> crate::error::Result<()> {
@@ -77,6 +91,10 @@ impl DaemonServer {
             .map_err(crate::error::AmuxError::Mqtt)?;
         self.mqtt.subscribe_all().await
             .map_err(crate::error::AmuxError::Mqtt)?;
+
+        if let Some(tc) = &self.teamclaw {
+            tc.subscribe_all().await.expect("teamclaw subscribe failed");
+        }
 
         let publisher = Publisher::new(&self.mqtt);
         publisher.publish_agent_list(&self.merged_agent_list()).await
@@ -233,12 +251,32 @@ impl DaemonServer {
     }
 
     async fn handle_incoming(&mut self, msg: subscriber::IncomingMessage) {
+        use prost::Message as ProstMessage;
         match msg {
             subscriber::IncomingMessage::AgentCommand { agent_id, envelope } => {
                 self.handle_agent_command(&agent_id, envelope).await;
             }
             subscriber::IncomingMessage::DeviceCollab { envelope } => {
                 self.handle_device_collab(envelope).await;
+            }
+            subscriber::IncomingMessage::TeamclawRpc { topic, payload } => {
+                if let Some(tc) = &mut self.teamclaw {
+                    tc.handle_rpc_request(&topic, &payload).await;
+                }
+            }
+            subscriber::IncomingMessage::TeamclawSessionMessage { session_id, payload } => {
+                if let Some(tc) = &self.teamclaw {
+                    if tc.is_host_for(&session_id) {
+                        if let Ok(envelope) = crate::proto::teamclaw::SessionMessageEnvelope::decode(payload.as_slice()) {
+                            if let Some(msg) = &envelope.message {
+                                let _ = tc.persist_message(&session_id, msg);
+                            }
+                        }
+                    }
+                }
+            }
+            subscriber::IncomingMessage::TeamclawWorkItemEvent { .. } => {
+                // Work item events handled via RPC; broadcast received here for UI sync
             }
         }
     }

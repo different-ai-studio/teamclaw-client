@@ -7,6 +7,10 @@ pub struct DaemonConfig {
     pub mqtt: MqttConfig,
     #[serde(default)]
     pub agents: AgentsConfig,
+    #[serde(default)]
+    pub team_id: Option<String>,
+    #[serde(default)]
+    pub is_team_host: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

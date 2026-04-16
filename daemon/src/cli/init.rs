@@ -22,6 +22,8 @@ pub fn run_init() -> anyhow::Result<()> {
         device: DeviceConfig { id: device_id.clone(), name: device_name.clone() },
         mqtt: MqttConfig { broker_url: broker_url.clone(), username, password },
         agents: AgentsConfig::default(),
+        team_id: None,
+        is_team_host: None,
     };
     config.save(&config_path)?;
     println!("✓ Config written to {}", config_path.display());

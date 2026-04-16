@@ -12,10 +12,52 @@ pub enum IncomingMessage {
     DeviceCollab {
         envelope: amux::DeviceCommandEnvelope,
     },
+    TeamclawRpc {
+        topic: String,
+        payload: Vec<u8>,
+    },
+    TeamclawSessionMessage {
+        session_id: String,
+        payload: Vec<u8>,
+    },
+    TeamclawWorkItemEvent {
+        session_id: String,
+        payload: Vec<u8>,
+    },
 }
 
 pub fn parse_incoming(publish: &Publish) -> Option<IncomingMessage> {
     let topic = &publish.topic;
+
+    // Teamclaw topic matching (checked before AMUX topics)
+    if topic.starts_with("teamclaw/") {
+        if topic.ends_with("/req") {
+            return Some(IncomingMessage::TeamclawRpc {
+                topic: topic.clone(),
+                payload: publish.payload.to_vec(),
+            });
+        }
+        // teamclaw/{team_id}/session/{session_id}/messages  or  /workitems
+        let parts: Vec<&str> = topic.split('/').collect();
+        if parts.len() == 5 && parts[2] == "session" {
+            let session_id = parts[3].to_string();
+            match parts[4] {
+                "messages" => {
+                    return Some(IncomingMessage::TeamclawSessionMessage {
+                        session_id,
+                        payload: publish.payload.to_vec(),
+                    });
+                }
+                "workitems" => {
+                    return Some(IncomingMessage::TeamclawWorkItemEvent {
+                        session_id,
+                        payload: publish.payload.to_vec(),
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
 
     if topic.contains("/agent/") && topic.ends_with("/commands") {
         let parts: Vec<&str> = topic.split('/').collect();
