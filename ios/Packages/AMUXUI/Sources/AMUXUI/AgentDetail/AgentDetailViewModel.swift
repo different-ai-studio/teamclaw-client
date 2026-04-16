@@ -99,7 +99,6 @@ public final class AgentDetailViewModel {
             if let idx = events.lastIndex(where: { $0.eventType == "tool_use" && $0.toolId == tr.toolID }) {
                 events[idx].success = tr.success
                 events[idx].isComplete = true
-                if !tr.summary.isEmpty { events[idx].text = tr.summary }
             } else {
                 let event = AgentEvent(agentId: agent.agentId, sequence: sequence, eventType: "tool_result")
                 event.toolId = tr.toolID; event.success = tr.success; event.text = tr.summary
