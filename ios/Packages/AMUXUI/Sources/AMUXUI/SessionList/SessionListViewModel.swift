@@ -27,7 +27,7 @@ public final class SessionListViewModel {
         let ctx = ModelContext(container)
 
         // Load cached data immediately
-        agents = (try? ctx.fetch(FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.startedAt, order: .reverse)]))) ?? []
+        agents = (try? ctx.fetch(FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
         workspaces = (try? ctx.fetch(FetchDescriptor<Workspace>(sortBy: [SortDescriptor(\.displayName)]))) ?? []
 
         task?.cancel()
@@ -106,7 +106,7 @@ public final class SessionListViewModel {
             }
         }
         try? modelContext.save()
-        agents = (try? modelContext.fetch(FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.startedAt, order: .reverse)]))) ?? []
+        agents = (try? modelContext.fetch(FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
     }
 
     private func syncWorkspaces(_ list: Amux_WorkspaceList, modelContext: ModelContext) {

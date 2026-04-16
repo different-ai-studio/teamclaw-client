@@ -90,6 +90,9 @@ public struct AgentDetailView: View {
                     }
                     .padding(.top, 8)
                 }
+                .onAppear {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
                 .onChange(of: viewModel.events.count) {
                     withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
@@ -178,7 +181,7 @@ private struct ReplySheet: View {
     let onCancel: () -> Void
     @FocusState private var isFocused: Bool
     @State private var showFilePicker = false
-    @State private var selectedModel = "Sonnet"
+    @AppStorage("selectedModel") private var selectedModel = "Sonnet"
     @State private var attachedFiles: [String] = []
 
     private let models = ["Haiku", "Sonnet", "Opus"]
