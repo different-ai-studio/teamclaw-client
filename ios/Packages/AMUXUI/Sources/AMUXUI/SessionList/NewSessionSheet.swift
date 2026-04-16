@@ -187,9 +187,12 @@ public struct NewSessionSheet: View {
                 Button {} label: {
                     Image(systemName: "plus")
                         .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(.primary)
                         .frame(width: 40, height: 40)
-                        .liquidGlass(in: Circle())
+                        .contentShape(Circle())
                 }
+                .buttonStyle(.plain)
+                .liquidGlass(in: Circle())
 
                 HStack(alignment: .bottom, spacing: 4) {
                     TextField("Message", text: $messageText, axis: .vertical)
@@ -206,8 +209,10 @@ public struct NewSessionSheet: View {
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .frame(width: 32, height: 32)
-                                .liquidGlass(in: Circle(), tint: .green)
+                                .contentShape(Circle())
                         }
+                        .buttonStyle(.plain)
+                        .liquidGlass(in: Circle(), tint: .green)
                         .padding(.trailing, 6)
                         .padding(.bottom, 6)
                     }

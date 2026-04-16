@@ -57,30 +57,15 @@ public struct SessionListView: View {
             .toolbar {
                 // Left: Settings
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
-                            .font(.body)
-                            .frame(width: 36, height: 36)
-                    }
-                    .liquidGlass(in: Circle())
+                    GlassCircleButton(icon: "gearshape") { showSettings = true }
                 }
                 // Right: Workspaces
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { showWorkspaces = true } label: {
-                        Image(systemName: "folder")
-                            .font(.body)
-                            .frame(width: 36, height: 36)
-                    }
-                    .liquidGlass(in: Circle())
+                    GlassCircleButton(icon: "folder") { showWorkspaces = true }
                 }
                 // Right: Members
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { showMembers = true } label: {
-                        Image(systemName: "person.2.fill")
-                            .font(.body)
-                            .frame(width: 36, height: 36)
-                    }
-                    .liquidGlass(in: Circle())
+                    GlassCircleButton(icon: "person.2.fill") { showMembers = true }
                 }
             }
             // Bottom bar: iOS Mail style with animated search expansion
@@ -365,16 +350,14 @@ private struct MailStyleBottomBar: View {
         HStack(spacing: 12) {
             // Left: filter/select button — hides when search active
             if !isActive {
-                Button {
+                GlassCircleButton(
+                    icon: isEditing ? "checkmark.circle.fill" : "line.3.horizontal.decrease"
+                ) {
                     withAnimation(.spring(duration: 0.25)) {
                         isEditing.toggle()
                         if !isEditing { selectedIDs.removeAll() }
                     }
-                } label: {
-                    Image(systemName: isEditing ? "checkmark.circle.fill" : "line.3.horizontal.decrease")
-                        .font(.title2)
                 }
-                .modifier(GlassToolbarButtonModifier())
                 .transition(.scale.combined(with: .opacity))
             }
 
@@ -390,25 +373,19 @@ private struct MailStyleBottomBar: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .modifier(GlassCapsuleModifier())
+            .liquidGlass(in: Capsule(), interactive: true)
 
             // Right: compose OR close
             if isActive {
-                Button {
+                GlassCircleButton(icon: "xmark.circle.fill") {
                     searchText = ""
                     isSearchFocused.wrappedValue = false
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
                 }
-                .modifier(GlassToolbarButtonModifier())
                 .transition(.scale.combined(with: .opacity))
             } else {
-                Button { showNewSession = true } label: {
-                    Image(systemName: "square.and.pencil")
-                        .font(.title2)
+                GlassCircleButton(icon: "square.and.pencil") {
+                    showNewSession = true
                 }
-                .modifier(GlassToolbarButtonModifier())
                 .modifier(MatchedTransitionSourceModifier(sourceID: "newSession", namespace: sheetTransition))
                 .transition(.scale.combined(with: .opacity))
             }
@@ -419,17 +396,24 @@ private struct MailStyleBottomBar: View {
     }
 }
 
-// MARK: - Liquid Glass Modifiers
+// MARK: - GlassCircleButton
 
-private struct GlassToolbarButtonModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content.liquidGlass(in: Circle(), interactive: true)
-    }
-}
+struct GlassCircleButton: View {
+    let icon: String
+    var size: CGFloat = 40
+    var iconFont: Font = .body
+    let action: () -> Void
 
-private struct GlassCapsuleModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content.liquidGlass(in: Capsule(), interactive: true)
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(iconFont)
+                .foregroundStyle(.primary)
+                .frame(width: size, height: size)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .liquidGlass(in: Circle())
     }
 }
 
