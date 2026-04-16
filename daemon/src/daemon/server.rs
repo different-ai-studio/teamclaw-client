@@ -60,6 +60,7 @@ impl DaemonServer {
                 &config.device.id,
                 crate::config::DaemonConfig::config_dir(),
                 is_team_host,
+                config.team_host_device_id.clone(),
             )?)
         } else {
             None

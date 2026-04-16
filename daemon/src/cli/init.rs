@@ -24,6 +24,7 @@ pub fn run_init() -> anyhow::Result<()> {
         agents: AgentsConfig::default(),
         team_id: None,
         is_team_host: None,
+        team_host_device_id: None,
     };
     config.save(&config_path)?;
     println!("✓ Config written to {}", config_path.display());

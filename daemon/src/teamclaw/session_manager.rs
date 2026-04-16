@@ -19,6 +19,7 @@ pub struct SessionManager {
     device_id: String,
     team_id: String,
     is_team_host: bool,
+    team_host_device_id: Option<String>,
 }
 
 impl SessionManager {
@@ -28,6 +29,7 @@ impl SessionManager {
         device_id: &str,
         config_dir: PathBuf,
         is_team_host: bool,
+        team_host_device_id: Option<String>,
     ) -> crate::error::Result<Self> {
         let topics = TeamclawTopics::new(team_id, device_id);
         let rpc_server = RpcServer::new(client.clone(), team_id.to_string(), device_id.to_string());
@@ -44,6 +46,7 @@ impl SessionManager {
             device_id: device_id.to_string(),
             team_id: team_id.to_string(),
             is_team_host,
+            team_host_device_id,
         })
     }
 
@@ -220,16 +223,31 @@ impl SessionManager {
             if let Err(e) = self.publish_session_index().await {
                 warn!("handle_create_session: failed to publish session index: {}", e);
             }
-        } else {
+        } else if let Some(host_id) = &self.team_host_device_id {
             // Send RegisterSessionRequest RPC to team host
-            // We don't have a direct reference to the host device_id here, but we publish
-            // to the sessions topic which the team host subscribes to; the index is maintained
-            // by the team host. We build an entry and send via RPC if we know the host.
-            // For now, log that we're non-host and the index should be updated by team host.
-            info!(
-                session_id = %session_id,
-                "non-team-host: session created, team host should register it"
-            );
+            let entry = teamclaw::SessionIndexEntry {
+                session_id: session_id.clone(),
+                session_type: r.session_type,
+                title: r.title.clone(),
+                host_device_id: self.device_id.clone(),
+                created_at: Utc::now().timestamp(),
+                participant_count: 0,
+                ..Default::default()
+            };
+            let rpc_req = RpcRequest {
+                request_id: Uuid::new_v4().to_string()[..8].to_string(),
+                sender_device_id: self.device_id.clone(),
+                method: Some(teamclaw::rpc_request::Method::RegisterSession(
+                    teamclaw::RegisterSessionRequest {
+                        entry: Some(entry),
+                    },
+                )),
+            };
+            let topic = self.topics.rpc_request(host_id, &rpc_req.request_id);
+            let _ = self.client.publish(topic, QoS::AtLeastOnce, false, rpc_req.encode_to_vec()).await;
+            info!(session_id = %session_id, team_host = %host_id, "sent RegisterSession RPC to team host");
+        } else {
+            warn!(session_id = %session_id, "non-team-host with no team_host_device_id configured, session index not updated");
         }
 
         let session_info = self.sessions.to_proto_session_info(&session_id);
