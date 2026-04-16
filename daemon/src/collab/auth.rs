@@ -31,7 +31,7 @@ impl AuthManager {
                 member_id: Uuid::new_v4().to_string(),
                 display_name: invite.display_name.clone(),
                 role: invite.role.clone(),
-                token: Uuid::new_v4().to_string(),
+                token: invite.invite_token.clone(), // Keep invite token so iOS can re-auth
                 joined_at: Utc::now(),
             };
             self.store.add_member(member.clone());
@@ -44,13 +44,13 @@ impl AuthManager {
         }
     }
 
-    pub fn create_invite(&mut self, display_name: &str, expires_hours: u32) -> crate::error::Result<PendingInvite> {
+    pub fn create_invite(&mut self, display_name: &str, expires_hours: u32, role: &str) -> crate::error::Result<PendingInvite> {
         let invite = PendingInvite {
             invite_token: Uuid::new_v4().to_string(),
             display_name: display_name.into(),
             created_at: Utc::now(),
             expires_at: Utc::now() + Duration::hours(expires_hours as i64),
-            role: "member".into(),
+            role: role.into(),
         };
         self.store.add_invite(invite.clone());
         self.store.save(&self.store_path)?;

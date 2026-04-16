@@ -1126,6 +1126,9 @@ public struct Amux_InviteMember: Sendable {
 
   public var requestID: String = String()
 
+  /// Owner or Member (default: Member)
+  public var role: Amux_MemberRole = .owner
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -3376,7 +3379,7 @@ extension Amux_PeerDisconnect: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
 extension Amux_InviteMember: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".InviteMember"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}display_name\0\u{3}request_id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}display_name\0\u{3}request_id\0\u{1}role\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3386,6 +3389,7 @@ extension Amux_InviteMember: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.displayName) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.requestID) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.role) }()
       default: break
       }
     }
@@ -3398,12 +3402,16 @@ extension Amux_InviteMember: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
     if !self.requestID.isEmpty {
       try visitor.visitSingularStringField(value: self.requestID, fieldNumber: 2)
     }
+    if self.role != .owner {
+      try visitor.visitSingularEnumField(value: self.role, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Amux_InviteMember, rhs: Amux_InviteMember) -> Bool {
     if lhs.displayName != rhs.displayName {return false}
     if lhs.requestID != rhs.requestID {return false}
+    if lhs.role != rhs.role {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -10,6 +10,7 @@ public struct MemberListView: View {
     @State private var viewModel = MemberListViewModel()
     @State private var showInvite = false
     @State private var inviteName = ""
+    @State private var inviteRole: Amux_MemberRole = .member
     let mqtt: MQTTService
     let deviceId: String
     let peerId: String
@@ -71,12 +72,34 @@ public struct MemberListView: View {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
                 }
             }
-            .alert("Invite Member", isPresented: $showInvite) {
-                TextField("Name", text: $inviteName)
-                Button("Invite") {
-                    Task { try? await viewModel.invite(displayName: inviteName, mqtt: mqtt, deviceId: deviceId, peerId: peerId); inviteName = "" }
+            .sheet(isPresented: $showInvite) {
+                NavigationStack {
+                    Form {
+                        TextField("Name", text: $inviteName)
+                        Picker("Role", selection: $inviteRole) {
+                            Text("Member").tag(Amux_MemberRole.member)
+                            Text("Owner").tag(Amux_MemberRole.owner)
+                        }
+                    }
+                    .navigationTitle("Invite Member")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { inviteName = ""; inviteRole = .member; showInvite = false }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Invite") {
+                                Task {
+                                    try? await viewModel.invite(displayName: inviteName, role: inviteRole, mqtt: mqtt, deviceId: deviceId, peerId: peerId)
+                                    inviteName = ""; inviteRole = .member
+                                }
+                                showInvite = false
+                            }
+                            .disabled(inviteName.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                    }
                 }
-                Button("Cancel", role: .cancel) { inviteName = "" }
+                .presentationDetents([.medium])
             }
         }
         .task { viewModel.start(mqtt: mqtt, deviceId: deviceId, modelContext: modelContext) }

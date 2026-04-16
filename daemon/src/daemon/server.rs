@@ -575,7 +575,8 @@ impl DaemonServer {
                     warn!(peer_id, "invite rejected: not owner");
                     return;
                 }
-                match self.auth.create_invite(&invite.display_name, 24) {
+                let invite_role = if invite.role == amux::MemberRole::Owner as i32 { "owner" } else { "member" };
+                match self.auth.create_invite(&invite.display_name, 24, invite_role) {
                     Ok(pending) => {
                         let deeplink = format!(
                             "amux://join?broker={}&device={}&token={}",

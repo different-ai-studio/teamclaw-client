@@ -48,11 +48,11 @@ public final class MemberListViewModel {
         members = (try? modelContext.fetch(FetchDescriptor<Member>(sortBy: [SortDescriptor(\.displayName)]))) ?? []
     }
 
-    public func invite(displayName: String, mqtt: MQTTService, deviceId: String, peerId: String) async throws {
+    public func invite(displayName: String, role: Amux_MemberRole = .member, mqtt: MQTTService, deviceId: String, peerId: String) async throws {
         var cmd = Amux_DeviceCommandEnvelope()
         cmd.deviceID = deviceId; cmd.peerID = peerId
         cmd.commandID = UUID().uuidString; cmd.timestamp = Int64(Date().timeIntervalSince1970)
-        var invite = Amux_InviteMember(); invite.displayName = displayName; invite.requestID = UUID().uuidString
+        var invite = Amux_InviteMember(); invite.displayName = displayName; invite.requestID = UUID().uuidString; invite.role = role
         var collabCmd = Amux_DeviceCollabCommand(); collabCmd.command = .inviteMember(invite)
         cmd.command = collabCmd
         let data = try ProtoMQTTCoder.encode(cmd)
