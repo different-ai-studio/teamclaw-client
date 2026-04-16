@@ -249,8 +249,31 @@ public final class TeamclawService {
             workItem = item
         case .updated(let item):
             workItem = item
-        case .claimed, .submitted, .none:
-            // No work item to sync for these events
+        case .claimed(let claim):
+            // Update work item status to in_progress on claim
+            let claimItemId = claim.workItemID
+            let claimDesc = FetchDescriptor<WorkItem>(
+                predicate: #Predicate { $0.workItemId == claimItemId }
+            )
+            if let existing = (try? modelContext.fetch(claimDesc))?.first {
+                if existing.status == "open" {
+                    existing.status = "in_progress"
+                    try? modelContext.save()
+                }
+            }
+            return
+        case .submitted(let sub):
+            // Mark work item as done when submission received
+            let subItemId = sub.workItemID
+            let subDesc = FetchDescriptor<WorkItem>(
+                predicate: #Predicate { $0.workItemId == subItemId }
+            )
+            if let existing = (try? modelContext.fetch(subDesc))?.first {
+                existing.status = "done"
+                try? modelContext.save()
+            }
+            return
+        case .none:
             return
         }
 
