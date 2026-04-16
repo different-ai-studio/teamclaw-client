@@ -30,7 +30,7 @@ platform :ios do
       export_method: "app-store",
       export_options: {
         provisioningProfiles: {
-          "team.amux.app" => "match AppStore team.amux.app",
+          "tech.teamclaw.mobile" => ENV["sigh_tech.teamclaw.mobile_appstore_profile-name"],
         },
       },
     )

@@ -1,2 +1,2 @@
-app_identifier("team.amux.app")
+app_identifier("tech.teamclaw.mobile")
 team_id(ENV["TEAM_ID"])

@@ -9,7 +9,7 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../AMUXCore"),
-        .package(url: "https://github.com/apple/swift-markdown.git", from: "0.4.0"),
+        .package(url: "https://github.com/apple/swift-markdown.git", from: "0.7.3"),
     ],
     targets: [
         .target(
