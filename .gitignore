@@ -1,0 +1,33 @@
+# Rust
+/daemon/target/
+**/*.rs.bk
+Cargo.lock
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Generated
+/ios/Generated/
+
+# Worktrees
+.worktrees/
+
+# Config (contains secrets)
+*.pid
+*.sock
+.env.local
+
+# Internal docs (not public)
+docs/
+
+# Fastlane
+ios/fastlane/report.xml
+ios/fastlane/Preview.html
+ios/fastlane/screenshots/
+ios/fastlane/test_output/
+ios/Gemfile.lock

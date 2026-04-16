@@ -1,0 +1,40 @@
+name: TestFlight
+
+on:
+  push:
+    tags:
+      - 'ios-v*'
+
+jobs:
+  build-and-upload:
+    runs-on: macos-latest
+
+    defaults:
+      run:
+        working-directory: ios
+
+    env:
+      TEAM_ID: ${{ secrets.TEAM_ID }}
+      MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+          working-directory: ios
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build and upload to TestFlight
+        run: bundle exec fastlane beta

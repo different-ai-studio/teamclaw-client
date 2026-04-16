@@ -1,0 +1,2 @@
+app_identifier("team.amux.app")
+team_id(ENV["TEAM_ID"])

@@ -1,0 +1,5 @@
+git_url(ENV["MATCH_GIT_URL"])
+storage_mode("git")
+type("appstore")
+app_identifier("team.amux.app")
+team_id(ENV["TEAM_ID"])

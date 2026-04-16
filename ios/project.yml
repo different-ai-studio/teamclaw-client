@@ -1,0 +1,29 @@
+name: AMUX
+options:
+  bundleIdPrefix: team.amux
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "26"
+
+packages:
+  AMUXCore:
+    path: Packages/AMUXCore
+  AMUXUI:
+    path: Packages/AMUXUI
+
+targets:
+  AMUX:
+    type: application
+    platform: iOS
+    sources:
+      - path: AMUXApp
+    dependencies:
+      - package: AMUXCore
+      - package: AMUXUI
+    settings:
+      base:
+        INFOPLIST_FILE: AMUXApp/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: team.amux.app
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "5.10"

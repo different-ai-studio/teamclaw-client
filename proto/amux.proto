@@ -1,0 +1,359 @@
+syntax = "proto3";
+package amux;
+
+// ═══════════════════════════════════════════
+//  AMUX Envelope — wraps ACP payloads
+// ═══════════════════════════════════════════
+
+// Downstream: daemon → clients
+message Envelope {
+  string agent_id = 1;
+  string device_id = 2;
+  string source_peer_id = 3;      // Who triggered (empty if agent-initiated)
+  int64 timestamp = 4;
+  uint64 sequence = 5;            // Monotonic per agent, for ordering
+
+  oneof payload {
+    AcpEvent acp_event = 10;      // Agent event (ACP passthrough)
+    CollabEvent collab_event = 11; // Collaboration control (AMUX-only)
+  }
+}
+
+// Upstream: clients → daemon (agent-level, sent to agent/{agentId}/commands topic)
+message CommandEnvelope {
+  string agent_id = 1;
+  string device_id = 2;
+  string peer_id = 3;
+  string command_id = 4;          // For response correlation
+  int64 timestamp = 5;
+
+  AcpCommand acp_command = 10;    // Agent command (maps to ACP request)
+}
+
+// Upstream: clients → daemon (device-level, sent to {deviceId}/collab topic)
+message DeviceCommandEnvelope {
+  string device_id = 1;
+  string peer_id = 2;
+  string command_id = 3;
+  int64 timestamp = 4;
+
+  DeviceCollabCommand command = 10;
+}
+
+// ═══════════════════════════════════════════
+//  ACP Passthrough — re-encoded as Protobuf
+// ═══════════════════════════════════════════
+
+// ACP session/update notification types
+message AcpEvent {
+  oneof event {
+    AcpThinking thinking = 1;
+    AcpOutput output = 2;
+    AcpToolUse tool_use = 3;
+    AcpToolResult tool_result = 4;
+    AcpError error = 5;
+    AcpPermissionRequest permission_request = 6;
+    AcpStatusChange status_change = 7;
+    AcpTodoUpdate todo_update = 8;
+    AcpRawJson raw = 15;           // Catch-all for new ACP events not yet mapped
+  }
+}
+
+message AcpThinking {
+  string text = 1;
+}
+
+message AcpOutput {
+  string text = 1;
+  bool is_complete = 2;
+}
+
+message AcpToolUse {
+  string tool_id = 1;
+  string tool_name = 2;           // "Read", "Edit", "Bash", "Write", etc.
+  string description = 3;
+  map<string, string> params = 4;
+}
+
+message AcpToolResult {
+  string tool_id = 1;
+  bool success = 2;
+  string summary = 3;
+}
+
+message AcpError {
+  string message = 1;
+  string details = 2;
+}
+
+message AcpPermissionRequest {
+  string request_id = 1;
+  string tool_name = 2;
+  string description = 3;
+  map<string, string> params = 4;
+}
+
+message AcpStatusChange {
+  AgentStatus old_status = 1;
+  AgentStatus new_status = 2;
+}
+
+message AcpTodoUpdate {
+  repeated TodoItem items = 1;
+}
+
+message AcpRawJson {
+  string method = 1;              // ACP method name
+  bytes json_payload = 2;         // Raw JSON for forward compat
+}
+
+// ACP commands from client
+message AcpCommand {
+  oneof command {
+    AcpSendPrompt send_prompt = 1;
+    AcpCancel cancel = 2;
+    AcpGrantPermission grant_permission = 3;
+    AcpDenyPermission deny_permission = 4;
+    AcpStartAgent start_agent = 5;
+    AcpStopAgent stop_agent = 6;
+  }
+}
+
+message AcpSendPrompt {
+  string text = 1;
+}
+
+message AcpCancel {}
+
+message AcpGrantPermission {
+  string request_id = 1;
+}
+
+message AcpDenyPermission {
+  string request_id = 1;
+}
+
+message AcpStartAgent {
+  AgentType agent_type = 1;
+  string worktree = 2;
+  string initial_prompt = 3;
+  string workspace_id = 4;
+}
+
+message AcpStopAgent {}
+
+// ═══════════════════════════════════════════
+//  Collaboration — AMUX-only, not in ACP
+// ═══════════════════════════════════════════
+
+// Agent-level collab events (flow through agent's events topic in Envelope)
+message CollabEvent {
+  oneof event {
+    PromptAccepted prompt_accepted = 1;
+    PromptRejected prompt_rejected = 2;
+    PermissionResolved permission_resolved = 3;
+  }
+}
+
+// Device-level collab events (flow through {deviceId}/collab topic)
+message DeviceCollabEvent {
+  string device_id = 10;
+  int64 timestamp = 11;
+  oneof event {
+    PeerJoined peer_joined = 1;
+    PeerLeft peer_left = 2;
+    PeerKicked peer_kicked = 3;
+    MemberListChanged member_list_changed = 4;
+    AuthResult auth_result = 5;
+    InviteCreated invite_created = 6;
+    PromptRejected command_rejected = 7;
+    WorkspaceResult workspace_result = 8;
+  }
+}
+
+message PromptAccepted {
+  string command_id = 1;
+}
+
+message PromptRejected {
+  string command_id = 1;
+  string reason = 2;
+}
+
+message PeerJoined {
+  PeerInfo peer = 1;
+}
+
+message PeerLeft {
+  string peer_id = 1;
+}
+
+message PeerKicked {
+  string peer_id = 1;
+  string reason = 2;
+}
+
+message MemberListChanged {
+  repeated MemberInfo members = 1;
+}
+
+message AuthResult {
+  string peer_id = 1;
+  bool accepted = 2;
+  string reason = 3;
+  MemberRole role = 4;
+}
+
+message PermissionResolved {
+  string request_id = 1;
+  string resolved_by_peer_id = 2;
+  bool granted = 3;
+}
+
+// Device-level collab commands (sent to {deviceId}/collab topic)
+message DeviceCollabCommand {
+  oneof command {
+    PeerAnnounce peer_announce = 1;
+    PeerDisconnect peer_disconnect = 2;
+    InviteMember invite_member = 3;
+    RemoveMember remove_member = 4;
+    AddWorkspace add_workspace = 5;
+    RemoveWorkspace remove_workspace = 6;
+  }
+}
+
+message AddWorkspace {
+  string path = 1;
+}
+
+message RemoveWorkspace {
+  string workspace_id = 1;
+}
+
+message WorkspaceResult {
+  string command_id = 1;
+  bool success = 2;
+  string error = 3;
+  WorkspaceInfo workspace = 4;
+}
+
+message PeerAnnounce {
+  PeerInfo peer = 1;
+  string auth_token = 2;
+}
+
+message PeerDisconnect {}
+
+message InviteMember {
+  string display_name = 1;
+  string request_id = 2;
+}
+
+message RemoveMember {
+  string member_id = 1;
+}
+
+// Response to InviteMember
+message InviteCreated {
+  string request_id = 1;
+  string invite_token = 2;
+  string deeplink = 3;
+  int64 expires_at = 4;
+}
+
+// ═══════════════════════════════════════════
+//  Device status (LWT support)
+// ═══════════════════════════════════════════
+
+message DeviceStatus {
+  bool online = 1;
+  string device_name = 2;
+  int64 timestamp = 3;
+}
+
+// ═══════════════════════════════════════════
+//  Shared types
+// ═══════════════════════════════════════════
+
+enum AgentType {
+  AGENT_TYPE_UNKNOWN = 0;
+  AGENT_TYPE_CLAUDE_CODE = 1;
+  AGENT_TYPE_OPENCODE = 2;
+  AGENT_TYPE_CODEX = 3;
+}
+
+message WorkspaceInfo {
+  string workspace_id = 1;
+  string path = 2;
+  string display_name = 3;
+}
+
+message WorkspaceList {
+  repeated WorkspaceInfo workspaces = 1;
+}
+
+enum AgentStatus {
+  AGENT_STATUS_UNKNOWN = 0;
+  AGENT_STATUS_STARTING = 1;
+  AGENT_STATUS_ACTIVE = 2;
+  AGENT_STATUS_IDLE = 3;
+  AGENT_STATUS_ERROR = 4;
+  AGENT_STATUS_STOPPED = 5;
+}
+
+message AgentInfo {
+  string agent_id = 1;
+  AgentType agent_type = 2;
+  string worktree = 3;
+  string branch = 4;
+  AgentStatus status = 5;
+  int64 started_at = 6;
+  string current_prompt = 7;
+  string workspace_id = 8;
+  string session_title = 9;
+  string last_output_summary = 10;
+  int32 tool_use_count = 11;
+}
+
+message AgentList {
+  repeated AgentInfo agents = 1;
+}
+
+message TodoItem {
+  string content = 1;
+  enum Status {
+    PENDING = 0;
+    IN_PROGRESS = 1;
+    COMPLETED = 2;
+  }
+  Status status = 2;
+}
+
+enum MemberRole {
+  MEMBER_ROLE_OWNER = 0;
+  MEMBER_ROLE_MEMBER = 1;
+}
+
+message MemberInfo {
+  string member_id = 1;
+  string display_name = 2;
+  MemberRole role = 3;
+  int64 joined_at = 4;
+}
+
+message MemberList {
+  repeated MemberInfo members = 1;
+}
+
+message PeerInfo {
+  string peer_id = 1;
+  string member_id = 2;
+  string display_name = 3;
+  string device_type = 4;
+  MemberRole role = 5;
+  int64 connected_at = 6;
+}
+
+message PeerList {
+  repeated PeerInfo peers = 1;
+}
