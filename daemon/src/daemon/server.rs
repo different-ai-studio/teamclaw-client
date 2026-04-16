@@ -217,6 +217,13 @@ impl DaemonServer {
                     session.last_output_summary = summary;
                     let _ = self.sessions.save(&self.sessions_path);
                 }
+                // Publish completed output to collab sessions this agent participates in
+                if let Some(tc) = &self.teamclaw {
+                    let collab_sessions = tc.sessions_for_agent(agent_id);
+                    for sid in &collab_sessions {
+                        tc.publish_agent_message(sid, agent_id, &output.text).await;
+                    }
+                }
             }
         }
 
@@ -265,18 +272,49 @@ impl DaemonServer {
                 }
             }
             subscriber::IncomingMessage::TeamclawSessionMessage { session_id, payload } => {
-                if let Some(tc) = &self.teamclaw {
-                    if tc.is_host_for(&session_id) {
-                        if let Ok(envelope) = crate::proto::teamclaw::SessionMessageEnvelope::decode(payload.as_slice()) {
-                            if let Some(msg) = &envelope.message {
+                if let Ok(envelope) = crate::proto::teamclaw::SessionMessageEnvelope::decode(payload.as_slice()) {
+                    if let Some(msg) = &envelope.message {
+                        // Host persists the message
+                        if let Some(tc) = &self.teamclaw {
+                            if tc.is_host_for(&session_id) {
                                 let _ = tc.persist_message(&session_id, msg);
+                            }
+                        }
+                        // Route to local agents
+                        if let Some(tc) = &self.teamclaw {
+                            let activated = tc.agents_to_activate(&session_id, msg);
+                            for agent_actor_id in activated {
+                                if msg.sender_actor_id == agent_actor_id { continue; }
+                                if self.agents.get_handle(&agent_actor_id).is_some() {
+                                    let prompt = format!(
+                                        "[Collab session: {}] {} says:\n{}",
+                                        session_id, msg.sender_actor_id, msg.content
+                                    );
+                                    if let Err(e) = self.agents.send_prompt(&agent_actor_id, &prompt).await {
+                                        warn!("Failed to route to agent {}: {}", agent_actor_id, e);
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
-            subscriber::IncomingMessage::TeamclawWorkItemEvent { .. } => {
-                // Work item events handled via RPC; broadcast received here for UI sync
+            subscriber::IncomingMessage::TeamclawWorkItemEvent { session_id, payload } => {
+                if let Ok(event) = crate::proto::teamclaw::WorkItemEvent::decode(payload.as_slice()) {
+                    if let Some(tc) = &self.teamclaw {
+                        let activated = tc.agents_to_activate_for_work_item(&session_id, &event);
+                        for agent_actor_id in activated {
+                            if self.agents.get_handle(&agent_actor_id).is_some() {
+                                let prompt = format_work_item_prompt(&session_id, &event);
+                                if !prompt.is_empty() {
+                                    if let Err(e) = self.agents.send_prompt(&agent_actor_id, &prompt).await {
+                                        warn!("Failed to route work item to agent {}: {}", agent_actor_id, e);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -614,5 +652,16 @@ impl DaemonServer {
         };
         let publisher = Publisher::new(&self.mqtt);
         let _ = publisher.publish_agent_event(agent_id, &envelope).await;
+    }
+}
+
+fn format_work_item_prompt(session_id: &str, event: &crate::proto::teamclaw::WorkItemEvent) -> String {
+    use crate::proto::teamclaw::work_item_event::Event;
+    match &event.event {
+        Some(Event::Created(item)) => format!("[Collab session: {}] New work item: {} - {}", session_id, item.title, item.description),
+        Some(Event::Updated(item)) => format!("[Collab session: {}] Work item updated: {}", session_id, item.title),
+        Some(Event::Claimed(claim)) => format!("[Collab session: {}] Work item {} claimed by {}", session_id, claim.work_item_id, claim.actor_id),
+        Some(Event::Submitted(sub)) => format!("[Collab session: {}] Submission for {}: {}", session_id, sub.work_item_id, sub.content),
+        None => String::new(),
     }
 }

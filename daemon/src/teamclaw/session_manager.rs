@@ -787,7 +787,8 @@ impl SessionManager {
             sender_actor_id: message.sender_actor_id.clone(),
             kind: message_kind_to_string(message.kind),
             content: message.content.clone(),
-            created_at: Utc::now(),
+            created_at: chrono::DateTime::from_timestamp(message.created_at, 0)
+                .unwrap_or_else(Utc::now),
             reply_to_message_id: message.reply_to_message_id.clone(),
             mentions: message.mentions.clone(),
         };
@@ -874,6 +875,42 @@ impl SessionManager {
             }
             Some(teamclaw::work_item_event::Event::Created(_)) | None => vec![],
         }
+    }
+
+    /// Get session_ids where this agent participates.
+    pub fn sessions_for_agent(&self, agent_actor_id: &str) -> Vec<String> {
+        self.sessions
+            .sessions
+            .iter()
+            .filter(|s| s.participants.iter().any(|p| p.actor_id == agent_actor_id))
+            .map(|s| s.session_id.clone())
+            .collect()
+    }
+
+    /// Publish an agent's output as a session message.
+    pub async fn publish_agent_message(
+        &self,
+        session_id: &str,
+        agent_actor_id: &str,
+        content: &str,
+    ) {
+        let msg = teamclaw::Message {
+            message_id: Uuid::new_v4().to_string()[..8].to_string(),
+            session_id: session_id.to_string(),
+            sender_actor_id: agent_actor_id.to_string(),
+            kind: teamclaw::MessageKind::Text as i32,
+            content: content.to_string(),
+            created_at: Utc::now().timestamp(),
+            ..Default::default()
+        };
+        let envelope = teamclaw::SessionMessageEnvelope {
+            message: Some(msg),
+        };
+        let topic = self.topics.session_messages(session_id);
+        let _ = self
+            .client
+            .publish(topic, QoS::AtLeastOnce, false, envelope.encode_to_vec())
+            .await;
     }
 
     // --- Private helpers ---
