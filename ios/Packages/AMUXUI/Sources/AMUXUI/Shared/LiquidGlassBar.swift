@@ -11,26 +11,20 @@ extension View {
     ) -> some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
-            // DEBUG: red border = glass effect branch is active
             if interactive {
                 if let tint {
                     self.glassEffect(.regular.interactive().tint(tint), in: shape)
-                        .overlay(shape.stroke(Color.red, lineWidth: 1))
                 } else {
                     self.glassEffect(.regular.interactive(), in: shape)
-                        .overlay(shape.stroke(Color.red, lineWidth: 1))
                 }
             } else {
                 if let tint {
                     self.glassEffect(.regular.tint(tint), in: shape)
-                        .overlay(shape.stroke(Color.red, lineWidth: 1))
                 } else {
                     self.glassEffect(.regular, in: shape)
-                        .overlay(shape.stroke(Color.red, lineWidth: 1))
                 }
             }
         } else {
-            // DEBUG: blue border = fallback branch
             self
                 .background {
                     shape
@@ -38,10 +32,8 @@ extension View {
                         .background(.ultraThinMaterial, in: shape)
                 }
                 .shadow(color: .black.opacity(0.08), radius: 10, y: 3)
-                .overlay(shape.stroke(Color.blue, lineWidth: 2))
         }
         #else
-        // DEBUG: green border = old compiler branch
         self
             .background {
                 shape
@@ -49,7 +41,6 @@ extension View {
                     .background(.ultraThinMaterial, in: shape)
             }
             .shadow(color: .black.opacity(0.08), radius: 10, y: 3)
-            .overlay(shape.stroke(Color.green, lineWidth: 2))
         #endif
     }
 }
