@@ -8,6 +8,7 @@ public struct SessionListView: View {
     let mqtt: MQTTService
     let pairing: PairingManager
     let connectionMonitor: ConnectionMonitor
+    let teamclawService: TeamclawService?
 
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel = SessionListViewModel()
@@ -26,10 +27,11 @@ public struct SessionListView: View {
     @State private var isEditing = false
     @State private var selectedIDs: Set<String> = []
 
-    public init(mqtt: MQTTService, pairing: PairingManager, connectionMonitor: ConnectionMonitor) {
+    public init(mqtt: MQTTService, pairing: PairingManager, connectionMonitor: ConnectionMonitor, teamclawService: TeamclawService? = nil) {
         self.mqtt = mqtt
         self.pairing = pairing
         self.connectionMonitor = connectionMonitor
+        self.teamclawService = teamclawService
     }
 
     public var body: some View {
@@ -49,7 +51,9 @@ public struct SessionListView: View {
                     viewModel: viewModel,
                     navigationPath: $navigationPath,
                     isEditing: $isEditing,
-                    selectedIDs: $selectedIDs
+                    selectedIDs: $selectedIDs,
+                    teamclawService: teamclawService,
+                    actorId: "ios-\(pairing.authToken.prefix(6))"
                 )
             }
             .navigationTitle("Sessions")
@@ -90,8 +94,17 @@ public struct SessionListView: View {
                 )
             }
             .toolbar(.hidden, for: .bottomBar)
-            .navigationDestination(for: String.self) { agentId in
-                if let agent = viewModel.agents.first(where: { $0.agentId == agentId }) {
+            .navigationDestination(for: String.self) { id in
+                if id.hasPrefix("collab:") {
+                    let sessionId = String(id.dropFirst("collab:".count))
+                    if let session = viewModel.collabSessions.first(where: { $0.sessionId == sessionId }),
+                       let svc = teamclawService {
+                        CollabSessionView(session: session, teamclawService: svc,
+                                          actorId: "ios-\(pairing.authToken.prefix(6))")
+                    } else {
+                        Text("Collab session not found")
+                    }
+                } else if let agent = viewModel.agents.first(where: { $0.agentId == id }) {
                     AgentDetailView(agent: agent, mqtt: mqtt, deviceId: pairing.deviceId,
                                     peerId: "ios-\(pairing.authToken.prefix(6))",
                                     allAgentIds: viewModel.agents.map(\.agentId),
@@ -123,6 +136,9 @@ public struct SessionListView: View {
             .task {
                 viewModel.start(mqtt: mqtt, deviceId: pairing.deviceId, modelContext: modelContext)
             }
+            .onChange(of: teamclawService?.sessions.count) {
+                viewModel.reloadCollabSessions(modelContext: modelContext)
+            }
         }
     }
 }
@@ -134,10 +150,16 @@ private struct SessionListContent: View {
     @Binding var navigationPath: [String]
     @Binding var isEditing: Bool
     @Binding var selectedIDs: Set<String>
+    let teamclawService: TeamclawService?
+    let actorId: String
+
+    private var hasContent: Bool {
+        !viewModel.filteredAgents.isEmpty || !viewModel.collabSessions.isEmpty
+    }
 
     var body: some View {
         Group {
-            if viewModel.filteredAgents.isEmpty && viewModel.isLoading {
+            if !hasContent && viewModel.isLoading {
                 VStack(spacing: 12) {
                     ProgressView()
                     Text("Loading sessions…")
@@ -145,11 +167,27 @@ private struct SessionListContent: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if viewModel.filteredAgents.isEmpty {
+            } else if !hasContent {
                 ContentUnavailableView("No Agents", systemImage: "cpu",
                     description: Text("Start a new agent session to begin"))
             } else {
                 List {
+                    // Collab sessions section (shown first)
+                    if !viewModel.collabSessions.isEmpty {
+                        Section {
+                            ForEach(viewModel.collabSessions, id: \.sessionId) { session in
+                                collabRow(session)
+                            }
+                        } header: {
+                            Text("Collab Sessions")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
+                                .textCase(nil)
+                        }
+                    }
+
+                    // Agent sessions grouped by time
                     ForEach(viewModel.groupedFilteredAgents) { group in
                         Section {
                             ForEach(group.agents, id: \.agentId) { agent in
@@ -167,6 +205,16 @@ private struct SessionListContent: View {
                 .listStyle(.plain)
             }
         }
+    }
+
+    @ViewBuilder
+    private func collabRow(_ session: CollabSession) -> some View {
+        CollabSessionRowView(session: session)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                navigationPath.append("collab:\(session.sessionId)")
+            }
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
     }
 
     @ViewBuilder
@@ -313,6 +361,61 @@ struct AgentRowView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         Text("Just now")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - CollabSessionRowView
+
+struct CollabSessionRowView: View {
+    let session: CollabSession
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            // Avatar: group icon to distinguish from agent sessions
+            ZStack {
+                Circle()
+                    .fill(Color.indigo.gradient)
+                    .frame(width: 40, height: 40)
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                // Row 1: title
+                Text(session.title.isEmpty ? "Collab Session" : session.title)
+                    .font(.body)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+
+                // Row 2: last message preview
+                if !session.lastMessagePreview.isEmpty {
+                    Text(session.lastMessagePreview)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                // Row 3: participant count + time
+                HStack(spacing: 4) {
+                    Image(systemName: "person.2")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("\(session.participantCount)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Spacer(minLength: 0)
+
+                    if let time = session.lastMessageAt {
+                        Text(time, style: .relative)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }

@@ -15,6 +15,7 @@ public struct AgentGroup: Identifiable {
 public final class SessionListViewModel {
     public var agents: [Agent] = []
     public var workspaces: [Workspace] = []
+    public var collabSessions: [CollabSession] = []
     public var isLoading = true
     public var searchText = ""
     private var task: Task<Void, Never>?
@@ -29,6 +30,7 @@ public final class SessionListViewModel {
         // Load cached data immediately
         agents = (try? ctx.fetch(FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
         workspaces = (try? ctx.fetch(FetchDescriptor<Workspace>(sortBy: [SortDescriptor(\.displayName)]))) ?? []
+        collabSessions = (try? ctx.fetch(FetchDescriptor<CollabSession>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
 
         task?.cancel()
         task = Task {
@@ -72,6 +74,7 @@ public final class SessionListViewModel {
                 guard let list = try? ProtoMQTTCoder.decode(Amux_AgentList.self, from: msg.payload) else { continue }
                 print("[SessionListVM] AgentList: \(list.agents.count) agents")
                 syncAgents(list, modelContext: ctx)
+                refreshCollabSessions(modelContext: ctx)
             }
         }
     }
@@ -135,6 +138,15 @@ public final class SessionListViewModel {
         let fetched = (try? modelContext.fetch(FetchDescriptor<Workspace>(sortBy: [SortDescriptor(\.displayName)]))) ?? []
         NSLog("[SessionListVM] fetched %d workspaces from SwiftData, setting viewModel.workspaces", fetched.count)
         workspaces = fetched
+    }
+
+    private func refreshCollabSessions(modelContext: ModelContext) {
+        collabSessions = (try? modelContext.fetch(FetchDescriptor<CollabSession>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
+    }
+
+    /// Call this from views when collab sessions are known to have changed (e.g. after TeamclawService sync).
+    public func reloadCollabSessions(modelContext: ModelContext) {
+        collabSessions = (try? modelContext.fetch(FetchDescriptor<CollabSession>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
     }
 
     public var filteredAgents: [Agent] {
