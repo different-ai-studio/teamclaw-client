@@ -187,16 +187,28 @@ public struct AgentDetailView: View {
                     .padding(.horizontal, 16)
                 }
 
-                // Toolbar
-                LiquidGlassBar {
-                    HStack(spacing: 16) {
+                // Toolbar: 3 independent glass capsules
+                HStack {
+                    // Left group: pin + members
+                    HStack(spacing: 14) {
                         Button {} label: { Image(systemName: "pin").font(.title3) }
                         Button { showMembers = true } label: { Image(systemName: "person.2").font(.title3) }
-                        Spacer()
-                        // Mic button
-                        RecordButton(voiceRecorder: voiceRecorder)
-                            .disabled(viewModel.agent.isActive)
-                        Spacer()
+                    }
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .liquidGlass(in: Capsule())
+
+                    Spacer()
+
+                    // Center: mic
+                    RecordButton(voiceRecorder: voiceRecorder)
+                        .disabled(viewModel.agent.isActive)
+
+                    Spacer()
+
+                    // Right group: settings + action
+                    HStack(spacing: 14) {
                         Button { showSettings = true } label: { Image(systemName: "gearshape").font(.title3) }
                         if viewModel.agent.isActive {
                             Button { Task { try? await viewModel.cancelTask() } } label: { Image(systemName: "stop.fill").font(.title3) }
@@ -205,7 +217,12 @@ public struct AgentDetailView: View {
                         }
                     }
                     .foregroundStyle(.primary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .liquidGlass(in: Capsule())
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
         }
         .sheet(isPresented: $showReplySheet) {

@@ -376,59 +376,74 @@ private struct MailStyleBottomBar: View {
     private var isActive: Bool { isSearchFocused.wrappedValue || !searchText.isEmpty }
 
     var body: some View {
-        LiquidGlassBar {
-            HStack(spacing: 12) {
-                // Left: filter/select button — hides when search active
-                if !isActive {
-                    Button {
-                        withAnimation(.spring(duration: 0.25)) {
-                            isEditing.toggle()
-                            if !isEditing { selectedIDs.removeAll() }
-                        }
-                    } label: {
-                        Image(systemName: isEditing ? "checkmark.circle.fill" : "line.3.horizontal.decrease")
-                            .font(.title3)
+        HStack(spacing: 10) {
+            // Left: filter/select button with glass capsule
+            if !isActive {
+                Button {
+                    withAnimation(.spring(duration: 0.25)) {
+                        isEditing.toggle()
+                        if !isEditing { selectedIDs.removeAll() }
                     }
-                    .transition(.scale.combined(with: .opacity))
+                } label: {
+                    Image(systemName: isEditing ? "checkmark.circle.fill" : "line.3.horizontal.decrease")
+                        .font(.title3)
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
                 }
-
-                // Center: search capsule
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.subheadline)
-                    TextField("Search", text: $searchText)
-                        .font(.subheadline)
-                        .focused(isSearchFocused)
-                        .onChange(of: searchText) { onSearchChanged(searchText) }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .liquidGlass(in: Capsule(), interactive: true)
-
-                // Right: compose OR close
-                if isActive {
-                    Button {
-                        searchText = ""
-                        isSearchFocused.wrappedValue = false
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                    }
-                    .transition(.scale.combined(with: .opacity))
-                } else {
-                    Button {
-                        showNewSession = true
-                    } label: {
-                        Image(systemName: "square.and.pencil").font(.title3)
-                    }
-                    .modifier(MatchedTransitionSourceModifier(sourceID: "newSession", namespace: sheetTransition))
-                    .transition(.scale.combined(with: .opacity))
-                }
+                .buttonStyle(.plain)
+                .liquidGlass(in: Circle())
+                .transition(.scale.combined(with: .opacity))
             }
-            .foregroundStyle(.primary)
-            .animation(.spring(duration: 0.3), value: isActive)
+
+            // Center: search capsule
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                TextField("Search", text: $searchText)
+                    .font(.subheadline)
+                    .focused(isSearchFocused)
+                    .onChange(of: searchText) { onSearchChanged(searchText) }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .liquidGlass(in: Capsule(), interactive: true)
+
+            // Right: compose OR close with glass capsule
+            if isActive {
+                Button {
+                    searchText = ""
+                    isSearchFocused.wrappedValue = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.title3)
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .liquidGlass(in: Circle())
+                .transition(.scale.combined(with: .opacity))
+            } else {
+                Button {
+                    showNewSession = true
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                        .font(.title3)
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .liquidGlass(in: Circle())
+                .modifier(MatchedTransitionSourceModifier(sourceID: "newSession", namespace: sheetTransition))
+                .transition(.scale.combined(with: .opacity))
+            }
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .animation(.spring(duration: 0.3), value: isActive)
     }
 }
 
