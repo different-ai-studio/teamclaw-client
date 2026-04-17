@@ -33,7 +33,7 @@ public struct SettingsView: View {
                 }
                 Section {
                     Button {
-                        pairing.unpair(); dismiss()
+                        try? pairing.unpair(); dismiss()
                     } label: {
                         Text("Unpair Device")
                             .font(.body).fontWeight(.medium)

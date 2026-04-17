@@ -17,11 +17,13 @@ let package = Package(
             dependencies: [
                 .product(name: "CocoaMQTT", package: "CocoaMQTT"),
                 .product(name: "SwiftProtobuf", package: "swift-protobuf"),
-            ]
+            ],
+            swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
             name: "AMUXCoreTests",
-            dependencies: ["AMUXCore"]
+            dependencies: ["AMUXCore"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]
 )
