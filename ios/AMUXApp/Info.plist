@@ -39,6 +39,10 @@
         <string>UIInterfaceOrientationLandscapeLeft</string>
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>AMUX needs microphone access for voice input to send prompts to your AI agent.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>AMUX uses on-device speech recognition to convert your voice into text prompts.</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>UILaunchScreen</key>

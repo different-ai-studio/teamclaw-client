@@ -1,6 +1,8 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import Speech
+import AVFoundation
 import AMUXCore
 
 // MARK: - AgentDetailView (NetNewsWire Article-style)
@@ -13,6 +15,7 @@ public struct AgentDetailView: View {
     @State private var showSettings = false
     @State private var showMembers = false
     @State private var collaborators: [Member] = []
+    @State private var voiceRecorder = VoiceRecorder()
 
     let allAgentIds: [String]
     @Binding var navigationPath: [String]
@@ -45,12 +48,13 @@ public struct AgentDetailView: View {
             if !viewModel.isDaemonOnline {
                 HStack(spacing: 6) {
                     Image(systemName: "wifi.slash").font(.caption)
-                    Text("Daemon offline").font(.caption)
+                    Text("Daemon offline").font(.caption).fontWeight(.medium)
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 6)
-                .background(Color.orange)
+                .liquidGlass(in: Capsule(), tint: .orange, interactive: false)
+                .padding(.vertical, 4)
             }
 
             ScrollViewReader { proxy in
@@ -114,30 +118,88 @@ public struct AgentDetailView: View {
         // Top right: prev/next (NetNewsWire ▲▼)
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button(action: goUp) { Image(systemName: "chevron.up") }.disabled(!canGoUp)
-                Button(action: goDown) { Image(systemName: "chevron.down") }.disabled(!canGoDown)
+                GlassCircleButton(icon: "chevron.up", size: 32, iconFont: .caption) { goUp() }
+                    .disabled(!canGoUp)
+                GlassCircleButton(icon: "chevron.down", size: 32, iconFont: .caption) { goDown() }
+                    .disabled(!canGoDown)
             }
         }
-        // Bottom: [Pin][Collab] ··· [Voice] ··· [Settings][Reply/Stop]
-        .toolbar {
-            ToolbarItemGroup(placement: .bottomBar) {
-                Button {} label: { Image(systemName: "pin") }
-                Button { showMembers = true } label: { Image(systemName: "person.2") }
-                Spacer()
-                Button {} label: { Image(systemName: "mic") }
-                    .disabled(viewModel.agent.isActive)
-                Spacer()
-                Button { showSettings = true } label: { Image(systemName: "gearshape") }
-                if viewModel.agent.isActive {
-                    Button { Task { try? await viewModel.cancelTask() } } label: {
-                        Image(systemName: "stop.fill")
-                            .foregroundStyle(.red)
+        .toolbar(.hidden, for: .bottomBar)
+        // Bottom: voice result bubble + toolbar
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 8) {
+                // Transcribed text bubble
+                if let text = voiceRecorder.transcribedText, !text.isEmpty,
+                   voiceRecorder.state == .done {
+                    VStack(spacing: 8) {
+                        Text(text)
+                            .font(.subheadline)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .liquidGlass(in: RoundedRectangle(cornerRadius: 16), interactive: false)
+
+                        HStack(spacing: 12) {
+                            Spacer()
+                            Button {
+                                promptText = text
+                                voiceRecorder.reset()
+                                showReplySheet = true
+                            } label: {
+                                Text("Edit")
+                                    .font(.subheadline).fontWeight(.medium)
+                                    .foregroundStyle(.primary)
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
+                                    .liquidGlass(in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+
+                            Button {
+                                let t = text
+                                voiceRecorder.reset()
+                                Task { try? await viewModel.sendPrompt(t, modelContext: modelContext) }
+                            } label: {
+                                Text("Send")
+                                    .font(.subheadline).fontWeight(.medium)
+                                    .foregroundStyle(.primary)
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
+                                    .liquidGlass(in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                } else {
-                    Button { showReplySheet = true } label: {
-                        Image(systemName: "arrowshape.turn.up.left")
+                    .padding(.horizontal, 16)
+                }
+
+                // Toolbar
+                HStack(spacing: 12) {
+                    GlassCircleButton(icon: "pin") {}
+                    GlassCircleButton(icon: "person.2") { showMembers = true }
+                    Spacer()
+                    // Mic button
+                    GlassCircleButton(
+                        icon: voiceRecorder.state == .recording ? "mic.fill" : "mic"
+                    ) {
+                        switch voiceRecorder.state {
+                        case .idle:
+                            voiceRecorder.startRecording()
+                        case .recording:
+                            voiceRecorder.stopRecording()
+                        case .done:
+                            voiceRecorder.startRecording()
+                        }
+                    }
+                    .disabled(viewModel.agent.isActive)
+                    Spacer()
+                    GlassCircleButton(icon: "gearshape") { showSettings = true }
+                    if viewModel.agent.isActive {
+                        GlassCircleButton(icon: "stop.fill") { Task { try? await viewModel.cancelTask() } }
+                    } else {
+                        GlassCircleButton(icon: "arrowshape.turn.up.left") { showReplySheet = true }
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
         }
         .sheet(isPresented: $showReplySheet) {
@@ -204,11 +266,12 @@ private struct ReplySheet: View {
                 Button(action: { onCancel(); dismiss() }) {
                     Label("Stop Agent", systemImage: "stop.fill")
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(.red, in: RoundedRectangle(cornerRadius: 12))
+                        .liquidGlass(in: Capsule(), tint: .red)
                 }
+                .buttonStyle(.plain)
                 .padding()
             } else {
                 // Immersive text editor — no title, just write
@@ -246,7 +309,7 @@ private struct ReplySheet: View {
                                 }
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
-                                .background(Color(.systemGray5), in: Capsule())
+                                .liquidGlass(in: Capsule(), interactive: false)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -255,18 +318,12 @@ private struct ReplySheet: View {
                 }
 
                 // Bottom toolbar
-                HStack(spacing: 16) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.body)
-                    }
+                HStack(spacing: 12) {
+                    GlassCircleButton(icon: "chevron.down") { dismiss() }
 
                     Spacer()
 
-                    Button { showFilePicker = true } label: {
-                        Image(systemName: "paperclip")
-                            .font(.body)
-                    }
+                    GlassCircleButton(icon: "paperclip") { showFilePicker = true }
 
                     Menu {
                         ForEach(models, id: \.self) { model in
@@ -284,17 +341,27 @@ private struct ReplySheet: View {
                                 .font(.caption)
                                 .fontWeight(.medium)
                         }
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .liquidGlass(in: Capsule())
                     }
 
                     Button {
                         onSend()
                         dismiss()
                     } label: {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(canSend ? .orange : Color(.systemGray4))
+                        Image(systemName: "arrow.up")
+                            .font(.body)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                            .frame(width: 40, height: 40)
+                            .contentShape(Circle())
                     }
+                    .buttonStyle(.plain)
+                    .liquidGlass(in: Circle())
                     .disabled(!canSend)
+                    .opacity(canSend ? 1 : 0.4)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
@@ -352,8 +419,107 @@ private struct AgentSettingsSheet: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    GlassCircleButton(icon: "xmark", size: 32, iconFont: .caption) { dismiss() }
+                }
             }
         }
+    }
+}
+
+// MARK: - VoiceRecorder
+
+@Observable @MainActor
+final class VoiceRecorder {
+    enum State { case idle, recording, done }
+
+    private(set) var state: State = .idle
+    private(set) var transcribedText: String?
+
+    private var audioEngine: AVAudioEngine?
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+
+    func startRecording() {
+        transcribedText = nil
+        state = .recording
+
+        SFSpeechRecognizer.requestAuthorization { [weak self] authStatus in
+            Task { @MainActor in
+                guard authStatus == .authorized else {
+                    self?.state = .idle
+                    return
+                }
+                self?.beginAudioSession()
+            }
+        }
+    }
+
+    private func beginAudioSession() {
+        let recognizer = SFSpeechRecognizer(locale: Locale.current)
+        guard let recognizer, recognizer.isAvailable else { state = .idle; return }
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
+        self.recognitionRequest = request
+
+        let audioEngine = AVAudioEngine()
+        self.audioEngine = audioEngine
+
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.record, mode: .measurement, options: .duckOthers)
+        try? session.setActive(true, options: .notifyOthersOnDeactivation)
+
+        let inputNode = audioEngine.inputNode
+        let format = inputNode.outputFormat(forBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+            request.append(buffer)
+        }
+
+        audioEngine.prepare()
+        try? audioEngine.start()
+
+        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            Task { @MainActor in
+                if let result {
+                    self?.transcribedText = result.bestTranscription.formattedString
+                }
+                if error != nil || (result?.isFinal == true) {
+                    self?.finishAudio()
+                }
+            }
+        }
+    }
+
+    func stopRecording() {
+        recognitionRequest?.endAudio()
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        // State transitions to .done when recognition finishes via the callback
+        // But set a fallback in case recognition is instant
+        if state == .recording {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(500))
+                if state == .recording { state = .done }
+            }
+        }
+    }
+
+    func reset() {
+        finishAudio()
+        transcribedText = nil
+        state = .idle
+    }
+
+    private func finishAudio() {
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        recognitionTask?.cancel()
+        audioEngine = nil
+        recognitionTask = nil
+        recognitionRequest = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if state == .recording { state = .done }
     }
 }
