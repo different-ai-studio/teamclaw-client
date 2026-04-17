@@ -12,5 +12,7 @@
     <array>
         <string>$(AppIdentifierPrefix)tech.teamclaw.mac</string>
     </array>
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
 </dict>
 </plist>

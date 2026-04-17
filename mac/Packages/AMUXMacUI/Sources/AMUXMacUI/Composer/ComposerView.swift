@@ -8,6 +8,7 @@ struct ComposerView: View {
 
     @State private var text: String = ""
     @State private var isSending = false
+    @State private var voice = VoiceRecorder()
     @FocusState private var inputFocused: Bool
 
     var body: some View {
@@ -25,6 +26,15 @@ struct ComposerView: View {
 
                 HStack(spacing: 8) {
                     Spacer()
+                    Button(action: micTapped) {
+                        Image(systemName: voice.state == .recording ? "mic.fill" : "mic")
+                            .font(.system(size: 16))
+                            .foregroundStyle(voice.state == .recording ? .red : .primary)
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .help(voice.state == .recording ? "Stop recording (Esc to cancel)" : "Voice input")
+
                     Button(action: send) {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 26))
@@ -39,6 +49,18 @@ struct ComposerView: View {
             }
             .background(.regularMaterial)
         }
+        .onChange(of: voice.transcript) { _, newValue in
+            if voice.state == .recording, !newValue.isEmpty {
+                text = newValue
+            }
+        }
+        .onKeyPress(.escape) {
+            if voice.state == .recording {
+                voice.cancel()
+                return .handled
+            }
+            return .ignored
+        }
     }
 
     private var canSend: Bool {
@@ -52,5 +74,9 @@ struct ComposerView: View {
         teamclawService.sendMessage(sessionId: sessionId, content: trimmed, actorId: actorId)
         text = ""
         isSending = false
+    }
+
+    private func micTapped() {
+        voice.toggle()
     }
 }

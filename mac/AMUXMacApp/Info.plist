@@ -24,5 +24,9 @@
 	<string>public.app-category.developer-tools</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Shenzhen Miaoxing Information Technology Co., Ltd</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>AMUX uses the microphone for voice-to-text composition in the message composer.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>AMUX transcribes spoken input on-device into the message composer.</string>
 </dict>
 </plist>
