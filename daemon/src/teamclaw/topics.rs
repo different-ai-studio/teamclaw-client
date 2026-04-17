@@ -38,6 +38,11 @@ impl TeamclawTopics {
         format!("teamclaw/{}/session/{}/workitems", self.team_id, session_id)
     }
 
+    /// Global work items topic (not tied to a session)
+    pub fn workitems(&self) -> String {
+        format!("teamclaw/{}/workitems", self.team_id)
+    }
+
     // User-level
     pub fn user_invites(&self, user_id: &str) -> String {
         format!("teamclaw/{}/user/{}/invites", self.team_id, user_id)

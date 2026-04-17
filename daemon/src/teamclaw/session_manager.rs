@@ -60,6 +60,11 @@ impl SessionManager {
             .subscribe(self.topics.sessions(), QoS::AtLeastOnce)
             .await?;
 
+        // Global work items topic
+        self.client
+            .subscribe(self.topics.workitems(), QoS::AtLeastOnce)
+            .await?;
+
         // RPC: incoming requests for this device
         self.client
             .subscribe(self.topics.rpc_incoming_requests(), QoS::AtLeastOnce)
@@ -463,7 +468,9 @@ impl SessionManager {
             created_at: Utc::now(),
         };
 
-        let mut store = match WorkItemStore::load(&self.config_dir, &r.session_id) {
+        let store_key = if r.session_id.is_empty() { "global" } else { &r.session_id };
+
+        let mut store = match WorkItemStore::load(&self.config_dir, store_key) {
             Ok(s) => s,
             Err(e) => {
                 warn!("handle_create_work_item: failed to load work item store: {}", e);
@@ -478,7 +485,7 @@ impl SessionManager {
 
         store.add_item(stored_item);
 
-        if let Err(e) = store.save(&self.config_dir, &r.session_id) {
+        if let Err(e) = store.save(&self.config_dir, store_key) {
             warn!("handle_create_work_item: failed to save work item store: {}", e);
         }
 
@@ -491,7 +498,11 @@ impl SessionManager {
             let event = teamclaw::WorkItemEvent {
                 event: Some(teamclaw::work_item_event::Event::Created(item.clone())),
             };
-            let topic = self.topics.session_workitems(&r.session_id);
+            let topic = if r.session_id.is_empty() {
+                self.topics.workitems()
+            } else {
+                self.topics.session_workitems(&r.session_id)
+            };
             let payload = event.encode_to_vec();
             if let Err(e) = self
                 .client
