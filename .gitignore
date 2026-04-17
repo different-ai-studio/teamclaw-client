@@ -37,3 +37,7 @@ ios/fastlane/screenshots/
 ios/fastlane/test_output/
 ios/Gemfile.lock
 .superpowers/
+
+# XcodeGen output
+mac/AMUXMac.xcodeproj/
+
