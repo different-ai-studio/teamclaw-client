@@ -1,0 +1,95 @@
+import Testing
+import Foundation
+@testable import AMUXCore
+
+@Suite("PairingManager")
+struct PairingManagerTests {
+
+    final class InMemoryStore: CredentialStore {
+        var saved: PairingCredentials?
+        func save(_ credentials: PairingCredentials) throws { saved = credentials }
+        func load() throws -> PairingCredentials? { saved }
+        func clear() throws { saved = nil }
+    }
+
+    @Test("pairs from a valid amux:// URL with mqtts broker")
+    func pairsFromValidURL() throws {
+        let store = InMemoryStore()
+        let manager = PairingManager(store: store)
+
+        let url = URL(string: "amux://join?broker=mqtts://broker.example.com:8883&device=mac-1&token=tok-abc&username=u&password=p")!
+        try manager.pair(from: url)
+
+        #expect(manager.isPaired)
+        #expect(manager.brokerHost == "broker.example.com")
+        #expect(manager.brokerPort == 8883)
+        #expect(manager.deviceId == "mac-1")
+        #expect(manager.authToken == "tok-abc")
+        #expect(manager.username == "u")
+        #expect(manager.password == "p")
+        #expect(manager.useTLS == true)
+        #expect(store.saved?.deviceId == "mac-1")
+    }
+
+    @Test("defaults port 8883 for mqtts when not specified")
+    func defaultsPortForMqtts() throws {
+        let store = InMemoryStore()
+        let manager = PairingManager(store: store)
+        let url = URL(string: "amux://join?broker=mqtts://broker.example.com&device=d&token=t")!
+        try manager.pair(from: url)
+        #expect(manager.brokerPort == 8883)
+        #expect(manager.useTLS == true)
+    }
+
+    @Test("defaults port 1883 for mqtt:// (non-TLS)")
+    func defaultsPortForMqttPlain() throws {
+        let store = InMemoryStore()
+        let manager = PairingManager(store: store)
+        let url = URL(string: "amux://join?broker=mqtt://broker.example.com&device=d&token=t")!
+        try manager.pair(from: url)
+        #expect(manager.brokerPort == 1883)
+        #expect(manager.useTLS == false)
+    }
+
+    @Test("rejects URLs with wrong scheme")
+    func rejectsWrongScheme() {
+        let manager = PairingManager(store: InMemoryStore())
+        let url = URL(string: "https://join?broker=mqtts://x&device=d&token=t")!
+        #expect(throws: PairingManager.PairingError.self) {
+            try manager.pair(from: url)
+        }
+    }
+
+    @Test("rejects URLs missing required fields")
+    func rejectsMissingFields() {
+        let manager = PairingManager(store: InMemoryStore())
+        let url = URL(string: "amux://join?broker=mqtts://x&device=d")!  // no token
+        #expect(throws: PairingManager.PairingError.self) {
+            try manager.pair(from: url)
+        }
+    }
+
+    @Test("loads previously stored credentials on init")
+    func loadsStoredCredentialsOnInit() throws {
+        let store = InMemoryStore()
+        store.saved = PairingCredentials(
+            brokerHost: "h", brokerPort: 8883, useTLS: true,
+            username: "u", password: "p", deviceId: "d", authToken: "t"
+        )
+        let manager = PairingManager(store: store)
+        #expect(manager.isPaired)
+        #expect(manager.deviceId == "d")
+    }
+
+    @Test("unpair clears state and store")
+    func unpairClearsEverything() throws {
+        let store = InMemoryStore()
+        let manager = PairingManager(store: store)
+        let url = URL(string: "amux://join?broker=mqtts://h&device=d&token=t")!
+        try manager.pair(from: url)
+        try manager.unpair()
+        #expect(!manager.isPaired)
+        #expect(manager.deviceId == "")
+        #expect(store.saved == nil)
+    }
+}

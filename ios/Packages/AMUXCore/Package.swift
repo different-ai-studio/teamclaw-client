@@ -1,9 +1,9 @@
-// swift-tools-version: 5.10
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
     name: "AMUXCore",
-    platforms: [.iOS(.v17)],
+    platforms: [.iOS(.v17), .macOS(.v26)],
     products: [
         .library(name: "AMUXCore", targets: ["AMUXCore"]),
     ],
@@ -17,7 +17,14 @@ let package = Package(
             dependencies: [
                 .product(name: "CocoaMQTT", package: "CocoaMQTT"),
                 .product(name: "SwiftProtobuf", package: "swift-protobuf"),
-            ]
+            ],
+            // Pinned to Swift 5 mode: ConnectionMonitor & MQTTService are not yet Sendable-clean for Swift 6 strict concurrency. Migrate after audit.
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "AMUXCoreTests",
+            dependencies: ["AMUXCore"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]
 )
