@@ -750,6 +750,8 @@ public struct Teamclaw_CreateSessionRequest: Sendable {
 
   public var inviteActorIds: [String] = []
 
+  public var workItemID: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2140,7 +2142,7 @@ extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
 
 extension Teamclaw_CreateSessionRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateSessionRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_type\0\u{3}team_id\0\u{1}title\0\u{1}summary\0\u{3}invite_actor_ids\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_type\0\u{3}team_id\0\u{1}title\0\u{1}summary\0\u{3}invite_actor_ids\0\u{3}work_item_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2153,6 +2155,7 @@ extension Teamclaw_CreateSessionRequest: SwiftProtobuf.Message, SwiftProtobuf._M
       case 3: try { try decoder.decodeSingularStringField(value: &self.title) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.summary) }()
       case 5: try { try decoder.decodeRepeatedStringField(value: &self.inviteActorIds) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.workItemID) }()
       default: break
       }
     }
@@ -2174,6 +2177,9 @@ extension Teamclaw_CreateSessionRequest: SwiftProtobuf.Message, SwiftProtobuf._M
     if !self.inviteActorIds.isEmpty {
       try visitor.visitRepeatedStringField(value: self.inviteActorIds, fieldNumber: 5)
     }
+    if !self.workItemID.isEmpty {
+      try visitor.visitSingularStringField(value: self.workItemID, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2183,6 +2189,7 @@ extension Teamclaw_CreateSessionRequest: SwiftProtobuf.Message, SwiftProtobuf._M
     if lhs.title != rhs.title {return false}
     if lhs.summary != rhs.summary {return false}
     if lhs.inviteActorIds != rhs.inviteActorIds {return false}
+    if lhs.workItemID != rhs.workItemID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

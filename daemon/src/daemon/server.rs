@@ -129,6 +129,20 @@ impl DaemonServer {
                 tokio::time::Duration::from_millis(50),
                 self.mqtt.eventloop.poll(),
             ).await {
+                Ok(Ok(Event::Incoming(Packet::ConnAck(_)))) => {
+                    // Reconnected — re-subscribe and re-publish all retained state
+                    info!("MQTT reconnected, re-publishing state");
+                    let _ = self.mqtt.announce_online(&self.config.device.name).await;
+                    let _ = self.mqtt.subscribe_all().await;
+                    if let Some(tc) = &self.teamclaw {
+                        let _ = tc.subscribe_all().await;
+                    }
+                    let publisher = Publisher::new(&self.mqtt);
+                    let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
+                    let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
+                    let _ = publisher.publish_member_list(&self.auth.to_proto_member_list()).await;
+                    let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
+                }
                 Ok(Ok(Event::Incoming(Packet::Publish(publish)))) => {
                     if let Some(msg) = subscriber::parse_incoming(&publish) {
                         self.handle_incoming(msg).await;

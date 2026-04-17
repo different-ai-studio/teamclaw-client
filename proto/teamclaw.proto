@@ -200,6 +200,7 @@ message CreateSessionRequest {
   string title = 3;
   string summary = 4;
   repeated string invite_actor_ids = 5;
+  string work_item_id = 6;
 }
 
 message JoinSessionRequest {
