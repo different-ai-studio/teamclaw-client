@@ -22,12 +22,3 @@ public struct SettingsScene: Scene {
     }
 }
 
-struct AccountPreferencesView: View {
-    let pairing: PairingManager
-
-    var body: some View {
-        Text("Account settings — coming in next step")
-            .foregroundStyle(.secondary)
-            .frame(width: 460, height: 220)
-    }
-}
