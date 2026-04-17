@@ -28,8 +28,31 @@ public struct AgentDetailView: View {
         self._navigationPath = navigationPath
     }
 
+    public init(collabSession: CollabSession, mqtt: MQTTService, deviceId: String, peerId: String,
+                navigationPath: Binding<[String]>) {
+        _viewModel = State(initialValue: AgentDetailViewModel(
+            agent: nil, mqtt: mqtt, deviceId: deviceId, peerId: peerId, collabSession: collabSession))
+        self.allAgentIds = []
+        self._navigationPath = navigationPath
+    }
+
+    private var agentLogoName: String {
+        switch viewModel.agent?.agentType {
+        case 1: "ClaudeLogo"
+        case 2: "OpenCodeLogo"
+        case 3: "CodexLogo"
+        default: "ClaudeLogo"
+        }
+    }
+
+    private var memberBadgeCount: Int {
+        let collab = viewModel.participantCount
+        return collab > 0 ? collab : collaborators.count
+    }
+
     private var currentIndex: Int? {
-        allAgentIds.firstIndex(of: viewModel.agent.agentId)
+        guard let agentId = viewModel.agent?.agentId else { return nil }
+        return allAgentIds.firstIndex(of: agentId)
     }
     private var canGoUp: Bool { (currentIndex ?? 0) > 0 }
     private var canGoDown: Bool { (currentIndex ?? allAgentIds.count) < allAgentIds.count - 1 }
@@ -93,7 +116,7 @@ public struct AgentDetailView: View {
                                 .id("streaming")
                         }
 
-                        if viewModel.agent.isActive {
+                        if viewModel.isActive {
                             TypingIndicatorView()
                                 .id("typing")
                         }
@@ -115,13 +138,7 @@ public struct AgentDetailView: View {
                 }
             }
         }
-        .navigationTitle({
-            if !viewModel.agent.sessionTitle.isEmpty { return viewModel.agent.sessionTitle }
-            let wt = viewModel.agent.worktree
-            if wt.isEmpty { return viewModel.agent.agentId }
-            let last = wt.split(separator: "/").last.map(String.init) ?? wt
-            return last == "." ? viewModel.agent.agentId : last
-        }())
+        .navigationTitle(viewModel.sessionTitle)
         .navigationBarTitleDisplayMode(.inline)
         // Top right: prev/next (NetNewsWire ▲▼)
         .toolbar {
@@ -192,7 +209,20 @@ public struct AgentDetailView: View {
                     // Left group: pin + members
                     HStack(spacing: 14) {
                         Button {} label: { Image(systemName: "pin").font(.title3) }
-                        Button { showMembers = true } label: { Image(systemName: "person.2").font(.title3) }
+                        Button { showMembers = true } label: {
+                            Image(systemName: "person.2").font(.title3)
+                                .overlay(alignment: .topTrailing) {
+                                    if memberBadgeCount > 0 {
+                                        Text("\(memberBadgeCount)")
+                                            .font(.caption2.weight(.bold))
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 1)
+                                            .background(.blue, in: Capsule())
+                                            .offset(x: 8, y: -8)
+                                    }
+                                }
+                        }
                     }
                     .foregroundStyle(.primary)
                     .padding(.horizontal, 14)
@@ -203,14 +233,21 @@ public struct AgentDetailView: View {
 
                     // Center: mic
                     RecordButton(voiceRecorder: voiceRecorder)
-                        .disabled(viewModel.agent.isActive)
+                        .disabled(viewModel.isActive)
 
                     Spacer()
 
-                    // Right group: settings + action
+                    // Right group: agent avatar + action
                     HStack(spacing: 14) {
-                        Button { showSettings = true } label: { Image(systemName: "gearshape").font(.title3) }
-                        if viewModel.agent.isActive {
+                        if viewModel.hasAgent {
+                            Button { showSettings = true } label: {
+                                Image(agentLogoName)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 22, height: 22)
+                            }
+                        }
+                        if viewModel.isActive {
                             Button { Task { try? await viewModel.cancelTask() } } label: { Image(systemName: "stop.fill").font(.title3) }
                         } else {
                             Button { showReplySheet = true } label: { Image(systemName: "arrowshape.turn.up.left").font(.title3) }
@@ -227,8 +264,9 @@ public struct AgentDetailView: View {
         }
         .sheet(isPresented: $showReplySheet) {
             ReplySheet(text: $promptText,
-                       isDisabled: !viewModel.agent.isIdle,
+                       isDisabled: !viewModel.isIdle,
                        isStreaming: viewModel.isStreaming,
+                       hasAgent: viewModel.hasAgent,
                        onSend: {
                            let t = promptText; promptText = ""
                            Task { try? await viewModel.sendPrompt(t, modelContext: modelContext) }
@@ -237,12 +275,14 @@ public struct AgentDetailView: View {
                 .presentationDetents([.medium])
         }
         .sheet(isPresented: $showSettings) {
-            AgentSettingsSheet(
-                agent: viewModel.agent,
-                onSync: { Task { try? await viewModel.requestFullSync(modelContext: modelContext) } },
-                isSyncing: viewModel.isSyncing
-            )
-            .presentationDetents([.medium])
+            if let agent = viewModel.agent {
+                AgentSettingsSheet(
+                    agent: agent,
+                    onSync: { Task { try? await viewModel.requestFullSync(modelContext: modelContext) } },
+                    isSyncing: viewModel.isSyncing
+                )
+                .presentationDetents([.medium])
+            }
         }
         .sheet(isPresented: $showMembers) {
             MemberListView(mqtt: viewModel.mqttRef, deviceId: viewModel.deviceIdRef, peerId: viewModel.peerIdRef,
@@ -258,7 +298,7 @@ public struct AgentDetailView: View {
     }
 
     private func forkToCollab(members: [Member]) {
-        let agent = viewModel.agent
+        guard let agent = viewModel.agent else { return }
         // Use last output summary or session title as handoff context
         let summary = agent.lastOutputSummary.isEmpty
             ? "Forked from agent session: \(agent.sessionTitle.isEmpty ? agent.agentId : agent.sessionTitle)"
@@ -293,6 +333,7 @@ private struct ReplySheet: View {
     @Binding var text: String
     let isDisabled: Bool
     let isStreaming: Bool
+    let hasAgent: Bool
     let onSend: () -> Void
     let onCancel: () -> Void
     @FocusState private var isFocused: Bool
@@ -379,26 +420,28 @@ private struct ReplySheet: View {
 
                     Button { showFilePicker = true } label: { Image(systemName: "paperclip").font(.title3) }
 
-                    Menu {
-                        ForEach(models, id: \.self) { model in
-                            Button {
-                                selectedModel = model
-                            } label: {
-                                Label(model, systemImage: selectedModel == model ? "checkmark" : "")
+                    if hasAgent {
+                        Menu {
+                            ForEach(models, id: \.self) { model in
+                                Button {
+                                    selectedModel = model
+                                } label: {
+                                    Label(model, systemImage: selectedModel == model ? "checkmark" : "")
+                                }
                             }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "cpu")
+                                    .font(.caption)
+                                Text(selectedModel)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .liquidGlass(in: Capsule())
                         }
-                    } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "cpu")
-                                .font(.caption)
-                            Text(selectedModel)
-                                .font(.caption)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .liquidGlass(in: Capsule())
                     }
 
                     Button {

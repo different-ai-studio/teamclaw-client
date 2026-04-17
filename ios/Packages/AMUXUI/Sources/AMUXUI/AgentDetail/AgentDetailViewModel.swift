@@ -9,7 +9,8 @@ public final class AgentDetailViewModel {
     public var isStreaming = false
     public var streamingText = ""
     public var isDaemonOnline = true
-    public let agent: Agent
+    public let agent: Agent?
+    public let collabSession: CollabSession?
     private let mqtt: MQTTService
     private let deviceId: String
     private let peerId: String
@@ -20,12 +21,37 @@ public final class AgentDetailViewModel {
     public var deviceIdRef: String { deviceId }
     public var peerIdRef: String { peerId }
 
-    public init(agent: Agent, mqtt: MQTTService, deviceId: String, peerId: String) {
+    public var sessionTitle: String {
+        if let agent, !agent.sessionTitle.isEmpty { return agent.sessionTitle }
+        if let agent {
+            let wt = agent.worktree
+            if !wt.isEmpty {
+                let last = wt.split(separator: "/").last.map(String.init) ?? wt
+                if last != "." { return last }
+            }
+            return agent.agentId
+        }
+        if let collabSession, !collabSession.title.isEmpty { return collabSession.title }
+        return "Session"
+    }
+
+    public var isActive: Bool { agent?.isActive ?? false }
+    public var isIdle: Bool { agent?.isIdle ?? true }
+    public var participantCount: Int { collabSession?.participantCount ?? 0 }
+    public var hasAgent: Bool { agent != nil }
+
+    public init(agent: Agent?, mqtt: MQTTService, deviceId: String, peerId: String, collabSession: CollabSession? = nil) {
         self.agent = agent; self.mqtt = mqtt; self.deviceId = deviceId; self.peerId = peerId
+        self.collabSession = collabSession
     }
 
     public func start(modelContext: ModelContext) {
         task?.cancel()
+
+        guard let agent else {
+            // No agent — collab-only session, nothing to subscribe to yet
+            return
+        }
 
         // Load cached events immediately (works offline)
         let agentId = agent.agentId
@@ -50,7 +76,7 @@ public final class AgentDetailViewModel {
                 if Task.isCancelled { return }
             }
 
-            let eventsTopic = "amux/\(deviceId)/agent/\(agent.agentId)/events"
+            let eventsTopic = "amux/\(deviceId)/agent/\(agentId)/events"
             let stream = mqtt.messages()
             try? await mqtt.subscribe(eventsTopic)
             print("[AgentDetailVM] subscribed to \(eventsTopic)")
@@ -78,7 +104,7 @@ public final class AgentDetailViewModel {
             if o.isComplete {
                 // Complete output — store as event
                 isStreaming = false
-                let event = AgentEvent(agentId: agent.agentId, sequence: sequence, eventType: "output")
+                let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "output")
                 event.text = o.text; event.isComplete = true
                 modelContext.insert(event); events.append(event); streamingText = ""
             } else {
@@ -90,11 +116,11 @@ public final class AgentDetailViewModel {
             if let last = events.last, last.eventType == "thinking" {
                 last.text = (last.text ?? "") + t.text
             } else {
-                let event = AgentEvent(agentId: agent.agentId, sequence: sequence, eventType: "thinking")
+                let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "thinking")
                 event.text = t.text; modelContext.insert(event); events.append(event)
             }
         case .toolUse(let tu):
-            let event = AgentEvent(agentId: agent.agentId, sequence: sequence, eventType: "tool_use")
+            let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "tool_use")
             event.toolName = tu.toolName; event.toolId = tu.toolID; event.text = tu.description_p
             modelContext.insert(event); events.append(event)
         case .toolResult(let tr):
@@ -103,21 +129,21 @@ public final class AgentDetailViewModel {
                 events[idx].success = tr.success
                 events[idx].isComplete = true
             } else {
-                let event = AgentEvent(agentId: agent.agentId, sequence: sequence, eventType: "tool_result")
+                let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "tool_result")
                 event.toolId = tr.toolID; event.success = tr.success; event.text = tr.summary
                 modelContext.insert(event); events.append(event)
             }
         case .error(let e):
-            let event = AgentEvent(agentId: agent.agentId, sequence: sequence, eventType: "error")
+            let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "error")
             event.text = e.message; modelContext.insert(event); events.append(event)
         case .permissionRequest(let pr):
-            let event = AgentEvent(agentId: agent.agentId, sequence: sequence, eventType: "permission_request")
+            let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "permission_request")
             event.toolName = pr.toolName; event.toolId = pr.requestID; event.text = pr.description_p
             modelContext.insert(event); events.append(event)
         case .todoUpdate(let tu):
             // Replace existing todo event with fresh snapshot
             events.removeAll { $0.eventType == "todo_update" }
-            let event = AgentEvent(agentId: agent.agentId, sequence: sequence, eventType: "todo_update")
+            let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "todo_update")
             let lines = tu.items.map { item -> String in
                 let icon = item.status == .completed ? "done" : item.status == .inProgress ? "wip" : "todo"
                 return "[\(icon)] \(item.content)"
@@ -125,11 +151,11 @@ public final class AgentDetailViewModel {
             event.text = lines.joined(separator: "\n")
             modelContext.insert(event); events.append(event)
         case .statusChange(let sc):
-            agent.status = Int(sc.newStatus.rawValue)
+            agent?.status = Int(sc.newStatus.rawValue)
             if sc.newStatus == .idle {
                 // Agent finished — flush any accumulated streaming text as a complete output event
                 if isStreaming && !streamingText.isEmpty {
-                    let event = AgentEvent(agentId: agent.agentId, sequence: sequence, eventType: "output")
+                    let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "output")
                     event.text = streamingText; event.isComplete = true
                     modelContext.insert(event); events.append(event)
                 }
@@ -160,9 +186,9 @@ public final class AgentDetailViewModel {
         switch collab.event {
         case .promptAccepted:
             // Confirmation: set agent to active (triggers typing indicator)
-            agent.status = Int(Amux_AgentStatus.active.rawValue)
+            agent?.status = Int(Amux_AgentStatus.active.rawValue)
         case .promptRejected(let pr):
-            let event = AgentEvent(agentId: agent.agentId, sequence: sequence, eventType: "error")
+            let event = AgentEvent(agentId: agent?.agentId ?? "", sequence: sequence, eventType: "error")
             event.text = "Rejected: \(pr.reason)"
             events.append(event)
         case .permissionResolved(let resolved):
@@ -209,6 +235,7 @@ public final class AgentDetailViewModel {
     }
 
     public func requestFullSync(modelContext: ModelContext) async throws {
+        guard agent != nil else { return }
         self.syncModelContext = modelContext
         isSyncing = true
         let maxSeq = events.compactMap({ $0.sequence != 0 ? $0.sequence : nil }).max() ?? 0
@@ -224,6 +251,7 @@ public final class AgentDetailViewModel {
     }
 
     private func sendCommand(_ makeCommand: (inout Amux_AcpCommand) -> Void) async throws {
+        guard let agent else { return }
         var cmd = Amux_CommandEnvelope()
         cmd.agentID = agent.agentId; cmd.deviceID = deviceId; cmd.peerID = peerId
         cmd.commandID = UUID().uuidString; cmd.timestamp = Int64(Date().timeIntervalSince1970)
@@ -235,6 +263,7 @@ public final class AgentDetailViewModel {
     }
 
     public func sendPrompt(_ text: String, modelContext: ModelContext? = nil) async throws {
+        guard let agent else { return }
         // Add local user bubble immediately
         let seq = (events.last?.sequence ?? 0) + 1
         let userEvent = AgentEvent(agentId: agent.agentId, sequence: seq, eventType: "user_prompt")

@@ -109,9 +109,10 @@ public struct SessionListView: View {
                         predicate: #Predicate { $0.sessionId == sessionId }
                     )
                     if let session = (try? modelContext.fetch(descriptor))?.first {
-                        let svc = teamclawService ?? TeamclawService()
-                        CollabSessionView(session: session, teamclawService: svc,
-                                          actorId: "ios-\(pairing.authToken.prefix(6))")
+                        AgentDetailView(collabSession: session, mqtt: mqtt,
+                                        deviceId: pairing.deviceId,
+                                        peerId: "ios-\(pairing.authToken.prefix(6))",
+                                        navigationPath: $navigationPath)
                     } else {
                         Text("Collab session not found")
                     }
