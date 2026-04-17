@@ -72,6 +72,7 @@ impl AuthManager {
                 display_name: m.display_name.clone(),
                 role: if m.is_owner() { amux::MemberRole::Owner as i32 } else { amux::MemberRole::Member as i32 },
                 joined_at: m.joined_at.timestamp(),
+                department: String::new(),
             }).collect(),
         }
     }

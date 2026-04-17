@@ -1318,6 +1318,8 @@ public struct Amux_MemberInfo: Sendable {
 
   public var joinedAt: Int64 = 0
 
+  public var department: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -3753,7 +3755,7 @@ extension Amux_TodoItem.Status: SwiftProtobuf._ProtoNameProviding {
 
 extension Amux_MemberInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".MemberInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}member_id\0\u{3}display_name\0\u{1}role\0\u{3}joined_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}member_id\0\u{3}display_name\0\u{1}role\0\u{3}joined_at\0\u{1}department\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3765,6 +3767,7 @@ extension Amux_MemberInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
       case 2: try { try decoder.decodeSingularStringField(value: &self.displayName) }()
       case 3: try { try decoder.decodeSingularEnumField(value: &self.role) }()
       case 4: try { try decoder.decodeSingularInt64Field(value: &self.joinedAt) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.department) }()
       default: break
       }
     }
@@ -3783,6 +3786,9 @@ extension Amux_MemberInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
     if self.joinedAt != 0 {
       try visitor.visitSingularInt64Field(value: self.joinedAt, fieldNumber: 4)
     }
+    if !self.department.isEmpty {
+      try visitor.visitSingularStringField(value: self.department, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3791,6 +3797,7 @@ extension Amux_MemberInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
     if lhs.displayName != rhs.displayName {return false}
     if lhs.role != rhs.role {return false}
     if lhs.joinedAt != rhs.joinedAt {return false}
+    if lhs.department != rhs.department {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
