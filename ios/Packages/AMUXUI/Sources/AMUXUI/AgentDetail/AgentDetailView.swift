@@ -72,12 +72,20 @@ public struct AgentDetailView: View {
                             .padding(.vertical, 60)
                         }
 
-                        ForEach(viewModel.events, id: \.id) { event in
-                            EventBubbleView(
-                                event: event,
-                                onGrant: { id in Task { try? await viewModel.grantPermission(requestId: id) } },
-                                onDeny: { id in Task { try? await viewModel.denyPermission(requestId: id) } }
-                            ).id(event.id)
+                        ForEach(groupEvents(viewModel.events)) { item in
+                            switch item {
+                            case .single(let event):
+                                EventBubbleView(
+                                    event: event,
+                                    onGrant: { id in Task { try? await viewModel.grantPermission(requestId: id) } },
+                                    onDeny: { id in Task { try? await viewModel.denyPermission(requestId: id) } }
+                                ).id(event.id)
+                            case .mergedTools(let id, let toolName, let events):
+                                MergedToolCallView(toolName: toolName, events: events)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 2)
+                                    .id(id)
+                            }
                         }
 
                         if viewModel.isStreaming {
