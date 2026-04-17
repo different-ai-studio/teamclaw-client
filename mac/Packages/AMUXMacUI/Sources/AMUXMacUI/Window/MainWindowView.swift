@@ -1,12 +1,19 @@
 import SwiftUI
+import SwiftData
 import AMUXCore
 
 public struct MainWindowView: View {
     let pairing: PairingManager
-    @State private var sidebarSelection: SidebarItem? = .sessions
-    @State private var listSelection: String?
+    @Environment(\.modelContext) private var modelContext
+    @State private var sidebarSelection: SidebarItem? = .function(.sessions)
+    @State private var selectedSessionId: String?
+    @State private var selectedTaskId: String?
     @State private var mqtt: MQTTService?
     @State private var monitor: ConnectionMonitor?
+    @State private var teamclaw = TeamclawService()
+    @State private var members = MemberListViewModel()
+
+    private static let teamId = "teamclaw"
 
     public init(pairing: PairingManager) {
         self.pairing = pairing
@@ -24,55 +31,37 @@ public struct MainWindowView: View {
     }
 
     private var sidebar: some View {
-        List(selection: $sidebarSelection) {
-            Section("功能") {
-                Label("Sessions", systemImage: "bubble.left.and.bubble.right")
-                    .tag(SidebarItem.sessions)
-                Label("Tasks", systemImage: "checkmark.circle")
-                    .tag(SidebarItem.tasks)
-            }
-            Section("Members") {
-                Text("(no members yet)")
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
-            }
-        }
-        .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(min: 220, ideal: 230, max: 320)
+        SidebarView(selection: $sidebarSelection, members: members.members)
+            .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 320)
     }
 
     private var list: some View {
-        VStack {
-            Spacer()
-            Text(sidebarSelection?.title ?? "—")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-            Text("List column placeholder")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
-            Spacer()
+        Group {
+            switch sidebarSelection {
+            case .function(.tasks):
+                TaskListColumn(selectedTaskId: $selectedTaskId)
+            case .function(.sessions), .none:
+                SessionListColumn(
+                    memberFilter: nil,
+                    selectedSessionId: $selectedSessionId
+                )
+            case .member(let id):
+                SessionListColumn(
+                    memberFilter: id,
+                    selectedSessionId: $selectedSessionId
+                )
+            }
         }
-        .frame(minWidth: 320)
         .navigationSplitViewColumnWidth(min: 280, ideal: 360, max: 480)
     }
 
     private var detail: some View {
-        VStack {
-            Spacer()
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(monitor?.daemonOnline == true ? Color.green : Color.red)
-                    .frame(width: 10, height: 10)
-                Text(monitor?.daemonOnline == true ? "Daemon online" : "Daemon offline")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            Text("\(pairing.brokerHost):\(pairing.brokerPort)  ·  \(pairing.deviceId)")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
-                .padding(.top, 4)
-            Spacer()
-        }
+        DetailPlaceholderView(
+            pairing: pairing,
+            monitor: monitor,
+            selectedSessionId: selectedSessionId,
+            selectedTaskId: selectedTaskId
+        )
         .frame(minWidth: 480)
         .task { await connectIfNeeded() }
     }
@@ -96,17 +85,18 @@ public struct MainWindowView: View {
         mon.start(mqtt: service, deviceId: pairing.deviceId)
         self.mqtt = service
         self.monitor = mon
-    }
-}
 
-public enum SidebarItem: Hashable {
-    case sessions
-    case tasks
-
-    var title: String {
-        switch self {
-        case .sessions: "Sessions"
-        case .tasks: "Tasks"
+        // Start data sync
+        let peerId = "mac-\(UUID().uuidString.prefix(6))"
+        teamclaw.start(
+            mqtt: service,
+            teamId: Self.teamId,
+            deviceId: pairing.deviceId,
+            peerId: peerId,
+            modelContext: modelContext
+        )
+        await MainActor.run {
+            members.start(mqtt: service, deviceId: pairing.deviceId, modelContext: modelContext)
         }
     }
 }
