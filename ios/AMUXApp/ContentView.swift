@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var mqtt = MQTTService()
     @State private var connectionMonitor = ConnectionMonitor()
     @State private var isConnecting = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -22,6 +23,15 @@ struct ContentView: View {
                     .onChange(of: pairing.isPaired) { _, paired in
                         if paired { Task { await connectMQTT() } }
                     }
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active && pairing.isPaired && mqtt.connectionState != .connected {
+                logger.info("App became active, reconnecting MQTT...")
+                Task {
+                    await mqtt.disconnect()
+                    await connectMQTT()
+                }
             }
         }
         .onOpenURL { url in
