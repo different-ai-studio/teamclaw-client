@@ -17,7 +17,7 @@ struct SessionDetailView: View {
             .sorted { $0.createdAt < $1.createdAt }
 
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 22) {
                 DetailHeaderView(session: session, participantSummary: participantSummary(messages))
 
                 if messages.isEmpty {
@@ -25,9 +25,13 @@ struct SessionDetailView: View {
                         .foregroundStyle(.tertiary)
                         .padding(22)
                 } else {
-                    Text("\(messages.count) message(s) — rendering coming in next steps")
-                        .foregroundStyle(.tertiary)
-                        .padding(22)
+                    ForEach(messages, id: \.messageId) { message in
+                        MessageRowAgent(
+                            message: message,
+                            senderName: senderName(for: message.senderActorId)
+                        )
+                    }
+                    .padding(.bottom, 22)
                 }
             }
         }
@@ -43,5 +47,9 @@ struct SessionDetailView: View {
         let head = sorted.prefix(3).joined(separator: " · ")
         let extra = sorted.count - 3
         return extra > 0 ? "\(head) +\(extra)" : head
+    }
+
+    private func senderName(for actorId: String) -> String {
+        actorId.isEmpty ? "Agent" : actorId
     }
 }
