@@ -39,12 +39,20 @@ public struct NewCollabSheet: View {
             .navigationTitle("New Collab Session")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    GlassCircleButton(icon: "xmark", size: 32, iconFont: .caption) { dismiss() }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") { createSession() }
-                        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { createSession() } label: {
+                        Text("Create")
+                            .font(.subheadline).fontWeight(.medium)
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 14).padding(.vertical, 6)
+                            .liquidGlass(in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                    .opacity(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending ? 0.4 : 1)
                 }
             }
         }

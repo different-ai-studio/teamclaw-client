@@ -67,7 +67,7 @@ public struct CollabSessionView: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .liquidGlass(in: Capsule(), interactive: false)
                 }
             }
             .padding(.horizontal)
@@ -75,26 +75,36 @@ public struct CollabSessionView: View {
         }
     }
 
+    private var canSend: Bool {
+        !promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var inputBar: some View {
-        HStack(spacing: 8) {
+        LiquidGlassContainer(spacing: 8) {
             TextField("Message...", text: $promptText, axis: .vertical)
                 .lineLimit(1...5)
                 .textFieldStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .liquidGlass(in: Capsule())
 
             Button {
-                guard !promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                 viewModel.sendMessage(promptText)
                 promptText = ""
             } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title2)
+                Image(systemName: "arrow.up")
+                    .font(.body)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+                    .frame(width: 40, height: 40)
+                    .contentShape(Circle())
             }
-            .disabled(promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .buttonStyle(.plain)
+            .liquidGlass(in: Circle())
+            .disabled(!canSend)
+            .opacity(canSend ? 1 : 0.4)
         }
-        .padding(.horizontal)
+        .padding(.horizontal, 16)
         .padding(.vertical, 8)
     }
 }

@@ -18,14 +18,23 @@ public struct PairingView: View {
             VStack(spacing: 12) {
                 TextField("amux://join?broker=...&device=...&token=...", text: $manualLink)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .font(.caption.monospaced()).padding(12)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10)).padding(.horizontal, 24)
-                Button("Connect") {
+                    .font(.caption.monospaced())
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .liquidGlass(in: Capsule())
+                    .padding(.horizontal, 24)
+                Button {
                     guard let url = URL(string: manualLink.trimmingCharacters(in: .whitespacesAndNewlines)) else { errorMessage = "Invalid URL"; return }
                     do { try pairing.pair(from: url) } catch { errorMessage = error.localizedDescription }
+                } label: {
+                    Text("Connect")
+                        .font(.body).fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 32).padding(.vertical, 10)
+                        .liquidGlass(in: Capsule())
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
                 .disabled(manualLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .opacity(manualLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
             }
             if let error = errorMessage { Text(error).font(.caption).foregroundStyle(.red) }
             Spacer()

@@ -56,20 +56,18 @@ public struct MemberListView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if selectionMode {
-                        Button {
+                        GlassCircleButton(icon: "checkmark", size: 32, iconFont: .caption) {
                             let selected = viewModel.members.filter { selectedIDs.contains($0.memberId) }
                             onConfirm?(selected)
                             dismiss()
-                        } label: {
-                            Image(systemName: "checkmark")
                         }
                         .disabled(selectedIDs.isEmpty)
                     } else {
-                        Button { showInvite = true } label: { Image(systemName: "person.badge.plus") }
+                        GlassCircleButton(icon: "person.badge.plus", size: 32, iconFont: .caption) { showInvite = true }
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                    GlassCircleButton(icon: "xmark", size: 32, iconFont: .caption) { dismiss() }
                 }
             }
             .sheet(isPresented: $showInvite) {
@@ -84,18 +82,28 @@ public struct MemberListView: View {
                     .navigationTitle("Invite Member")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Cancel") { inviteName = ""; inviteRole = .member; showInvite = false }
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            GlassCircleButton(icon: "xmark", size: 32, iconFont: .caption) {
+                                inviteName = ""; inviteRole = .member; showInvite = false
+                            }
                         }
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Invite") {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button {
                                 Task {
                                     try? await viewModel.invite(displayName: inviteName, role: inviteRole, mqtt: mqtt, deviceId: deviceId, peerId: peerId)
                                     inviteName = ""; inviteRole = .member
                                 }
                                 showInvite = false
+                            } label: {
+                                Text("Invite")
+                                    .font(.subheadline).fontWeight(.medium)
+                                    .foregroundStyle(.primary)
+                                    .padding(.horizontal, 14).padding(.vertical, 6)
+                                    .liquidGlass(in: Capsule())
                             }
+                            .buttonStyle(.plain)
                             .disabled(inviteName.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .opacity(inviteName.trimmingCharacters(in: .whitespaces).isEmpty ? 0.4 : 1)
                         }
                     }
                 }

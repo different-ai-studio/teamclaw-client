@@ -73,10 +73,8 @@ public struct WorkspaceSheet: View {
                         .liquidGlass(in: Capsule())
 
                     if !newPath.trimmingCharacters(in: .whitespaces).isEmpty {
-                        Button(action: addWorkspace) {
-                            Image(systemName: "plus.circle.fill")
-                        }
-                        .disabled(isAdding)
+                        GlassCircleButton(icon: "plus") { addWorkspace() }
+                            .disabled(isAdding)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -86,7 +84,7 @@ public struct WorkspaceSheet: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                    GlassCircleButton(icon: "xmark", size: 32, iconFont: .caption) { dismiss() }
                 }
             }
         }

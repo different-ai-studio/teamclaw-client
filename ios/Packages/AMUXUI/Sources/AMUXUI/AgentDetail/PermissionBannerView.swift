@@ -37,17 +37,21 @@ public struct PermissionBannerView: View {
                 HStack(spacing: 12) {
                     Button { onDeny?(requestId) } label: {
                         Text("Deny").font(.subheadline).fontWeight(.medium).frame(maxWidth: .infinity)
-                            .padding(.vertical, 8).background(Color.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
-                            .foregroundStyle(.red)
+                            .padding(.vertical, 8)
+                            .foregroundStyle(.primary)
+                            .liquidGlass(in: Capsule(), tint: .red)
                     }
+                    .buttonStyle(.plain)
                     Button { onGrant?(requestId) } label: {
                         Text("Allow").font(.subheadline).fontWeight(.medium).frame(maxWidth: .infinity)
-                            .padding(.vertical, 8).background(Color.green.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
-                            .foregroundStyle(.green)
+                            .padding(.vertical, 8)
+                            .foregroundStyle(.primary)
+                            .liquidGlass(in: Capsule(), tint: .green)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
-        .padding(12).background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .padding(12).liquidGlass(in: RoundedRectangle(cornerRadius: 12), tint: .orange, interactive: false)
     }
 }

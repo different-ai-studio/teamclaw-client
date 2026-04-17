@@ -43,12 +43,20 @@ public struct InviteSheet: View {
             .navigationTitle("Invite to Session")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    GlassCircleButton(icon: "xmark", size: 32, iconFont: .caption) { dismiss() }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Invite") { sendInvites() }
-                        .disabled(selectedIds.isEmpty)
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { sendInvites() } label: {
+                        Text("Invite")
+                            .font(.subheadline).fontWeight(.medium)
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 14).padding(.vertical, 6)
+                            .liquidGlass(in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(selectedIds.isEmpty)
+                    .opacity(selectedIds.isEmpty ? 0.4 : 1)
                 }
             }
             .task { loadMembers() }
