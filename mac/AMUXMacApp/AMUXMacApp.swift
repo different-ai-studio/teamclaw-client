@@ -1,12 +1,17 @@
 import SwiftUI
+import AMUXCore
 import AMUXMacUI
 
 @main
 struct AMUXMacApp: App {
+    @State private var pairing = PairingManager(store: KeychainCredentialStore())
+
     var body: some Scene {
         WindowGroup {
-            Text("AMUX \(AMUXMacUI.buildVersion)")
-                .frame(minWidth: 800, minHeight: 600)
+            RootView(pairing: pairing)
+                .frame(minWidth: 900, minHeight: 600)
         }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentMinSize)
     }
 }
