@@ -217,7 +217,7 @@ public struct NewSessionSheet: View {
                         .padding(.bottom, 6)
                     }
                 }
-                .liquidGlass(in: Capsule())
+                .liquidGlass(in: RoundedRectangle(cornerRadius: 20))
             }
         }
         .padding(.horizontal, 16)
