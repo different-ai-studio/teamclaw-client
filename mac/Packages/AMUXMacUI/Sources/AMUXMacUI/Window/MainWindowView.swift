@@ -1,12 +1,18 @@
 import SwiftUI
+import SwiftData
 import AMUXCore
 
 public struct MainWindowView: View {
     let pairing: PairingManager
+    @Environment(\.modelContext) private var modelContext
     @State private var sidebarSelection: SidebarItem? = .function(.sessions)
     @State private var listSelection: String?
     @State private var mqtt: MQTTService?
     @State private var monitor: ConnectionMonitor?
+    @State private var teamclaw = TeamclawService()
+    @State private var members = MemberListViewModel()
+
+    private static let teamId = "teamclaw"
 
     public init(pairing: PairingManager) {
         self.pairing = pairing
@@ -102,5 +108,18 @@ public struct MainWindowView: View {
         mon.start(mqtt: service, deviceId: pairing.deviceId)
         self.mqtt = service
         self.monitor = mon
+
+        // Start data sync
+        let peerId = "mac-\(UUID().uuidString.prefix(6))"
+        teamclaw.start(
+            mqtt: service,
+            teamId: Self.teamId,
+            deviceId: pairing.deviceId,
+            peerId: peerId,
+            modelContext: modelContext
+        )
+        await MainActor.run {
+            members.start(mqtt: service, deviceId: pairing.deviceId, modelContext: modelContext)
+        }
     }
 }
