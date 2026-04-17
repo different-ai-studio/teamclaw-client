@@ -25,6 +25,7 @@ struct ComposerView: View {
                     .onSubmit { send() }
 
                 HStack(spacing: 8) {
+                    ModelPicker(sessionId: sessionId)
                     Spacer()
                     Button(action: micTapped) {
                         Image(systemName: voice.state == .recording ? "mic.fill" : "mic")
