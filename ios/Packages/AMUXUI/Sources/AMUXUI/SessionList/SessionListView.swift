@@ -8,6 +8,7 @@ public struct SessionListView: View {
     let mqtt: MQTTService
     let pairing: PairingManager
     let connectionMonitor: ConnectionMonitor
+    var onReconnect: (() -> Void)?
     let teamclawService: TeamclawService?
 
     @Environment(\.modelContext) private var modelContext
@@ -28,11 +29,12 @@ public struct SessionListView: View {
     @State private var isEditing = false
     @State private var selectedIDs: Set<String> = []
 
-    public init(mqtt: MQTTService, pairing: PairingManager, connectionMonitor: ConnectionMonitor, teamclawService: TeamclawService? = nil) {
+    public init(mqtt: MQTTService, pairing: PairingManager, connectionMonitor: ConnectionMonitor, teamclawService: TeamclawService? = nil, onReconnect: (() -> Void)? = nil) {
         self.mqtt = mqtt
         self.pairing = pairing
         self.connectionMonitor = connectionMonitor
         self.teamclawService = teamclawService
+        self.onReconnect = onReconnect
     }
 
     public var body: some View {
@@ -42,7 +44,12 @@ public struct SessionListView: View {
                 if mqtt.connectionState == .reconnecting {
                     ConnectionBanner(icon: "arrow.triangle.2.circlepath", text: "Reconnecting…", color: .yellow)
                 } else if mqtt.connectionState == .disconnected {
-                    ConnectionBanner(icon: "bolt.slash.fill", text: "Not Connected", color: .red)
+                    Button {
+                        onReconnect?()
+                    } label: {
+                        ConnectionBanner(icon: "bolt.slash.fill", text: "Not Connected · Tap to reconnect", color: .red)
+                    }
+                    .buttonStyle(.plain)
                 } else if !connectionMonitor.daemonOnline {
                     ConnectionBanner(icon: "desktopcomputer", text: "Daemon Offline", color: .orange)
                 }
@@ -98,8 +105,11 @@ public struct SessionListView: View {
             .navigationDestination(for: String.self) { id in
                 if id.hasPrefix("collab:") {
                     let sessionId = String(id.dropFirst("collab:".count))
-                    if let session = viewModel.collabSessions.first(where: { $0.sessionId == sessionId }),
-                       let svc = teamclawService {
+                    let descriptor = FetchDescriptor<CollabSession>(
+                        predicate: #Predicate { $0.sessionId == sessionId }
+                    )
+                    if let session = (try? modelContext.fetch(descriptor))?.first {
+                        let svc = teamclawService ?? TeamclawService()
                         CollabSessionView(session: session, teamclawService: svc,
                                           actorId: "ios-\(pairing.authToken.prefix(6))")
                     } else {

@@ -204,19 +204,15 @@ public struct NewSessionSheet: View {
                         .padding(.trailing, 4)
                         .padding(.vertical, 10)
 
-                    if canSend {
-                        Button(action: sendAndCreate) {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: 32, height: 32)
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .liquidGlass(in: Circle())
-                        .padding(.trailing, 6)
-                        .padding(.bottom, 6)
+                    Button(action: sendAndCreate) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundStyle(canSend ? .blue : .gray.opacity(0.4))
                     }
+                    .buttonStyle(.plain)
+                    .disabled(!canSend)
+                    .padding(.trailing, 6)
+                    .padding(.bottom, 6)
                 }
                 .liquidGlass(in: RoundedRectangle(cornerRadius: 20))
             }
@@ -305,14 +301,17 @@ public struct NewSessionSheet: View {
         }
     }
 
+    /// v1: team_id matches daemon.toml config. Must be kept in sync.
+    private static let teamId = "teamclaw"
+
     private func createCollabSession(text: String) {
         isSending = true
 
         // Build CreateSessionRequest RPC
         var createReq = Teamclaw_CreateSessionRequest()
         createReq.sessionType = .collab
-        createReq.teamID = deviceId  // v1: use deviceId as teamId placeholder
-        createReq.title = text.prefix(50).trimmingCharacters(in: .whitespacesAndNewlines)
+        createReq.teamID = Self.teamId
+        createReq.title = String(text.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
         createReq.summary = text
         createReq.inviteActorIds = collaborators.map(\.memberId)
 
@@ -321,15 +320,66 @@ public struct NewSessionSheet: View {
         rpcReq.senderDeviceID = deviceId
         rpcReq.method = .createSession(createReq)
 
-        // Send RPC to local amuxd
-        let topic = "teamclaw/\(deviceId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
+        // Send RPC to local amuxd (teamId in topic must match daemon's team_id)
+        let requestId = rpcReq.requestID
+        let topic = "teamclaw/\(Self.teamId)/rpc/\(deviceId)/\(requestId)/req"
         Task {
-            if let data = try? rpcReq.serializedData() {
-                try? await mqtt.publish(topic: topic, payload: data, retain: false)
+            // Subscribe to RPC responses for this device
+            let responseTopic = "teamclaw/\(Self.teamId)/rpc/\(deviceId)/+/res"
+            try? await mqtt.subscribe(responseTopic)
+
+            // Listen for response
+            let stream = mqtt.messages()
+
+            guard let data = try? rpcReq.serializedData() else {
+                isSending = false
+                errorMessage = "Failed to encode request"
+                return
             }
-            // Don't wait for response — just dismiss
+            try? await mqtt.publish(topic: topic, payload: data, retain: false)
+
+            // Wait up to 10s for RPC response
+            let deadline = Date().addingTimeInterval(10)
+            for await msg in stream {
+                if Date() > deadline { break }
+
+                // Match response by requestId in topic
+                if msg.topic.contains("/rpc/") && msg.topic.hasSuffix("/res") {
+                    if let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload) {
+                        if response.success, case .sessionInfo(let info) = response.result {
+                            // Save to SwiftData so navigation can find it
+                            let session = CollabSession(
+                                sessionId: info.sessionID,
+                                sessionType: "collab",
+                                teamId: info.teamID,
+                                title: info.title,
+                                hostDeviceId: info.hostDeviceID,
+                                createdBy: info.createdBy,
+                                createdAt: Date(timeIntervalSince1970: TimeInterval(info.createdAt)),
+                                summary: info.summary,
+                                participantCount: info.participants.count
+                            )
+                            modelContext.insert(session)
+                            try? modelContext.save()
+                            // Also refresh the viewModel
+                            viewModel.reloadCollabSessions(modelContext: modelContext)
+
+                            isSending = false
+                            onSessionCreated?("collab:\(info.sessionID)")
+                            dismiss()
+                            return
+                        } else if !response.error.isEmpty {
+                            isSending = false
+                            errorMessage = response.error
+                            return
+                        }
+                    }
+                }
+            }
+
+            // Timeout
             isSending = false
-            dismiss()
+            errorMessage = "Session creation timed out"
         }
     }
 }

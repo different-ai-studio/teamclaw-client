@@ -16,7 +16,12 @@ struct ContentView: View {
     var body: some View {
         Group {
             if pairing.isPaired {
-                SessionListView(mqtt: mqtt, pairing: pairing, connectionMonitor: connectionMonitor)
+                SessionListView(mqtt: mqtt, pairing: pairing, connectionMonitor: connectionMonitor, onReconnect: {
+                        Task {
+                            await mqtt.disconnect()
+                            await connectMQTT()
+                        }
+                    })
                     .task { await connectMQTT() }
             } else {
                 PairingView(pairing: pairing)
