@@ -3,7 +3,7 @@ import AMUXCore
 
 public struct MainWindowView: View {
     let pairing: PairingManager
-    @State private var sidebarSelection: SidebarItem? = .sessions
+    @State private var sidebarSelection: SidebarItem? = .function(.sessions)
     @State private var listSelection: String?
     @State private var mqtt: MQTTService?
     @State private var monitor: ConnectionMonitor?
@@ -27,9 +27,9 @@ public struct MainWindowView: View {
         List(selection: $sidebarSelection) {
             Section("功能") {
                 Label("Sessions", systemImage: "bubble.left.and.bubble.right")
-                    .tag(SidebarItem.sessions)
+                    .tag(SidebarItem.function(.sessions))
                 Label("Tasks", systemImage: "checkmark.circle")
-                    .tag(SidebarItem.tasks)
+                    .tag(SidebarItem.function(.tasks))
             }
             Section("Members") {
                 Text("(no members yet)")
@@ -44,7 +44,13 @@ public struct MainWindowView: View {
     private var list: some View {
         VStack {
             Spacer()
-            Text(sidebarSelection?.title ?? "—")
+            Text({
+                switch sidebarSelection {
+                case .function(let f): return f.title
+                case .member(let id): return "Member: \(id)"
+                case nil: return "—"
+                }
+            }())
                 .font(.title2)
                 .foregroundStyle(.secondary)
             Text("List column placeholder")
@@ -96,17 +102,5 @@ public struct MainWindowView: View {
         mon.start(mqtt: service, deviceId: pairing.deviceId)
         self.mqtt = service
         self.monitor = mon
-    }
-}
-
-public enum SidebarItem: Hashable {
-    case sessions
-    case tasks
-
-    var title: String {
-        switch self {
-        case .sessions: "Sessions"
-        case .tasks: "Tasks"
-        }
     }
 }

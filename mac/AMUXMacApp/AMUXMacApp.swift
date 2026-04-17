@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import AMUXCore
 import AMUXMacUI
 
@@ -12,5 +13,11 @@ struct AMUXMacApp: App {
                 .frame(minWidth: 1100, minHeight: 700)
         }
         .windowResizability(.contentMinSize)
+        .modelContainer(for: [
+            Member.self,
+            CollabSession.self,
+            SessionMessage.self,
+            WorkItem.self,
+        ])
     }
 }
