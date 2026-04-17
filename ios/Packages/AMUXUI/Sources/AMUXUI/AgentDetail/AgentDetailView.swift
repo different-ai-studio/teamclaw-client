@@ -146,11 +146,15 @@ public struct AgentDetailView: View {
                                 voiceRecorder.reset()
                                 showReplySheet = true
                             } label: {
-                                Text("Edit")
-                                    .font(.subheadline).fontWeight(.medium)
-                                    .foregroundStyle(.primary)
-                                    .padding(.horizontal, 16).padding(.vertical, 8)
-                                    .liquidGlass(in: Capsule())
+                                HStack(spacing: 6) {
+                                    Image(systemName: "pencil")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text("Edit")
+                                        .font(.subheadline).fontWeight(.medium)
+                                }
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                .liquidGlass(in: Capsule())
                             }
                             .buttonStyle(.plain)
 
@@ -159,11 +163,15 @@ public struct AgentDetailView: View {
                                 voiceRecorder.reset()
                                 Task { try? await viewModel.sendPrompt(t, modelContext: modelContext) }
                             } label: {
-                                Text("Send")
-                                    .font(.subheadline).fontWeight(.medium)
-                                    .foregroundStyle(.primary)
-                                    .padding(.horizontal, 16).padding(.vertical, 8)
-                                    .liquidGlass(in: Capsule())
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.up")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text("Send")
+                                        .font(.subheadline).fontWeight(.medium)
+                                }
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                .background(.green.gradient, in: Capsule())
                             }
                             .buttonStyle(.plain)
                         }
@@ -177,19 +185,8 @@ public struct AgentDetailView: View {
                     GlassCircleButton(icon: "person.2") { showMembers = true }
                     Spacer()
                     // Mic button
-                    GlassCircleButton(
-                        icon: voiceRecorder.state == .recording ? "mic.fill" : "mic"
-                    ) {
-                        switch voiceRecorder.state {
-                        case .idle:
-                            voiceRecorder.startRecording()
-                        case .recording:
-                            voiceRecorder.stopRecording()
-                        case .done:
-                            voiceRecorder.startRecording()
-                        }
-                    }
-                    .disabled(viewModel.agent.isActive)
+                    RecordButton(voiceRecorder: voiceRecorder)
+                        .disabled(viewModel.agent.isActive)
                     Spacer()
                     GlassCircleButton(icon: "gearshape") { showSettings = true }
                     if viewModel.agent.isActive {
@@ -432,6 +429,49 @@ private struct AgentSettingsSheet: View {
     }
 }
 
+// MARK: - RecordButton
+
+private struct RecordButton: View {
+    let voiceRecorder: VoiceRecorder
+    @State private var wavePhase: CGFloat = 0
+
+    private var isRecording: Bool { voiceRecorder.state == .recording }
+
+    var body: some View {
+        Button {
+            switch voiceRecorder.state {
+            case .idle: voiceRecorder.startRecording()
+            case .recording: voiceRecorder.stopRecording()
+            case .done: voiceRecorder.startRecording()
+            }
+        } label: {
+            ZStack {
+                if isRecording {
+                    // Waveform rings
+                    ForEach(0..<3, id: \.self) { i in
+                        Circle()
+                            .stroke(Color.red.opacity(0.3 - Double(i) * 0.08), lineWidth: 2)
+                            .frame(
+                                width: 40 + CGFloat(i) * 12 * CGFloat(voiceRecorder.audioLevel + 0.3),
+                                height: 40 + CGFloat(i) * 12 * CGFloat(voiceRecorder.audioLevel + 0.3)
+                            )
+                            .animation(.easeOut(duration: 0.15), value: voiceRecorder.audioLevel)
+                    }
+                }
+                Image(systemName: isRecording ? "mic.fill" : "mic")
+                    .font(.body)
+                    .foregroundStyle(isRecording ? .white : .primary)
+                    .frame(width: 40, height: 40)
+                    .background(isRecording ? AnyShapeStyle(Color.red) : AnyShapeStyle(.clear), in: Circle())
+                    .contentShape(Circle())
+            }
+        }
+        .buttonStyle(.plain)
+        .liquidGlass(in: Circle())
+        .animation(.easeInOut(duration: 0.2), value: isRecording)
+    }
+}
+
 // MARK: - VoiceRecorder
 
 @Observable @MainActor
@@ -440,6 +480,7 @@ final class VoiceRecorder {
 
     private(set) var state: State = .idle
     private(set) var transcribedText: String?
+    private(set) var audioLevel: Float = 0
 
     private var audioEngine: AVAudioEngine?
     private var recognitionTask: SFSpeechRecognitionTask?
@@ -478,8 +519,16 @@ final class VoiceRecorder {
 
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             request.append(buffer)
+            // Calculate audio level for waveform visualization
+            guard let channelData = buffer.floatChannelData?[0] else { return }
+            let frameLength = Int(buffer.frameLength)
+            var sum: Float = 0
+            for i in 0..<frameLength { sum += abs(channelData[i]) }
+            let avg = sum / Float(max(frameLength, 1))
+            let level = min(max(avg * 5, 0), 1) // normalize to 0...1
+            Task { @MainActor in self?.audioLevel = level }
         }
 
         audioEngine.prepare()
