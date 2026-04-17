@@ -25,8 +25,12 @@ public struct CollabSessionView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
                         ForEach(viewModel.messages, id: \.messageId) { message in
-                            CollabMessageBubble(message: message, isMe: message.senderActorId == actorId)
-                                .id(message.messageId)
+                            CollabMessageBubble(
+                                message: message,
+                                isMe: message.senderActorId == actorId,
+                                senderName: resolveName(message.senderActorId)
+                            )
+                            .id(message.messageId)
                         }
                     }
                     .padding()
@@ -75,6 +79,14 @@ public struct CollabSessionView: View {
         }
     }
 
+    private func resolveName(_ actorId: String) -> String {
+        let descriptor = FetchDescriptor<Member>(predicate: #Predicate { $0.memberId == actorId })
+        if let member = (try? modelContext.fetch(descriptor))?.first {
+            return member.displayName
+        }
+        return actorId.split(separator: "-").last.map(String.init) ?? actorId
+    }
+
     private var canSend: Bool {
         !promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -112,6 +124,7 @@ public struct CollabSessionView: View {
 struct CollabMessageBubble: View {
     let message: SessionMessage
     let isMe: Bool
+    let senderName: String
 
     var body: some View {
         HStack {
@@ -119,7 +132,7 @@ struct CollabMessageBubble: View {
 
             VStack(alignment: isMe ? .trailing : .leading, spacing: 2) {
                 if !isMe && !message.isSystem {
-                    Text(message.senderActorId)
+                    Text(senderName)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

@@ -14,6 +14,7 @@ public struct SessionListView: View {
     @State private var viewModel = SessionListViewModel()
 
     @State private var showSettings = false
+    @State private var showWorkItems = false
     @State private var showMembers = false
     @State private var showWorkspaces = false
     @State private var showNewSession = false
@@ -59,10 +60,10 @@ public struct SessionListView: View {
             .navigationTitle("Sessions")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                // Left: Settings
+                // Left: Work Items
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape").font(.title3).foregroundStyle(.primary)
+                    Button { showWorkItems = true } label: {
+                        Image(systemName: "checklist").font(.title3).foregroundStyle(.primary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -113,8 +114,8 @@ public struct SessionListView: View {
                     Text("Agent not found")
                 }
             }
-            .sheet(isPresented: $showSettings) {
-                SettingsView(pairing: pairing, connectionMonitor: connectionMonitor)
+            .sheet(isPresented: $showWorkItems) {
+                WorkItemSheet(pairing: pairing, connectionMonitor: connectionMonitor)
             }
             .sheet(isPresented: $showWorkspaces) {
                 WorkspaceSheet(mqtt: mqtt, deviceId: pairing.deviceId,
