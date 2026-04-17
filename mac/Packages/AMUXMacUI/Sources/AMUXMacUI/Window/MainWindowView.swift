@@ -7,6 +7,7 @@ public struct MainWindowView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var sidebarSelection: SidebarItem? = .function(.sessions)
     @State private var listSelection: String?
+    @State private var selectedSessionId: String?
     @State private var mqtt: MQTTService?
     @State private var monitor: ConnectionMonitor?
     @State private var teamclaw = TeamclawService()
@@ -35,23 +36,23 @@ public struct MainWindowView: View {
     }
 
     private var list: some View {
-        VStack {
-            Spacer()
-            Text({
-                switch sidebarSelection {
-                case .function(let f): return f.title
-                case .member(let id): return "Member: \(id)"
-                case nil: return "—"
-                }
-            }())
-                .font(.title2)
-                .foregroundStyle(.secondary)
-            Text("List column placeholder")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
-            Spacer()
+        Group {
+            switch sidebarSelection {
+            case .function(.tasks):
+                Text("Task list — coming in next step")
+                    .foregroundStyle(.secondary)
+            case .function(.sessions), .none:
+                SessionListColumn(
+                    memberFilter: nil,
+                    selectedSessionId: $selectedSessionId
+                )
+            case .member(let id):
+                SessionListColumn(
+                    memberFilter: id,
+                    selectedSessionId: $selectedSessionId
+                )
+            }
         }
-        .frame(minWidth: 320)
         .navigationSplitViewColumnWidth(min: 280, ideal: 360, max: 480)
     }
 
