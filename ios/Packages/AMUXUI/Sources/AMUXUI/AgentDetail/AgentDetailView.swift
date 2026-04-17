@@ -459,7 +459,7 @@ private struct AgentSettingsSheet: View {
 
 private struct RecordButton: View {
     let voiceRecorder: VoiceRecorder
-    @State private var wavePhase: CGFloat = 0
+    @State private var spinning = false
 
     private var isRecording: Bool { voiceRecorder.state == .recording }
 
@@ -472,23 +472,22 @@ private struct RecordButton: View {
             }
         } label: {
             ZStack {
+                // Spinning ring when recording
                 if isRecording {
-                    // Waveform rings
-                    ForEach(0..<3, id: \.self) { i in
-                        Circle()
-                            .stroke(Color.red.opacity(0.3 - Double(i) * 0.08), lineWidth: 2)
-                            .frame(
-                                width: 40 + CGFloat(i) * 12 * CGFloat(voiceRecorder.audioLevel + 0.3),
-                                height: 40 + CGFloat(i) * 12 * CGFloat(voiceRecorder.audioLevel + 0.3)
-                            )
-                            .animation(.easeOut(duration: 0.15), value: voiceRecorder.audioLevel)
-                    }
+                    Circle()
+                        .trim(from: 0, to: 0.7)
+                        .stroke(Color.red, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .frame(width: 46, height: 46)
+                        .rotationEffect(.degrees(spinning ? 360 : 0))
+                        .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: spinning)
+                        .onAppear { spinning = true }
+                        .onDisappear { spinning = false }
                 }
+
                 Image(systemName: isRecording ? "mic.fill" : "mic")
                     .font(.body)
-                    .foregroundStyle(isRecording ? .white : .primary)
+                    .foregroundStyle(isRecording ? .red : .primary)
                     .frame(width: 40, height: 40)
-                    .background(isRecording ? AnyShapeStyle(Color.red) : AnyShapeStyle(.clear), in: Circle())
                     .contentShape(Circle())
             }
         }
