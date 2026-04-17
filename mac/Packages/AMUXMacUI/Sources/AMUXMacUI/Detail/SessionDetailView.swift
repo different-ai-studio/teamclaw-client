@@ -16,21 +16,29 @@ struct SessionDetailView: View {
             .filter { $0.sessionId == session.sessionId }
             .sorted { $0.createdAt < $1.createdAt }
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                DetailHeaderView(session: session, participantSummary: participantSummary(messages))
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    DetailHeaderView(session: session, participantSummary: participantSummary(messages))
 
-                if messages.isEmpty {
-                    Text("No messages yet.")
-                        .foregroundStyle(.tertiary)
-                        .padding(22)
-                } else {
-                    ForEach(messages, id: \.messageId) { message in
-                        rowView(for: message)
+                    if messages.isEmpty {
+                        Text("No messages yet.")
+                            .foregroundStyle(.tertiary)
+                            .padding(22)
+                    } else {
+                        ForEach(messages, id: \.messageId) { message in
+                            rowView(for: message)
+                        }
+                        .padding(.bottom, 22)
                     }
-                    .padding(.bottom, 22)
                 }
             }
+
+            ComposerView(
+                teamclawService: teamclawService,
+                sessionId: session.sessionId,
+                actorId: actorId
+            )
         }
         .task(id: session.sessionId) {
             teamclawService.subscribeToSession(session.sessionId)
