@@ -8,6 +8,7 @@ public struct MainWindowView: View {
     @State private var sidebarSelection: SidebarItem? = .function(.sessions)
     @State private var listSelection: String?
     @State private var selectedSessionId: String?
+    @State private var selectedTaskId: String?
     @State private var mqtt: MQTTService?
     @State private var monitor: ConnectionMonitor?
     @State private var teamclaw = TeamclawService()
@@ -39,8 +40,7 @@ public struct MainWindowView: View {
         Group {
             switch sidebarSelection {
             case .function(.tasks):
-                Text("Task list — coming in next step")
-                    .foregroundStyle(.secondary)
+                TaskListColumn(selectedTaskId: $selectedTaskId)
             case .function(.sessions), .none:
                 SessionListColumn(
                     memberFilter: nil,
