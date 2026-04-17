@@ -126,7 +126,7 @@ public struct SessionListView: View {
                 }
             }
             .sheet(isPresented: $showWorkItems) {
-                WorkItemSheet(pairing: pairing, connectionMonitor: connectionMonitor)
+                WorkItemSheet(pairing: pairing, connectionMonitor: connectionMonitor, teamclawService: teamclawService)
             }
             .sheet(isPresented: $showWorkspaces) {
                 WorkspaceSheet(mqtt: mqtt, deviceId: pairing.deviceId,
