@@ -2,6 +2,7 @@ import Foundation
 import Security
 import AMUXCore
 
+// @unchecked Sendable is safe: SecItem* APIs are thread-safe per Apple documentation, and this class holds no mutable state beyond immutable let properties (service, account).
 public final class KeychainCredentialStore: CredentialStore, @unchecked Sendable {
     private let service: String
     private let account: String
@@ -16,7 +17,7 @@ public final class KeychainCredentialStore: CredentialStore, @unchecked Sendable
         var query = baseQuery
         let attributes: [String: Any] = [
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
         let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if updateStatus == errSecItemNotFound {
