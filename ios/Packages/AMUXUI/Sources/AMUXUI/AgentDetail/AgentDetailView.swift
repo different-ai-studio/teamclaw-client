@@ -188,23 +188,24 @@ public struct AgentDetailView: View {
                 }
 
                 // Toolbar
-                HStack(spacing: 16) {
-                    Button {} label: { Image(systemName: "pin").font(.title3) }
-                    Button { showMembers = true } label: { Image(systemName: "person.2").font(.title3) }
-                    Spacer()
-                    // Mic button
-                    RecordButton(voiceRecorder: voiceRecorder)
-                        .disabled(viewModel.agent.isActive)
-                    Spacer()
-                    Button { showSettings = true } label: { Image(systemName: "gearshape").font(.title3) }
-                    if viewModel.agent.isActive {
-                        Button { Task { try? await viewModel.cancelTask() } } label: { Image(systemName: "stop.fill").font(.title3) }
-                    } else {
-                        Button { showReplySheet = true } label: { Image(systemName: "arrowshape.turn.up.left").font(.title3) }
+                LiquidGlassBar {
+                    HStack(spacing: 16) {
+                        Button {} label: { Image(systemName: "pin").font(.title3) }
+                        Button { showMembers = true } label: { Image(systemName: "person.2").font(.title3) }
+                        Spacer()
+                        // Mic button
+                        RecordButton(voiceRecorder: voiceRecorder)
+                            .disabled(viewModel.agent.isActive)
+                        Spacer()
+                        Button { showSettings = true } label: { Image(systemName: "gearshape").font(.title3) }
+                        if viewModel.agent.isActive {
+                            Button { Task { try? await viewModel.cancelTask() } } label: { Image(systemName: "stop.fill").font(.title3) }
+                        } else {
+                            Button { showReplySheet = true } label: { Image(systemName: "arrowshape.turn.up.left").font(.title3) }
+                        }
                     }
+                    .foregroundStyle(.primary)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
             }
         }
         .sheet(isPresented: $showReplySheet) {

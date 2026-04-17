@@ -58,21 +58,21 @@ public struct SessionListView: View {
                 // Left: Settings
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button { showSettings = true } label: {
-                        Image(systemName: "gearshape").font(.title3)
+                        Image(systemName: "gearshape").font(.title3).foregroundStyle(.primary)
                     }
                     .buttonStyle(.plain)
                 }
                 // Right: Workspaces
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showWorkspaces = true } label: {
-                        Image(systemName: "folder").font(.title3)
+                        Image(systemName: "folder").font(.title3).foregroundStyle(.primary)
                     }
                     .buttonStyle(.plain)
                 }
                 // Right: Members
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showMembers = true } label: {
-                        Image(systemName: "person.2.fill").font(.title3)
+                        Image(systemName: "person.2.fill").font(.title3).foregroundStyle(.primary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -376,59 +376,59 @@ private struct MailStyleBottomBar: View {
     private var isActive: Bool { isSearchFocused.wrappedValue || !searchText.isEmpty }
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Left: filter/select button — hides when search active
-            if !isActive {
-                Button {
-                    withAnimation(.spring(duration: 0.25)) {
-                        isEditing.toggle()
-                        if !isEditing { selectedIDs.removeAll() }
+        LiquidGlassBar {
+            HStack(spacing: 12) {
+                // Left: filter/select button — hides when search active
+                if !isActive {
+                    Button {
+                        withAnimation(.spring(duration: 0.25)) {
+                            isEditing.toggle()
+                            if !isEditing { selectedIDs.removeAll() }
+                        }
+                    } label: {
+                        Image(systemName: isEditing ? "checkmark.circle.fill" : "line.3.horizontal.decrease")
+                            .font(.title3)
                     }
-                } label: {
-                    Image(systemName: isEditing ? "checkmark.circle.fill" : "line.3.horizontal.decrease")
-                        .font(.title3)
+                    .transition(.scale.combined(with: .opacity))
                 }
-                .transition(.scale.combined(with: .opacity))
-            }
 
-            // Center: search capsule
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.primary)
-                    .font(.subheadline)
-                TextField("Search", text: $searchText)
-                    .font(.subheadline)
-                    .focused(isSearchFocused)
-                    .onChange(of: searchText) { onSearchChanged(searchText) }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .liquidGlass(in: Capsule(), interactive: true)
+                // Center: search capsule
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.subheadline)
+                    TextField("Search", text: $searchText)
+                        .font(.subheadline)
+                        .focused(isSearchFocused)
+                        .onChange(of: searchText) { onSearchChanged(searchText) }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .liquidGlass(in: Capsule(), interactive: true)
 
-            // Right: compose OR close
-            if isActive {
-                Button {
-                    searchText = ""
-                    isSearchFocused.wrappedValue = false
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
+                // Right: compose OR close
+                if isActive {
+                    Button {
+                        searchText = ""
+                        isSearchFocused.wrappedValue = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                } else {
+                    Button {
+                        showNewSession = true
+                    } label: {
+                        Image(systemName: "square.and.pencil").font(.title3)
+                    }
+                    .modifier(MatchedTransitionSourceModifier(sourceID: "newSession", namespace: sheetTransition))
+                    .transition(.scale.combined(with: .opacity))
                 }
-                .transition(.scale.combined(with: .opacity))
-            } else {
-                Button {
-                    showNewSession = true
-                } label: {
-                    Image(systemName: "square.and.pencil").font(.title3)
-                }
-                .modifier(MatchedTransitionSourceModifier(sourceID: "newSession", namespace: sheetTransition))
-                .transition(.scale.combined(with: .opacity))
             }
+            .foregroundStyle(.primary)
+            .animation(.spring(duration: 0.3), value: isActive)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .animation(.spring(duration: 0.3), value: isActive)
     }
 }
 
