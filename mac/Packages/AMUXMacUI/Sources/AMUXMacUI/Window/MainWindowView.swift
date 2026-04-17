@@ -30,21 +30,8 @@ public struct MainWindowView: View {
     }
 
     private var sidebar: some View {
-        List(selection: $sidebarSelection) {
-            Section("功能") {
-                Label("Sessions", systemImage: "bubble.left.and.bubble.right")
-                    .tag(SidebarItem.function(.sessions))
-                Label("Tasks", systemImage: "checkmark.circle")
-                    .tag(SidebarItem.function(.tasks))
-            }
-            Section("Members") {
-                Text("(no members yet)")
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
-            }
-        }
-        .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(min: 220, ideal: 230, max: 320)
+        SidebarView(selection: $sidebarSelection, members: members.members)
+            .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 320)
     }
 
     private var list: some View {
