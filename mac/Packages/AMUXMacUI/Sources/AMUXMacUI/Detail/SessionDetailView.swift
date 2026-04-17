@@ -26,10 +26,7 @@ struct SessionDetailView: View {
                         .padding(22)
                 } else {
                     ForEach(messages, id: \.messageId) { message in
-                        MessageRowAgent(
-                            message: message,
-                            senderName: senderName(for: message.senderActorId)
-                        )
+                        rowView(for: message)
                     }
                     .padding(.bottom, 22)
                 }
@@ -51,5 +48,16 @@ struct SessionDetailView: View {
 
     private func senderName(for actorId: String) -> String {
         actorId.isEmpty ? "Agent" : actorId
+    }
+
+    @ViewBuilder
+    private func rowView(for message: SessionMessage) -> some View {
+        if message.isSystem {
+            MessageRowSystem(message: message)
+        } else if message.senderActorId == actorId {
+            MessageRowUser(message: message, senderName: senderName(for: message.senderActorId))
+        } else {
+            MessageRowAgent(message: message, senderName: senderName(for: message.senderActorId))
+        }
     }
 }
