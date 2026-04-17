@@ -233,8 +233,14 @@ public struct NewSessionSheet: View {
         guard !text.isEmpty else { return }
 
         isInputFocused = false
-        isSending = true
         errorMessage = nil
+
+        if !collaborators.isEmpty {
+            createCollabSession(text: text)
+            return
+        }
+
+        isSending = true
 
         Task {
             // Listen for agent list updates before sending
@@ -296,6 +302,34 @@ public struct NewSessionSheet: View {
             // Timeout
             isSending = false
             errorMessage = "Session creation timed out. Check daemon logs."
+        }
+    }
+
+    private func createCollabSession(text: String) {
+        isSending = true
+
+        // Build CreateSessionRequest RPC
+        var createReq = Teamclaw_CreateSessionRequest()
+        createReq.sessionType = .collab
+        createReq.teamID = deviceId  // v1: use deviceId as teamId placeholder
+        createReq.title = text.prefix(50).trimmingCharacters(in: .whitespacesAndNewlines)
+        createReq.summary = text
+        createReq.inviteActorIds = collaborators.map(\.memberId)
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .createSession(createReq)
+
+        // Send RPC to local amuxd
+        let topic = "teamclaw/\(deviceId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
+        Task {
+            if let data = try? rpcReq.serializedData() {
+                try? await mqtt.publish(topic: topic, payload: data, retain: false)
+            }
+            // Don't wait for response — just dismiss
+            isSending = false
+            dismiss()
         }
     }
 }

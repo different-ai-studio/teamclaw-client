@@ -248,10 +248,41 @@ public struct AgentDetailView: View {
             MemberListView(mqtt: viewModel.mqttRef, deviceId: viewModel.deviceIdRef, peerId: viewModel.peerIdRef,
                            selected: Set(collaborators.map(\.memberId))) { selected in
                 collaborators = selected
+                if !selected.isEmpty {
+                    forkToCollab(members: selected)
+                }
             }
         }
         .task { viewModel.start(modelContext: modelContext) }
         .onDisappear { viewModel.stop() }
+    }
+
+    private func forkToCollab(members: [Member]) {
+        let agent = viewModel.agent
+        // Use last output summary or session title as handoff context
+        let summary = agent.lastOutputSummary.isEmpty
+            ? "Forked from agent session: \(agent.sessionTitle.isEmpty ? agent.agentId : agent.sessionTitle)"
+            : agent.lastOutputSummary
+
+        var createReq = Teamclaw_CreateSessionRequest()
+        createReq.sessionType = .collab
+        createReq.teamID = viewModel.deviceIdRef  // v1: use deviceId as teamId
+        createReq.title = agent.sessionTitle.isEmpty ? "Collab: \(agent.worktree.split(separator: "/").last.map(String.init) ?? agent.agentId)" : "Collab: \(agent.sessionTitle)"
+        createReq.summary = summary
+        createReq.inviteActorIds = members.map(\.memberId)
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = viewModel.deviceIdRef
+        rpcReq.method = .createSession(createReq)
+
+        let deviceId = viewModel.deviceIdRef
+        let topic = "teamclaw/\(deviceId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
+        Task {
+            if let data = try? rpcReq.serializedData() {
+                try? await viewModel.mqttRef.publish(topic: topic, payload: data, retain: false)
+            }
+        }
     }
 }
 
