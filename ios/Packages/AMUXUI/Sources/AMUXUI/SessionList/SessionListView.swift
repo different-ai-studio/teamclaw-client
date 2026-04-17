@@ -230,6 +230,15 @@ struct AgentRowView: View {
         return colors[abs(hash) % colors.count]
     }
 
+    /// Asset name for the agent type logo
+    private var agentLogoName: String {
+        switch agent.agentType {
+        case 1: "ClaudeLogo"
+        case 2: "OpenCodeLogo"
+        case 3: "CodexLogo"
+        default: "ClaudeLogo"
+        }
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -276,7 +285,7 @@ struct AgentRowView: View {
 
                 // Row 3: agent logo + workspace name (left) + time (right)
                 HStack(spacing: 4) {
-                    Image("AgentLogo", bundle: .module)
+                    Image(agentLogoName, bundle: .module)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 14, height: 14)
