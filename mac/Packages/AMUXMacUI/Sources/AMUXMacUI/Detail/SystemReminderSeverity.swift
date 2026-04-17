@@ -1,11 +1,11 @@
 import SwiftUI
 
-public enum SystemReminderSeverity: Equatable {
+enum SystemReminderSeverity: Equatable {
     case info
     case warn
     case urgent
 
-    public var label: String {
+    var label: String {
         switch self {
         case .info: "Info"
         case .warn: "Warning"
@@ -13,7 +13,7 @@ public enum SystemReminderSeverity: Equatable {
         }
     }
 
-    public var color: Color {
+    var color: Color {
         switch self {
         case .info: .accentColor
         case .warn: .yellow
@@ -21,7 +21,7 @@ public enum SystemReminderSeverity: Equatable {
         }
     }
 
-    public static func from(content: String) -> SystemReminderSeverity {
+    static func from(content: String) -> SystemReminderSeverity {
         let lower = content.lowercased()
         let urgentMarkers = ["permission requested", "approval required", "permission required", "blocking"]
         if urgentMarkers.contains(where: lower.contains) { return .urgent }
