@@ -31,16 +31,19 @@ public final class MemberListViewModel {
     private func syncMembers(_ list: Amux_MemberList, modelContext: ModelContext) {
         for proto in list.members {
             let id = proto.memberID
+            let department: String? = proto.department.isEmpty ? nil : proto.department
             let descriptor = FetchDescriptor<Member>(predicate: #Predicate { $0.memberId == id })
             if let existing = try? modelContext.fetch(descriptor).first {
                 existing.displayName = proto.displayName
                 existing.role = Int(proto.role.rawValue)
+                existing.department = department
             } else {
                 modelContext.insert(Member(
                     memberId: proto.memberID,
                     displayName: proto.displayName,
                     role: Int(proto.role.rawValue),
-                    joinedAt: Date(timeIntervalSince1970: TimeInterval(proto.joinedAt))
+                    joinedAt: Date(timeIntervalSince1970: TimeInterval(proto.joinedAt)),
+                    department: department
                 ))
             }
         }

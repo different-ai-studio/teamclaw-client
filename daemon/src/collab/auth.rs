@@ -33,6 +33,7 @@ impl AuthManager {
                 role: invite.role.clone(),
                 token: invite.invite_token.clone(), // Keep invite token so iOS can re-auth
                 joined_at: Utc::now(),
+                department: None,
             };
             self.store.add_member(member.clone());
             let _ = self.store.save(&self.store_path);
@@ -72,6 +73,7 @@ impl AuthManager {
                 display_name: m.display_name.clone(),
                 role: if m.is_owner() { amux::MemberRole::Owner as i32 } else { amux::MemberRole::Member as i32 },
                 joined_at: m.joined_at.timestamp(),
+                department: m.department.clone().unwrap_or_default(),
             }).collect(),
         }
     }
@@ -86,5 +88,47 @@ impl AuthManager {
         self.store.members.iter()
             .find(|m| m.token.starts_with(prefix))
             .map(|m| if m.is_owner() { amux::MemberRole::Owner } else { amux::MemberRole::Member })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{MemberStore, StoredMember};
+    use chrono::TimeZone;
+    use tempfile::tempdir;
+
+    fn make_auth_with(members: Vec<StoredMember>) -> AuthManager {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("members.toml");
+        let store = MemberStore { members, pending_invites: vec![] };
+        store.save(&path).unwrap();
+        // Keep the tempdir alive by leaking it for the test's duration.
+        Box::leak(Box::new(dir));
+        AuthManager::new(path).unwrap()
+    }
+
+    fn member(id: &str, department: Option<&str>) -> StoredMember {
+        StoredMember {
+            member_id: id.to_string(),
+            display_name: format!("Member {}", id),
+            role: "member".into(),
+            token: format!("tok-{}", id),
+            joined_at: Utc.with_ymd_and_hms(2026, 4, 17, 12, 0, 0).unwrap(),
+            department: department.map(|s| s.to_string()),
+        }
+    }
+
+    #[test]
+    fn proto_member_list_includes_department_when_set() {
+        let auth = make_auth_with(vec![
+            member("alice", Some("Engineering")),
+            member("bob", None),
+        ]);
+        let list = auth.to_proto_member_list();
+        assert_eq!(list.members.len(), 2);
+        assert_eq!(list.members[0].department, "Engineering");
+        // Bob has no department — proto3 emits empty string.
+        assert_eq!(list.members[1].department, "");
     }
 }
