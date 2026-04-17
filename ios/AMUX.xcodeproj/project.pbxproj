@@ -11,6 +11,7 @@
 		16C83AF390462FDDFA5ABAEE /* AMUXApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 499D508CBB7FB4FD1F584D9D /* AMUXApp.swift */; };
 		2C36DC72B69CF16E00B4ECB5 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F467BD534BE686B6EACBD702 /* ContentView.swift */; };
 		48A4F0655EACAE64B0B0232B /* AMUXUI in Frameworks */ = {isa = PBXBuildFile; productRef = 984FDD5CB983CACB65198166 /* AMUXUI */; };
+		989AF52819F1BFC91A3315B1 /* SentrySwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5821CF422126708735E13341 /* SentrySwiftUI */; };
 		EB09506708CCBE1B923FBFAE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 25D67C6EB2C2948CCFE684D1 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -31,6 +32,7 @@
 			files = (
 				15AE54E5F6CE826C9D3884B5 /* AMUXCore in Frameworks */,
 				48A4F0655EACAE64B0B0232B /* AMUXUI in Frameworks */,
+				989AF52819F1BFC91A3315B1 /* SentrySwiftUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -93,6 +95,7 @@
 			packageProductDependencies = (
 				E240150FE27A7C45F36DE38D /* AMUXCore */,
 				984FDD5CB983CACB65198166 /* AMUXUI */,
+				5821CF422126708735E13341 /* SentrySwiftUI */,
 			);
 			productName = AMUX;
 			productReference = 92EC5FA726FD730FCA929AD0 /* AMUX.app */;
@@ -107,6 +110,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
+					88EBDC80E588A3914F746958 = {
+						DevelopmentTeam = 43G5A6G9QV;
+					};
 				};
 			};
 			buildConfigurationList = E7004AD026FE880F080DB80C /* Build configuration list for PBXProject "AMUX" */;
@@ -119,6 +125,7 @@
 			mainGroup = 83793258F8E10835639EAA01;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				50F232FD09A259B871847F9E /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 				48FE25CCBE8D8352AEDA3987 /* XCLocalSwiftPackageReference "Packages/AMUXCore" */,
 				B60399363A37FA63521EE916 /* XCLocalSwiftPackageReference "Packages/AMUXUI" */,
 			);
@@ -218,13 +225,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 43G5A6G9QV;
 				INFOPLIST_FILE = AMUXApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.4;
-				DEVELOPMENT_TEAM = 43G5A6G9QV;
 				PRODUCT_BUNDLE_IDENTIFIER = tech.teamclaw.mobile;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
@@ -238,13 +245,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 43G5A6G9QV;
 				INFOPLIST_FILE = AMUXApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.4;
-				DEVELOPMENT_TEAM = 43G5A6G9QV;
 				PRODUCT_BUNDLE_IDENTIFIER = tech.teamclaw.mobile;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
@@ -349,7 +356,23 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		50F232FD09A259B871847F9E /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		5821CF422126708735E13341 /* SentrySwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 50F232FD09A259B871847F9E /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = SentrySwiftUI;
+		};
 		984FDD5CB983CACB65198166 /* AMUXUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = AMUXUI;

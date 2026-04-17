@@ -10,6 +10,9 @@ packages:
     path: Packages/AMUXCore
   AMUXUI:
     path: Packages/AMUXUI
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa
+    from: "8.0.0"
 
 targets:
   AMUX:
@@ -20,6 +23,8 @@ targets:
     dependencies:
       - package: AMUXCore
       - package: AMUXUI
+      - package: Sentry
+        product: SentrySwiftUI
     settings:
       base:
         INFOPLIST_FILE: AMUXApp/Info.plist
