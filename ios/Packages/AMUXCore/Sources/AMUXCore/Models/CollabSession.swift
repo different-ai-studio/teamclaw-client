@@ -14,6 +14,7 @@ public final class CollabSession {
     public var participantCount: Int
     public var lastMessagePreview: String
     public var lastMessageAt: Date?
+    public var workItemId: String
 
     public init(
         sessionId: String,
@@ -26,7 +27,8 @@ public final class CollabSession {
         summary: String = "",
         participantCount: Int = 0,
         lastMessagePreview: String = "",
-        lastMessageAt: Date? = nil
+        lastMessageAt: Date? = nil,
+        workItemId: String = ""
     ) {
         self.sessionId = sessionId
         self.sessionType = sessionType
@@ -39,6 +41,7 @@ public final class CollabSession {
         self.participantCount = participantCount
         self.lastMessagePreview = lastMessagePreview
         self.lastMessageAt = lastMessageAt
+        self.workItemId = workItemId
     }
 
     public var isCollab: Bool { sessionType == "collab" }

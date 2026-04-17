@@ -32,6 +32,17 @@ public final class WorkItem {
         self.createdAt = createdAt
     }
 
+    public var displayTitle: String {
+        if !title.isEmpty { return title }
+        let desc = itemDescription
+        if desc.count <= 50 { return desc }
+        let prefix = desc.prefix(50)
+        if let lastSpace = prefix.lastIndex(of: " ") {
+            return String(prefix[prefix.startIndex..<lastSpace]) + "…"
+        }
+        return String(prefix) + "…"
+    }
+
     public var isOpen: Bool { status == "open" }
     public var isInProgress: Bool { status == "in_progress" }
     public var isDone: Bool { status == "done" }
