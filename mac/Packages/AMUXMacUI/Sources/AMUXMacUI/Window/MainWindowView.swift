@@ -6,7 +6,6 @@ public struct MainWindowView: View {
     let pairing: PairingManager
     @Environment(\.modelContext) private var modelContext
     @State private var sidebarSelection: SidebarItem? = .function(.sessions)
-    @State private var listSelection: String?
     @State private var selectedSessionId: String?
     @State private var selectedTaskId: String?
     @State private var mqtt: MQTTService?
