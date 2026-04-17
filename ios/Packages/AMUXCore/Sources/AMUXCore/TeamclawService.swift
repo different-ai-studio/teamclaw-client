@@ -61,6 +61,7 @@ public final class TeamclawService {
             try? await mqtt.subscribe("teamclaw/\(teamId)/members")
             try? await mqtt.subscribe("teamclaw/\(teamId)/user/\(peerId)/invites")
             try? await mqtt.subscribe("teamclaw/\(teamId)/rpc/\(deviceId)/+/res")
+            try? await mqtt.subscribe("teamclaw/\(teamId)/workitems")
 
             isConnected = true
             print("[TeamclawService] subscribed to teamclaw topics for team: \(teamId)")
@@ -102,6 +103,15 @@ public final class TeamclawService {
             if envelope.hasMessage {
                 syncMessage(envelope.message, modelContext: modelContext)
             }
+            return
+        }
+
+        if topic == "teamclaw/\(teamId)/workitems" {
+            guard let event = try? Teamclaw_WorkItemEvent(serializedBytes: incoming.payload) else {
+                print("[TeamclawService] failed to decode WorkItemEvent from global topic")
+                return
+            }
+            syncWorkItemEvent(event, modelContext: modelContext)
             return
         }
 
@@ -337,6 +347,51 @@ public final class TeamclawService {
         Task {
             try? await mqtt.publish(topic: topic, payload: data, retain: false)
         }
+    }
+
+    public func createWorkItem(description: String) async -> Bool {
+        guard let mqtt else { return false }
+
+        let title: String
+        if description.count <= 50 {
+            title = description
+        } else {
+            let prefix = description.prefix(50)
+            if let lastSpace = prefix.lastIndex(of: " ") {
+                title = String(prefix[prefix.startIndex..<lastSpace]) + "…"
+            } else {
+                title = String(prefix) + "…"
+            }
+        }
+
+        var createReq = Teamclaw_CreateWorkItemRequest()
+        createReq.sessionID = ""
+        createReq.title = title
+        createReq.description_p = description
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .createWorkItem(createReq)
+
+        let requestId = rpcReq.requestID
+        let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(requestId)/req"
+
+        guard let data = try? rpcReq.serializedData() else { return false }
+        try? await mqtt.publish(topic: topic, payload: data, retain: false)
+
+        let stream = mqtt.messages()
+        let deadline = Date().addingTimeInterval(10)
+        for await msg in stream {
+            if Date() > deadline { break }
+            if msg.topic.contains("/rpc/") && msg.topic.hasSuffix("/res") {
+                if let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
+                   response.requestID == requestId {
+                    return response.success
+                }
+            }
+        }
+        return false
     }
 
     public func subscribeToSession(_ sessionId: String) {
