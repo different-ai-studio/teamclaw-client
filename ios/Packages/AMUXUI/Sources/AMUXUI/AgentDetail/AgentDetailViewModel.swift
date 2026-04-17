@@ -46,9 +46,10 @@ public final class AgentDetailViewModel {
             events = (try? modelContext.fetch(descriptor)) ?? []
 
             // Insert initial prompt as first user bubble if not already present
-            if !agent.currentPrompt.isEmpty && !events.contains(where: { $0.eventType == "user_prompt" && $0.text == agent.currentPrompt }) {
+            if !agent.currentPrompt.isEmpty && !events.contains(where: { $0.eventType == "user_prompt" }) {
                 let promptEvent = AgentEvent(agentId: agentId, sequence: 0, eventType: "user_prompt")
                 promptEvent.text = agent.currentPrompt
+                modelContext.insert(promptEvent)
                 events.insert(promptEvent, at: 0)
             }
             for await msg in stream {
@@ -231,10 +232,12 @@ public final class AgentDetailViewModel {
         try await mqtt.publish(topic: "amux/\(deviceId)/agent/\(agent.agentId)/commands", payload: data)
     }
 
-    public func sendPrompt(_ text: String) async throws {
+    public func sendPrompt(_ text: String, modelContext: ModelContext? = nil) async throws {
         // Add local user bubble immediately
-        let userEvent = AgentEvent(agentId: agent.agentId, sequence: Int(Date().timeIntervalSince1970), eventType: "user_prompt")
+        let seq = (events.last?.sequence ?? 0) + 1
+        let userEvent = AgentEvent(agentId: agent.agentId, sequence: seq, eventType: "user_prompt")
         userEvent.text = text
+        if let ctx = modelContext ?? syncModelContext { ctx.insert(userEvent); try? ctx.save() }
         events.append(userEvent)
 
         var p = Amux_AcpSendPrompt(); p.text = text

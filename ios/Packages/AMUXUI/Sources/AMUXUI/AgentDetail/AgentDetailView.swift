@@ -146,7 +146,7 @@ public struct AgentDetailView: View {
                        isStreaming: viewModel.isStreaming,
                        onSend: {
                            let t = promptText; promptText = ""
-                           Task { try? await viewModel.sendPrompt(t) }
+                           Task { try? await viewModel.sendPrompt(t, modelContext: modelContext) }
                        },
                        onCancel: { Task { try? await viewModel.cancelTask() } })
                 .presentationDetents([.medium])
