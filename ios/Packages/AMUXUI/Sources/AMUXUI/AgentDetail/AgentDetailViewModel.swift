@@ -26,6 +26,23 @@ public final class AgentDetailViewModel {
 
     public func start(modelContext: ModelContext) {
         task?.cancel()
+
+        // Load cached events immediately (works offline)
+        let agentId = agent.agentId
+        let descriptor = FetchDescriptor<AgentEvent>(
+            predicate: #Predicate { $0.agentId == agentId },
+            sortBy: [SortDescriptor(\.sequence)]
+        )
+        events = (try? modelContext.fetch(descriptor)) ?? []
+
+        // Insert initial prompt as first user bubble if not already present
+        if !agent.currentPrompt.isEmpty && !events.contains(where: { $0.eventType == "user_prompt" }) {
+            let promptEvent = AgentEvent(agentId: agentId, sequence: 0, eventType: "user_prompt")
+            promptEvent.text = agent.currentPrompt
+            modelContext.insert(promptEvent)
+            events.insert(promptEvent, at: 0)
+        }
+
         task = Task {
             // Wait for MQTT to be connected
             while mqtt.connectionState != .connected {
@@ -37,21 +54,6 @@ public final class AgentDetailViewModel {
             let stream = mqtt.messages()
             try? await mqtt.subscribe(eventsTopic)
             print("[AgentDetailVM] subscribed to \(eventsTopic)")
-            // Load existing events for this agent from SwiftData
-            let agentId = agent.agentId
-            let descriptor = FetchDescriptor<AgentEvent>(
-                predicate: #Predicate { $0.agentId == agentId },
-                sortBy: [SortDescriptor(\.sequence)]
-            )
-            events = (try? modelContext.fetch(descriptor)) ?? []
-
-            // Insert initial prompt as first user bubble if not already present
-            if !agent.currentPrompt.isEmpty && !events.contains(where: { $0.eventType == "user_prompt" }) {
-                let promptEvent = AgentEvent(agentId: agentId, sequence: 0, eventType: "user_prompt")
-                promptEvent.text = agent.currentPrompt
-                modelContext.insert(promptEvent)
-                events.insert(promptEvent, at: 0)
-            }
             for await msg in stream {
                 guard msg.topic == eventsTopic else { continue }
                 guard let envelope = try? ProtoMQTTCoder.decode(Amux_Envelope.self, from: msg.payload) else { continue }
