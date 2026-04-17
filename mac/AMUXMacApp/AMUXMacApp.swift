@@ -9,9 +9,8 @@ struct AMUXMacApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(pairing: pairing)
-                .frame(minWidth: 900, minHeight: 600)
+                .frame(minWidth: 1100, minHeight: 700)
         }
-        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
     }
 }

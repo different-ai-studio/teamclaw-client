@@ -20,7 +20,7 @@ public struct MainWindowView: View {
         } detail: {
             detail
         }
-        .navigationSplitViewColumnWidth(min: 220, ideal: 230, max: 320)
+        .navigationSplitViewStyle(.balanced)
     }
 
     private var sidebar: some View {
