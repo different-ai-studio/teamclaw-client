@@ -376,13 +376,14 @@ private struct MailStyleBottomBar: View {
         HStack(spacing: 12) {
             // Left: filter/select button — hides when search active
             if !isActive {
-                GlassCircleButton(
-                    icon: isEditing ? "checkmark.circle.fill" : "line.3.horizontal.decrease"
-                ) {
+                Button {
                     withAnimation(.spring(duration: 0.25)) {
                         isEditing.toggle()
                         if !isEditing { selectedIDs.removeAll() }
                     }
+                } label: {
+                    Image(systemName: isEditing ? "checkmark.circle.fill" : "line.3.horizontal.decrease")
+                        .font(.title3)
                 }
                 .transition(.scale.combined(with: .opacity))
             }
@@ -403,14 +404,21 @@ private struct MailStyleBottomBar: View {
 
             // Right: compose OR close
             if isActive {
-                GlassCircleButton(icon: "xmark.circle.fill") {
+                Button {
                     searchText = ""
                     isSearchFocused.wrappedValue = false
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.secondary)
                 }
                 .transition(.scale.combined(with: .opacity))
             } else {
-                GlassCircleButton(icon: "square.and.pencil") {
+                Button {
                     showNewSession = true
+                } label: {
+                    Image(systemName: "square.and.pencil").font(.title3)
                 }
                 .modifier(MatchedTransitionSourceModifier(sourceID: "newSession", namespace: sheetTransition))
                 .transition(.scale.combined(with: .opacity))
@@ -419,27 +427,6 @@ private struct MailStyleBottomBar: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .animation(.spring(duration: 0.3), value: isActive)
-    }
-}
-
-// MARK: - GlassCircleButton
-
-struct GlassCircleButton: View {
-    let icon: String
-    var size: CGFloat = 40
-    var iconFont: Font = .body
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(iconFont)
-                .foregroundStyle(.primary)
-                .frame(width: size, height: size)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .liquidGlass(in: Circle())
     }
 }
 

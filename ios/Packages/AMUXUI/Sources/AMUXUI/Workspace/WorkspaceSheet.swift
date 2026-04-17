@@ -78,8 +78,12 @@ public struct WorkspaceSheet: View {
                         .liquidGlass(in: Capsule())
 
                     if !newPath.trimmingCharacters(in: .whitespaces).isEmpty {
-                        GlassCircleButton(icon: "plus") { addWorkspace() }
-                            .disabled(isAdding)
+                        Button { addWorkspace() } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title2)
+                                .symbolRenderingMode(.hierarchical)
+                        }
+                        .disabled(isAdding)
                     }
                 }
                 .padding(.horizontal, 16)

@@ -126,9 +126,9 @@ public struct AgentDetailView: View {
         // Top right: prev/next (NetNewsWire ▲▼)
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                GlassCircleButton(icon: "chevron.up", size: 32, iconFont: .caption) { goUp() }
+                Button { goUp() } label: { Image(systemName: "chevron.up").font(.title3) }
                     .disabled(!canGoUp)
-                GlassCircleButton(icon: "chevron.down", size: 32, iconFont: .caption) { goDown() }
+                Button { goDown() } label: { Image(systemName: "chevron.down").font(.title3) }
                     .disabled(!canGoDown)
             }
         }
@@ -188,19 +188,19 @@ public struct AgentDetailView: View {
                 }
 
                 // Toolbar
-                HStack(spacing: 12) {
-                    GlassCircleButton(icon: "pin") {}
-                    GlassCircleButton(icon: "person.2") { showMembers = true }
+                HStack(spacing: 16) {
+                    Button {} label: { Image(systemName: "pin").font(.title3) }
+                    Button { showMembers = true } label: { Image(systemName: "person.2").font(.title3) }
                     Spacer()
                     // Mic button
                     RecordButton(voiceRecorder: voiceRecorder)
                         .disabled(viewModel.agent.isActive)
                     Spacer()
-                    GlassCircleButton(icon: "gearshape") { showSettings = true }
+                    Button { showSettings = true } label: { Image(systemName: "gearshape").font(.title3) }
                     if viewModel.agent.isActive {
-                        GlassCircleButton(icon: "stop.fill") { Task { try? await viewModel.cancelTask() } }
+                        Button { Task { try? await viewModel.cancelTask() } } label: { Image(systemName: "stop.fill").font(.title3) }
                     } else {
-                        GlassCircleButton(icon: "arrowshape.turn.up.left") { showReplySheet = true }
+                        Button { showReplySheet = true } label: { Image(systemName: "arrowshape.turn.up.left").font(.title3) }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -324,11 +324,11 @@ private struct ReplySheet: View {
 
                 // Bottom toolbar
                 HStack(spacing: 12) {
-                    GlassCircleButton(icon: "chevron.down") { dismiss() }
+                    Button { dismiss() } label: { Image(systemName: "chevron.down").font(.title3) }
 
                     Spacer()
 
-                    GlassCircleButton(icon: "paperclip") { showFilePicker = true }
+                    Button { showFilePicker = true } label: { Image(systemName: "paperclip").font(.title3) }
 
                     Menu {
                         ForEach(models, id: \.self) { model in
@@ -475,7 +475,6 @@ private struct RecordButton: View {
             }
         }
         .buttonStyle(.plain)
-        .liquidGlass(in: Circle())
         .animation(.easeInOut(duration: 0.2), value: isRecording)
     }
 }

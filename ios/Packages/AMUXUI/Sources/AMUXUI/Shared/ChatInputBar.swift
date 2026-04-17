@@ -46,12 +46,8 @@ public struct ChatInputBar: View {
                 isInputFocused = true
             } label: {
                 Image(systemName: "square.and.pencil")
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .frame(width: 56, height: 56)
+                    .font(.title2)
             }
-            .buttonStyle(.plain)
-            .liquidGlass(in: Circle())
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
@@ -108,10 +104,10 @@ public struct ChatInputBar: View {
                     isTextInputMode = false
                     isInputFocused = false
                 } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 17, weight: .medium))
-                        .frame(width: 40, height: 40)
-                        .liquidGlass(in: Circle())
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 12)
