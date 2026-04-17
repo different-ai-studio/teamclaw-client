@@ -56,18 +56,27 @@ public struct MemberListView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if selectionMode {
-                        GlassCircleButton(icon: "checkmark", size: 32, iconFont: .caption) {
+                        Button {
                             let selected = viewModel.members.filter { selectedIDs.contains($0.memberId) }
                             onConfirm?(selected)
                             dismiss()
+                        } label: {
+                            Image(systemName: "checkmark").font(.title3)
                         }
                         .disabled(selectedIDs.isEmpty)
                     } else {
-                        GlassCircleButton(icon: "person.badge.plus", size: 32, iconFont: .caption) { showInvite = true }
+                        Button { showInvite = true } label: {
+                            Image(systemName: "person.badge.plus").font(.title3)
+                        }
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    GlassCircleButton(icon: "xmark", size: 32, iconFont: .caption) { dismiss() }
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .sheet(isPresented: $showInvite) {
@@ -83,8 +92,13 @@ public struct MemberListView: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .navigationBarLeading) {
-                            GlassCircleButton(icon: "xmark", size: 32, iconFont: .caption) {
+                            Button {
                                 inviteName = ""; inviteRole = .member; showInvite = false
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.title2)
+                                    .symbolRenderingMode(.hierarchical)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                         ToolbarItem(placement: .navigationBarTrailing) {

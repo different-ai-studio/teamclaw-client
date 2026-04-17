@@ -57,15 +57,21 @@ public struct SessionListView: View {
             .toolbar {
                 // Left: Settings
                 ToolbarItem(placement: .navigationBarLeading) {
-                    GlassCircleButton(icon: "gearshape") { showSettings = true }
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape").font(.title3)
+                    }
                 }
                 // Right: Workspaces
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    GlassCircleButton(icon: "folder") { showWorkspaces = true }
+                    Button { showWorkspaces = true } label: {
+                        Image(systemName: "folder").font(.title3)
+                    }
                 }
                 // Right: Members
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    GlassCircleButton(icon: "person.2.fill") { showMembers = true }
+                    Button { showMembers = true } label: {
+                        Image(systemName: "person.2.fill").font(.title3)
+                    }
                 }
             }
             // Bottom bar: iOS Mail style with animated search expansion

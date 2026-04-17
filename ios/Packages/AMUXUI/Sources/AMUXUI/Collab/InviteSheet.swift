@@ -44,7 +44,12 @@ public struct InviteSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    GlassCircleButton(icon: "xmark", size: 32, iconFont: .caption) { dismiss() }
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { sendInvites() } label: {
