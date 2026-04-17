@@ -5,6 +5,7 @@ import AMUXCore
 struct SessionListColumn: View {
     let memberFilter: String?
     @Binding var selectedSessionId: String?
+    @Environment(\.openWindow) private var openWindow
 
     @Query(sort: \CollabSession.lastMessageAt, order: .reverse)
     private var sessions: [CollabSession]
@@ -37,6 +38,11 @@ struct SessionListColumn: View {
                     )
                 )
                 .tag(session.sessionId)
+                .contextMenu {
+                    Button("Open in New Window") {
+                        openWindow(id: "session-detail", value: session.sessionId)
+                    }
+                }
             }
             .listStyle(.inset)
         }

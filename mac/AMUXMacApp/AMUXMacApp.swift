@@ -6,10 +6,11 @@ import AMUXMacUI
 @main
 struct AMUXMacApp: App {
     @State private var pairing = PairingManager(store: KeychainCredentialStore())
+    @State private var detailTeamclaw = TeamclawService()
 
     var body: some Scene {
         WindowGroup {
-            RootView(pairing: pairing)
+            RootView(pairing: pairing, teamclaw: detailTeamclaw)
                 .frame(minWidth: 1100, minHeight: 700)
         }
         .windowResizability(.contentMinSize)
@@ -19,5 +20,7 @@ struct AMUXMacApp: App {
             SessionMessage.self,
             WorkItem.self,
         ])
+
+        DetailWindowScene(pairing: pairing, teamclawService: detailTeamclaw)
     }
 }

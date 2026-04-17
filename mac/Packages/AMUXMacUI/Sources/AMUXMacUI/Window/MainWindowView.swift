@@ -10,13 +10,14 @@ public struct MainWindowView: View {
     @State private var selectedTaskId: String?
     @State private var mqtt: MQTTService?
     @State private var monitor: ConnectionMonitor?
-    @State private var teamclaw = TeamclawService()
+    let teamclaw: TeamclawService
     @State private var members = MemberListViewModel()
 
     private static let teamId = "teamclaw"
 
-    public init(pairing: PairingManager) {
+    public init(pairing: PairingManager, teamclaw: TeamclawService) {
         self.pairing = pairing
+        self.teamclaw = teamclaw
     }
 
     public var body: some View {
