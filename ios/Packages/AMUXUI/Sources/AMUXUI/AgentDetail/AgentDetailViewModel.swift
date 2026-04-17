@@ -14,6 +14,7 @@ public final class AgentDetailViewModel {
     private let mqtt: MQTTService
     private let deviceId: String
     private let peerId: String
+    private let teamclawService: TeamclawService?
     private var task: Task<Void, Never>?
 
     // Expose for child views that need to pass these along
@@ -40,13 +41,14 @@ public final class AgentDetailViewModel {
     public var participantCount: Int { collabSession?.participantCount ?? 0 }
     public var hasAgent: Bool { agent != nil }
 
-    public init(agent: Agent?, mqtt: MQTTService, deviceId: String, peerId: String, collabSession: CollabSession? = nil) {
+    public init(agent: Agent?, mqtt: MQTTService, deviceId: String, peerId: String, collabSession: CollabSession? = nil, teamclawService: TeamclawService? = nil) {
         self.agent = agent; self.mqtt = mqtt; self.deviceId = deviceId; self.peerId = peerId
-        self.collabSession = collabSession
+        self.collabSession = collabSession; self.teamclawService = teamclawService
     }
 
     public func start(modelContext: ModelContext) {
         task?.cancel()
+        startModelContext = modelContext
 
         guard let agent else {
             // No agent — collab-only session, nothing to subscribe to yet
@@ -56,7 +58,6 @@ public final class AgentDetailViewModel {
         // Clear unread badge when user opens the session
         agent.hasUnread = false
         try? modelContext.save()
-        startModelContext = modelContext
 
         // Load cached events immediately (works offline)
         let agentId = agent.agentId
@@ -306,16 +307,30 @@ public final class AgentDetailViewModel {
     }
 
     public func sendPrompt(_ text: String, modelContext: ModelContext? = nil) async throws {
-        guard let agent else { return }
-        // Add local user bubble immediately
-        let seq = (events.last?.sequence ?? 0) + 1
-        let userEvent = AgentEvent(agentId: agent.agentId, sequence: seq, eventType: "user_prompt")
-        userEvent.text = text
-        if let ctx = modelContext ?? syncModelContext { ctx.insert(userEvent); try? ctx.save() }
-        events.append(userEvent)
+        if let agent {
+            // Agent session: send ACP command
+            let seq = (events.last?.sequence ?? 0) + 1
+            let userEvent = AgentEvent(agentId: agent.agentId, sequence: seq, eventType: "user_prompt")
+            userEvent.text = text
+            if let ctx = modelContext ?? syncModelContext { ctx.insert(userEvent); try? ctx.save() }
+            events.append(userEvent)
 
-        var p = Amux_AcpSendPrompt(); p.text = text
-        try await sendCommand { $0.command = .sendPrompt(p) }
+            var p = Amux_AcpSendPrompt(); p.text = text
+            try await sendCommand { $0.command = .sendPrompt(p) }
+        } else if let collabSession, let teamclawService {
+            // Collab session: add local bubble + send via TeamclawService
+            let seq = (events.last?.sequence ?? 0) + 1
+            let userEvent = AgentEvent(agentId: collabSession.sessionId, sequence: seq, eventType: "user_prompt")
+            userEvent.text = text
+            if let ctx = modelContext ?? startModelContext { ctx.insert(userEvent); try? ctx.save() }
+            events.append(userEvent)
+
+            teamclawService.sendMessage(
+                sessionId: collabSession.sessionId,
+                content: text,
+                actorId: peerId
+            )
+        }
     }
     public func cancelTask() async throws {
         try await sendCommand { $0.command = .cancel(Amux_AcpCancel()) }

@@ -10,13 +10,15 @@ struct ContentView: View {
     let pairing: PairingManager
     @State private var mqtt = MQTTService()
     @State private var connectionMonitor = ConnectionMonitor()
+    @State private var teamclawService = TeamclawService()
     @State private var isConnecting = false
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         Group {
             if pairing.isPaired {
-                SessionListView(mqtt: mqtt, pairing: pairing, connectionMonitor: connectionMonitor, onReconnect: {
+                SessionListView(mqtt: mqtt, pairing: pairing, connectionMonitor: connectionMonitor, teamclawService: teamclawService, onReconnect: {
                         Task {
                             await mqtt.disconnect()
                             await connectMQTT()
@@ -86,6 +88,15 @@ struct ContentView: View {
 
             logger.info("MQTT connected, PeerAnnounce sent, collab subscribed")
             connectionMonitor.start(mqtt: mqtt, deviceId: pairing.deviceId)
+
+            // Start TeamclawService for work items and collab sessions
+            teamclawService.start(
+                mqtt: mqtt,
+                teamId: "teamclaw",
+                deviceId: pairing.deviceId,
+                peerId: "ios-\(pairing.authToken.prefix(6))",
+                modelContext: modelContext
+            )
         } catch {
             logger.error("MQTT connect failed: \(error)")
         }

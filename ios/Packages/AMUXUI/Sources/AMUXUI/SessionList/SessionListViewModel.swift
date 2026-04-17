@@ -5,10 +5,29 @@ import AMUXCore
 
 // MARK: - AgentGroup
 
-public struct AgentGroup: Identifiable {
+public enum SessionItem: Identifiable {
+    case agent(Agent)
+    case collab(CollabSession)
+
+    public var id: String {
+        switch self {
+        case .agent(let a): return a.agentId
+        case .collab(let c): return "collab:\(c.sessionId)"
+        }
+    }
+
+    public var date: Date {
+        switch self {
+        case .agent(let a): return a.lastEventTime ?? a.startedAt
+        case .collab(let c): return c.lastMessageAt ?? c.createdAt
+        }
+    }
+}
+
+public struct SessionGroup: Identifiable {
     public let id: String
     public let title: String
-    public var agents: [Agent]
+    public var items: [SessionItem]
 }
 
 @Observable @MainActor
@@ -168,38 +187,46 @@ public final class SessionListViewModel {
 
     // MARK: - Time Grouping
 
-    public var groupedFilteredAgents: [AgentGroup] {
-        let sorted = filteredAgents
-        var groups: [AgentGroup] = []
+    public var groupedSessions: [SessionGroup] {
+        // Merge agents and collab sessions into one list
+        var allItems: [SessionItem] = filteredAgents.map { .agent($0) }
+        for session in collabSessions {
+            if searchText.isEmpty || session.title.lowercased().contains(searchText.lowercased()) {
+                allItems.append(.collab(session))
+            }
+        }
+        allItems.sort { $0.date > $1.date }
+
+        var groups: [SessionGroup] = []
         let calendar = Calendar.current
         let now = Date()
 
-        var todayAgents: [Agent] = []
-        var yesterdayAgents: [Agent] = []
-        var thisWeekAgents: [Agent] = []
-        var thisMonthAgents: [Agent] = []
-        var olderAgents: [Agent] = []
+        var today: [SessionItem] = []
+        var yesterday: [SessionItem] = []
+        var thisWeek: [SessionItem] = []
+        var thisMonth: [SessionItem] = []
+        var older: [SessionItem] = []
 
-        for agent in sorted {
-            let date = agent.lastEventTime ?? agent.startedAt
+        for item in allItems {
+            let date = item.date
             if calendar.isDateInToday(date) {
-                todayAgents.append(agent)
+                today.append(item)
             } else if calendar.isDateInYesterday(date) {
-                yesterdayAgents.append(agent)
+                yesterday.append(item)
             } else if let weekAgo = calendar.date(byAdding: .day, value: -7, to: now), date > weekAgo {
-                thisWeekAgents.append(agent)
+                thisWeek.append(item)
             } else if let monthAgo = calendar.date(byAdding: .month, value: -1, to: now), date > monthAgo {
-                thisMonthAgents.append(agent)
+                thisMonth.append(item)
             } else {
-                olderAgents.append(agent)
+                older.append(item)
             }
         }
 
-        if !todayAgents.isEmpty { groups.append(AgentGroup(id: "today", title: "Today", agents: todayAgents)) }
-        if !yesterdayAgents.isEmpty { groups.append(AgentGroup(id: "yesterday", title: "Yesterday", agents: yesterdayAgents)) }
-        if !thisWeekAgents.isEmpty { groups.append(AgentGroup(id: "week", title: "This Week", agents: thisWeekAgents)) }
-        if !thisMonthAgents.isEmpty { groups.append(AgentGroup(id: "month", title: "This Month", agents: thisMonthAgents)) }
-        if !olderAgents.isEmpty { groups.append(AgentGroup(id: "older", title: "Older", agents: olderAgents)) }
+        if !today.isEmpty { groups.append(SessionGroup(id: "today", title: "Today", items: today)) }
+        if !yesterday.isEmpty { groups.append(SessionGroup(id: "yesterday", title: "Yesterday", items: yesterday)) }
+        if !thisWeek.isEmpty { groups.append(SessionGroup(id: "week", title: "This Week", items: thisWeek)) }
+        if !thisMonth.isEmpty { groups.append(SessionGroup(id: "month", title: "This Month", items: thisMonth)) }
+        if !older.isEmpty { groups.append(SessionGroup(id: "older", title: "Older", items: older)) }
 
         return groups
     }

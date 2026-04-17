@@ -112,6 +112,7 @@ public struct SessionListView: View {
                         AgentDetailView(collabSession: session, mqtt: mqtt,
                                         deviceId: pairing.deviceId,
                                         peerId: "ios-\(pairing.authToken.prefix(6))",
+                                        teamclawService: teamclawService,
                                         navigationPath: $navigationPath)
                     } else {
                         Text("Collab session not found")
@@ -166,7 +167,7 @@ private struct SessionListContent: View {
     let actorId: String
 
     private var hasContent: Bool {
-        !viewModel.filteredAgents.isEmpty || !viewModel.collabSessions.isEmpty
+        !viewModel.groupedSessions.isEmpty
     }
 
     var body: some View {
@@ -180,30 +181,14 @@ private struct SessionListContent: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if !hasContent {
-                ContentUnavailableView("No Agents", systemImage: "cpu",
-                    description: Text("Start a new agent session to begin"))
+                ContentUnavailableView("No Sessions", systemImage: "cpu",
+                    description: Text("Start a new session to begin"))
             } else {
                 List {
-                    // Collab sessions section (shown first)
-                    if !viewModel.collabSessions.isEmpty {
+                    ForEach(viewModel.groupedSessions) { group in
                         Section {
-                            ForEach(viewModel.collabSessions, id: \.sessionId) { session in
-                                collabRow(session)
-                            }
-                        } header: {
-                            Text("Collab Sessions")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.secondary)
-                                .textCase(nil)
-                        }
-                    }
-
-                    // Agent sessions grouped by time
-                    ForEach(viewModel.groupedFilteredAgents) { group in
-                        Section {
-                            ForEach(group.agents, id: \.agentId) { agent in
-                                agentRow(agent)
+                            ForEach(group.items) { item in
+                                sessionRow(item)
                             }
                         } header: {
                             Text(group.title)
@@ -220,42 +205,35 @@ private struct SessionListContent: View {
     }
 
     @ViewBuilder
-    private func collabRow(_ session: CollabSession) -> some View {
-        CollabSessionRowView(session: session)
+    private func sessionRow(_ item: SessionItem) -> some View {
+        switch item {
+        case .agent(let agent):
+            HStack(spacing: 10) {
+                if isEditing {
+                    Image(systemName: selectedIDs.contains(agent.agentId) ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(selectedIDs.contains(agent.agentId) ? .blue : .secondary)
+                        .font(.title3)
+                        .onTapGesture { toggleSelection(agent.agentId) }
+                }
+                AgentRowView(agent: agent, workspaceName: workspaceName(for: agent))
+            }
             .contentShape(Rectangle())
             .onTapGesture {
-                navigationPath.append("collab:\(session.sessionId)")
+                if isEditing {
+                    toggleSelection(agent.agentId)
+                } else {
+                    navigationPath.append(agent.agentId)
+                }
             }
             .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-    }
 
-    @ViewBuilder
-    private func agentRow(_ agent: Agent) -> some View {
-        HStack(spacing: 10) {
-            if isEditing {
-                Image(systemName: selectedIDs.contains(agent.agentId) ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selectedIDs.contains(agent.agentId) ? .blue : .secondary)
-                    .font(.title3)
-                    .onTapGesture { toggleSelection(agent.agentId) }
-            }
-
-            AgentRowView(agent: agent, workspaceName: workspaceName(for: agent))
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if isEditing {
-                toggleSelection(agent.agentId)
-            } else {
-                navigationPath.append(agent.agentId)
-            }
-        }
-        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(role: .destructive) {
-                // archive / stop agent
-            } label: {
-                Label("Stop", systemImage: "stop.circle")
-            }
+        case .collab(let session):
+            SessionRowView(session: session)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    navigationPath.append("collab:\(session.sessionId)")
+                }
+                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
         }
     }
 
@@ -305,6 +283,17 @@ struct AgentRowView: View {
         case 3: "CodexLogo"
         default: "ClaudeLogo"
         }
+    }
+
+    private func formatTime(_ date: Date) -> String {
+        let seconds = Int(-date.timeIntervalSinceNow)
+        if seconds < 60 { return "Just now" }
+        if seconds < 3600 { return "\(seconds / 60)m" }
+        if seconds < 86400 { return "\(seconds / 3600)h" }
+        if seconds < 604800 { return "\(seconds / 86400)d" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM/dd"
+        return formatter.string(from: date)
     }
 
     var body: some View {
@@ -365,15 +354,9 @@ struct AgentRowView: View {
 
                     Spacer(minLength: 0)
 
-                    if let time = agent.lastEventTime {
-                        Text(time, style: .relative)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Just now")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(formatTime(agent.lastEventTime ?? agent.startedAt))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -381,31 +364,47 @@ struct AgentRowView: View {
     }
 }
 
-// MARK: - CollabSessionRowView
+// MARK: - SessionRowView (collab sessions, same style as AgentRowView)
 
-struct CollabSessionRowView: View {
+struct SessionRowView: View {
     let session: CollabSession
+
+    private func formatTime(_ date: Date) -> String {
+        let seconds = Int(-date.timeIntervalSinceNow)
+        if seconds < 60 { return "Just now" }
+        if seconds < 3600 { return "\(seconds / 60)m" }
+        if seconds < 86400 { return "\(seconds / 3600)h" }
+        if seconds < 604800 { return "\(seconds / 86400)d" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM/dd"
+        return formatter.string(from: date)
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            // Avatar: group icon to distinguish from agent sessions
-            ZStack {
+            // Left: empty dot space + group avatar (same layout as AgentRowView)
+            HStack(spacing: 6) {
                 Circle()
-                    .fill(Color.indigo.gradient)
-                    .frame(width: 40, height: 40)
-                Image(systemName: "person.2.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.white)
+                    .fill(Color.clear)
+                    .frame(width: 8, height: 8)
+
+                ZStack {
+                    Circle()
+                        .fill(Color.indigo.gradient)
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.white)
+                }
             }
 
+            // Right: 3 rows (same structure as AgentRowView)
             VStack(alignment: .leading, spacing: 3) {
-                // Row 1: title
                 Text(session.title.isEmpty ? "Collab Session" : session.title)
                     .font(.body)
                     .fontWeight(.semibold)
                     .lineLimit(1)
 
-                // Row 2: last message preview
                 if !session.lastMessagePreview.isEmpty {
                     Text(session.lastMessagePreview)
                         .font(.subheadline)
@@ -413,7 +412,6 @@ struct CollabSessionRowView: View {
                         .lineLimit(2)
                 }
 
-                // Row 3: participant count + time
                 HStack(spacing: 4) {
                     Image(systemName: "person.2")
                         .font(.caption)
@@ -424,11 +422,9 @@ struct CollabSessionRowView: View {
 
                     Spacer(minLength: 0)
 
-                    if let time = session.lastMessageAt {
-                        Text(time, style: .relative)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(formatTime(session.lastMessageAt ?? session.createdAt))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

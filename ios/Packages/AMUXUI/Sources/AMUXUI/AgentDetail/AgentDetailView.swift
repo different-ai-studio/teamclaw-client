@@ -29,9 +29,9 @@ public struct AgentDetailView: View {
     }
 
     public init(collabSession: CollabSession, mqtt: MQTTService, deviceId: String, peerId: String,
-                navigationPath: Binding<[String]>) {
+                teamclawService: TeamclawService?, navigationPath: Binding<[String]>) {
         _viewModel = State(initialValue: AgentDetailViewModel(
-            agent: nil, mqtt: mqtt, deviceId: deviceId, peerId: peerId, collabSession: collabSession))
+            agent: nil, mqtt: mqtt, deviceId: deviceId, peerId: peerId, collabSession: collabSession, teamclawService: teamclawService))
         self.allAgentIds = []
         self._navigationPath = navigationPath
     }
