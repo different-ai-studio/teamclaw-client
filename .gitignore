@@ -24,6 +24,7 @@ Cargo.lock
 # Config (contains secrets)
 *.pid
 *.sock
+.env
 .env.local
 
 # Internal docs (not public)
