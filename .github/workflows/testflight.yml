@@ -41,5 +41,15 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Install iOS platform
+        run: |
+          # Check if iOS 26 platform is already installed
+          if ! xcodebuild -showsdks 2>&1 | grep -q "iphoneos26"; then
+            echo "Installing iOS 26 platform..."
+            xcodebuild -downloadPlatform iOS
+          else
+            echo "iOS 26 platform already installed"
+          fi
+
       - name: Build and upload to TestFlight
         run: bundle exec fastlane beta
