@@ -18,6 +18,7 @@ let package = Package(
                 .product(name: "CocoaMQTT", package: "CocoaMQTT"),
                 .product(name: "SwiftProtobuf", package: "swift-protobuf"),
             ],
+            // Pinned to Swift 5 mode: ConnectionMonitor & MQTTService are not yet Sendable-clean for Swift 6 strict concurrency. Migrate after audit.
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(

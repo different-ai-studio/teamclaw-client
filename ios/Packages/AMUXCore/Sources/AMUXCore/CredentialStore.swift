@@ -34,6 +34,7 @@ public protocol CredentialStore: AnyObject, Sendable {
     func clear() throws
 }
 
+// @unchecked Sendable is safe: UserDefaults is documented as thread-safe by Apple.
 public final class UserDefaultsCredentialStore: CredentialStore, @unchecked Sendable {
     private let defaults: UserDefaults
 

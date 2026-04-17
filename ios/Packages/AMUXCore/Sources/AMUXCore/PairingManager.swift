@@ -21,8 +21,8 @@ public final class PairingManager {
 
     public func pair(from url: URL) throws {
         let credentials = try Self.parse(url: url)
-        apply(credentials)
         try store.save(credentials)
+        apply(credentials)
     }
 
     public func unpair() throws {
