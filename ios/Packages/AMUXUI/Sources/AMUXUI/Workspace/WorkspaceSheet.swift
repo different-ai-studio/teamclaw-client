@@ -94,11 +94,11 @@ public struct WorkspaceSheet: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
-                            .symbolRenderingMode(.hierarchical)
+                        Image(systemName: "xmark")
+                            .font(.title3)
                             .foregroundStyle(.secondary)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }

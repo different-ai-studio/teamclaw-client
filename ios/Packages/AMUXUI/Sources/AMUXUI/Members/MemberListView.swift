@@ -63,20 +63,22 @@ public struct MemberListView: View {
                         } label: {
                             Image(systemName: "checkmark").font(.title3)
                         }
+                        .buttonStyle(.plain)
                         .disabled(selectedIDs.isEmpty)
                     } else {
                         Button { showInvite = true } label: {
                             Image(systemName: "person.badge.plus").font(.title3)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
-                            .symbolRenderingMode(.hierarchical)
+                        Image(systemName: "xmark")
+                            .font(.title3)
                             .foregroundStyle(.secondary)
                     }
+                    .buttonStyle(.plain)
                 }
             }
             .sheet(isPresented: $showInvite) {
@@ -95,11 +97,11 @@ public struct MemberListView: View {
                             Button {
                                 inviteName = ""; inviteRole = .member; showInvite = false
                             } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.title2)
-                                    .symbolRenderingMode(.hierarchical)
+                                Image(systemName: "xmark")
+                                    .font(.title3)
                                     .foregroundStyle(.secondary)
                             }
+                            .buttonStyle(.plain)
                         }
                         ToolbarItem(placement: .navigationBarTrailing) {
                             Button {

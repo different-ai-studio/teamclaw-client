@@ -60,18 +60,21 @@ public struct SessionListView: View {
                     Button { showSettings = true } label: {
                         Image(systemName: "gearshape").font(.title3)
                     }
+                    .buttonStyle(.plain)
                 }
                 // Right: Workspaces
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showWorkspaces = true } label: {
                         Image(systemName: "folder").font(.title3)
                     }
+                    .buttonStyle(.plain)
                 }
                 // Right: Members
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showMembers = true } label: {
                         Image(systemName: "person.2.fill").font(.title3)
                     }
+                    .buttonStyle(.plain)
                 }
             }
             // Bottom bar: iOS Mail style with animated search expansion
@@ -408,9 +411,8 @@ private struct MailStyleBottomBar: View {
                     searchText = ""
                     isSearchFocused.wrappedValue = false
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
+                    Image(systemName: "xmark")
                         .font(.title3)
-                        .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(.secondary)
                 }
                 .transition(.scale.combined(with: .opacity))

@@ -104,9 +104,8 @@ public struct ChatInputBar: View {
                     isTextInputMode = false
                     isInputFocused = false
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .symbolRenderingMode(.hierarchical)
+                    Image(systemName: "xmark")
+                        .font(.title3)
                         .foregroundStyle(.secondary)
                 }
             }
