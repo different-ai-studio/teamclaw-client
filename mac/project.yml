@@ -27,6 +27,8 @@ targets:
         CFBundleDisplayName: AMUX
         LSApplicationCategoryType: public.app-category.developer-tools
         NSHumanReadableCopyright: "© 2026 Shenzhen Miaoxing Information Technology Co., Ltd"
+        NSMicrophoneUsageDescription: "AMUX uses the microphone for voice-to-text composition in the message composer."
+        NSSpeechRecognitionUsageDescription: "AMUX transcribes spoken input on-device into the message composer."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: tech.teamclaw.mac

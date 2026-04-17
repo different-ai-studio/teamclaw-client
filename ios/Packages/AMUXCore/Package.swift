@@ -10,6 +10,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/emqx/CocoaMQTT.git", from: "2.2.3"),
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.36.1"),
+        .package(url: "https://github.com/apple/swift-markdown.git", from: "0.7.3"),
     ],
     targets: [
         .target(
@@ -17,6 +18,7 @@ let package = Package(
             dependencies: [
                 .product(name: "CocoaMQTT", package: "CocoaMQTT"),
                 .product(name: "SwiftProtobuf", package: "swift-protobuf"),
+                .product(name: "Markdown", package: "swift-markdown"),
             ],
             // Pinned to Swift 5 mode: ConnectionMonitor & MQTTService are not yet Sendable-clean for Swift 6 strict concurrency. Migrate after audit.
             swiftSettings: [.swiftLanguageMode(.v5)]

@@ -59,6 +59,8 @@ public struct MainWindowView: View {
         DetailPlaceholderView(
             pairing: pairing,
             monitor: monitor,
+            teamclawService: teamclaw,
+            actorId: pairing.deviceId,
             selectedSessionId: selectedSessionId,
             selectedTaskId: selectedTaskId
         )

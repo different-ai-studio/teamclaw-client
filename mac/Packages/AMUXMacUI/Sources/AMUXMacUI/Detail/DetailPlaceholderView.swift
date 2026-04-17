@@ -5,6 +5,8 @@ import AMUXCore
 struct DetailPlaceholderView: View {
     let pairing: PairingManager
     let monitor: ConnectionMonitor?
+    let teamclawService: TeamclawService
+    let actorId: String
     let selectedSessionId: String?
     let selectedTaskId: String?
 
@@ -18,7 +20,7 @@ struct DetailPlaceholderView: View {
 
             Group {
                 if let session = selectedSession {
-                    sessionPreview(session)
+                    SessionDetailView(session: session, teamclawService: teamclawService, actorId: actorId)
                 } else if let task = selectedTask {
                     taskPreview(task)
                 } else {
@@ -41,23 +43,6 @@ struct DetailPlaceholderView: View {
     private var selectedTask: WorkItem? {
         guard let id = selectedTaskId else { return nil }
         return tasks.first(where: { $0.workItemId == id })
-    }
-
-    @ViewBuilder
-    private func sessionPreview(_ session: CollabSession) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(session.title.isEmpty ? "(untitled)" : session.title)
-                .font(.title2.weight(.semibold))
-            if !session.summary.isEmpty {
-                Text(session.summary)
-                    .foregroundStyle(.secondary)
-            }
-            Text("Messages, composer, and detail header coming in Plan 4.")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(24)
     }
 
     @ViewBuilder
