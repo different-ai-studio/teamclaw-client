@@ -5,6 +5,8 @@ public struct MainWindowView: View {
     let pairing: PairingManager
     @State private var sidebarSelection: SidebarItem? = .sessions
     @State private var listSelection: String?
+    @State private var mqtt: MQTTService?
+    @State private var monitor: ConnectionMonitor?
 
     public init(pairing: PairingManager) {
         self.pairing = pairing
@@ -57,16 +59,43 @@ public struct MainWindowView: View {
     private var detail: some View {
         VStack {
             Spacer()
-            Text("Detail column placeholder")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-            Text("Connected to \(pairing.brokerHost):\(pairing.brokerPort) as \(pairing.deviceId)")
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(monitor?.daemonOnline == true ? Color.green : Color.red)
+                    .frame(width: 10, height: 10)
+                Text(monitor?.daemonOnline == true ? "Daemon online" : "Daemon offline")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Text("\(pairing.brokerHost):\(pairing.brokerPort)  ·  \(pairing.deviceId)")
                 .font(.callout)
                 .foregroundStyle(.tertiary)
                 .padding(.top, 4)
             Spacer()
         }
         .frame(minWidth: 480)
+        .task { await connectIfNeeded() }
+    }
+
+    private func connectIfNeeded() async {
+        guard mqtt == nil, pairing.isPaired else { return }
+        let service = MQTTService()
+        do {
+            try await service.connect(
+                host: pairing.brokerHost,
+                port: pairing.brokerPort,
+                username: pairing.username,
+                password: pairing.password,
+                clientId: "amux-mac-\(UUID().uuidString.prefix(6))",
+                useTLS: pairing.useTLS
+            )
+        } catch {
+            return
+        }
+        let mon = ConnectionMonitor()
+        mon.start(mqtt: service, deviceId: pairing.deviceId)
+        self.mqtt = service
+        self.monitor = mon
     }
 }
 
