@@ -2,8 +2,13 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build-and-test:
@@ -45,3 +50,41 @@ jobs:
       - name: Clippy
         working-directory: daemon
         run: cargo clippy -- -D warnings
+
+  macos-build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Install protoc + swift-protobuf
+        run: brew install protobuf swift-protobuf
+
+      - name: Generate Swift protos
+        run: ./scripts/proto-gen-swift.sh
+
+      - name: AMUXCore tests
+        working-directory: ios/Packages/AMUXCore
+        run: swift test
+
+      - name: AMUXMacUI tests
+        working-directory: mac/Packages/AMUXMacUI
+        run: swift test
+
+      - name: Generate AMUXMac Xcode project
+        working-directory: mac
+        run: xcodegen generate
+
+      - name: Build AMUXMac
+        working-directory: mac
+        run: |
+          xcodebuild -project AMUXMac.xcodeproj \
+            -scheme AMUXMac \
+            -destination 'platform=macOS' \
+            -configuration Debug \
+            build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO

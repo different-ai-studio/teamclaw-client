@@ -5,18 +5,40 @@ import AMUXCore
 public struct MainWindowView: View {
     let pairing: PairingManager
     @Environment(\.modelContext) private var modelContext
-    @State private var sidebarSelection: SidebarItem? = .function(.sessions)
-    @State private var selectedSessionId: String?
-    @State private var selectedTaskId: String?
+    @SceneStorage("amux.mainWindow.sidebar") private var sidebarStorage: String = "function:sessions"
+    @SceneStorage("amux.mainWindow.selectedSession") private var selectedSessionId: String?
+    @SceneStorage("amux.mainWindow.selectedTask") private var selectedTaskId: String?
     @State private var mqtt: MQTTService?
     @State private var monitor: ConnectionMonitor?
-    @State private var teamclaw = TeamclawService()
+    let teamclaw: TeamclawService
     @State private var members = MemberListViewModel()
 
     private static let teamId = "teamclaw"
 
-    public init(pairing: PairingManager) {
+    public init(pairing: PairingManager, teamclaw: TeamclawService) {
         self.pairing = pairing
+        self.teamclaw = teamclaw
+    }
+
+    private var sidebarSelection: SidebarItem? {
+        Self.parseSidebar(sidebarStorage)
+    }
+
+    private static func parseSidebar(_ raw: String) -> SidebarItem? {
+        if raw == "function:sessions" { return .function(.sessions) }
+        if raw == "function:tasks" { return .function(.tasks) }
+        if raw.hasPrefix("member:") {
+            return .member(memberId: String(raw.dropFirst("member:".count)))
+        }
+        return .function(.sessions)
+    }
+
+    private static func encodeSidebar(_ item: SidebarItem?) -> String {
+        switch item {
+        case .function(.sessions), .none: "function:sessions"
+        case .function(.tasks): "function:tasks"
+        case .member(let id): "member:\(id)"
+        }
     }
 
     public var body: some View {
@@ -31,8 +53,15 @@ public struct MainWindowView: View {
     }
 
     private var sidebar: some View {
-        SidebarView(selection: $sidebarSelection, members: members.members)
+        SidebarView(selection: sidebarSelectionBinding, members: members.members)
             .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 320)
+    }
+
+    private var sidebarSelectionBinding: Binding<SidebarItem?> {
+        Binding(
+            get: { sidebarSelection },
+            set: { newValue in sidebarStorage = Self.encodeSidebar(newValue) }
+        )
     }
 
     private var list: some View {
