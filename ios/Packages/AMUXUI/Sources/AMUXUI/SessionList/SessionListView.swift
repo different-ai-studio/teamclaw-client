@@ -206,6 +206,8 @@ struct AgentRowView: View {
     let agent: Agent
     let workspaceName: String
 
+    @State private var breathe = false
+
     private var displayTitle: String {
         if !agent.sessionTitle.isEmpty { return agent.sessionTitle }
         if agent.worktree.isEmpty { return agent.agentId }
@@ -214,6 +216,7 @@ struct AgentRowView: View {
     }
 
     private var isUnread: Bool { agent.isActive }
+    private var isRunning: Bool { agent.status == 2 }
 
     private var avatarInitial: String {
         let name = agent.worktree.isEmpty ? agent.agentId : agent.worktree
@@ -227,13 +230,22 @@ struct AgentRowView: View {
         return colors[abs(hash) % colors.count]
     }
 
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            // Left: unread dot + avatar
+            // Left: status dot + avatar
             HStack(spacing: 6) {
                 Circle()
-                    .fill(isUnread ? Color.blue : Color.clear)
+                    .fill(isUnread ? Color.blue : isRunning ? Color.red : Color.clear)
                     .frame(width: 8, height: 8)
+                    .opacity(isRunning && !isUnread ? (breathe ? 0.3 : 1.0) : 1.0)
+                    .animation(
+                        isRunning && !isUnread
+                            ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
+                            : .default,
+                        value: breathe
+                    )
+                    .onAppear { breathe = true }
 
                 ZStack {
                     Circle()
@@ -262,19 +274,18 @@ struct AgentRowView: View {
                         .lineLimit(2)
                 }
 
-                // Row 3: workspace + agent name (left) + time (right)
-                HStack {
+                // Row 3: agent logo + workspace name (left) + time (right)
+                HStack(spacing: 4) {
+                    Image("AgentLogo", bundle: .module)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 14, height: 14)
+
                     if !workspaceName.isEmpty {
                         Text(workspaceName)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        Text("\u{00B7}")
-                            .font(.subheadline)
-                            .foregroundStyle(.quaternary)
                     }
-                    Text(agent.agentTypeLabel)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
 
                     Spacer(minLength: 0)
 

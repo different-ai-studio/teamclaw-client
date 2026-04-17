@@ -17,6 +17,9 @@ let package = Package(
             dependencies: [
                 "AMUXCore",
                 .product(name: "Markdown", package: "swift-markdown"),
+            ],
+            resources: [
+                .process("Resources"),
             ]
         ),
     ]

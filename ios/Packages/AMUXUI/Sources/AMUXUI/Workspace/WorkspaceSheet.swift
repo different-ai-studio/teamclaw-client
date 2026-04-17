@@ -33,14 +33,19 @@ public struct WorkspaceSheet: View {
                 } else {
                     List {
                         ForEach(workspaces, id: \.workspaceId) { ws in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(ws.displayName)
-                                    .font(.body)
-                                    .fontWeight(.medium)
-                                Text(ws.path)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                            Button {
+                                newPath = ws.path
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(ws.displayName)
+                                        .font(.body)
+                                        .fontWeight(.medium)
+                                    Text(ws.path)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
+                            .buttonStyle(.plain)
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button(role: .destructive) {
                                     removeWorkspace(ws.workspaceId)
