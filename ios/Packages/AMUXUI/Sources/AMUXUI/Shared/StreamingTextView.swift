@@ -12,6 +12,7 @@ public struct StreamingTextView: View {
         HStack(alignment: .bottom, spacing: 0) {
             Text(content)
                 .font(.subheadline)
+                .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text("▊")
                 .font(.subheadline)
@@ -21,6 +22,16 @@ public struct StreamingTextView: View {
         .padding(.vertical, 10)
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 18))
+        .contextMenu {
+            Button {
+                UIPasteboard.general.string = content
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+            ShareLink(item: content) {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+        }
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
         .transaction { t in t.animation = nil }

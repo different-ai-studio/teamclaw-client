@@ -16,6 +16,7 @@ public final class Agent {
     public var lastEventTime: Date?
     public var lastOutputSummary: String
     public var toolUseCount: Int
+    public var hasUnread: Bool
 
     public init(agentId: String, agentType: Int = 1, worktree: String = "", branch: String = "",
                 status: Int = 1, startedAt: Date = .now, currentPrompt: String = "",
@@ -33,6 +34,7 @@ public final class Agent {
         self.lastEventTime = nil
         self.lastOutputSummary = ""
         self.toolUseCount = 0
+        self.hasUnread = false
     }
 
     public var isActive: Bool { status == 2 }

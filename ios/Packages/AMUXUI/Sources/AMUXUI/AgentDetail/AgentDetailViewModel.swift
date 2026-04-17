@@ -53,6 +53,11 @@ public final class AgentDetailViewModel {
             return
         }
 
+        // Clear unread badge when user opens the session
+        agent.hasUnread = false
+        try? modelContext.save()
+        startModelContext = modelContext
+
         // Load cached events immediately (works offline)
         let agentId = agent.agentId
         let descriptor = FetchDescriptor<AgentEvent>(
@@ -67,6 +72,12 @@ public final class AgentDetailViewModel {
             promptEvent.text = agent.currentPrompt
             modelContext.insert(promptEvent)
             events.insert(promptEvent, at: 0)
+        }
+
+        // Resume streaming state if there's an incomplete output event (saved by stop())
+        if let lastOutput = events.last(where: { $0.eventType == "output" && $0.isComplete == false }) {
+            streamingText = lastOutput.text ?? ""
+            isStreaming = agent.isActive
         }
 
         task = Task {
@@ -88,7 +99,24 @@ public final class AgentDetailViewModel {
         }
     }
 
-    public func stop() { task?.cancel(); task = nil }
+    public func stop() {
+        task?.cancel(); task = nil
+
+        // Flush any in-progress streaming text to a persisted event
+        // so it's visible when the user returns
+        if isStreaming, !streamingText.isEmpty, let agent, let ctx = startModelContext {
+            let seq = (events.last?.sequence ?? 0) + 1
+            let event = AgentEvent(agentId: agent.agentId, sequence: seq, eventType: "output")
+            event.text = streamingText
+            event.isComplete = false
+            ctx.insert(event)
+            events.append(event)
+            try? ctx.save()
+            isStreaming = false
+            streamingText = ""
+        }
+        startModelContext = nil
+    }
 
     private func handleEnvelope(_ env: Amux_Envelope, modelContext: ModelContext) {
         switch env.payload {
@@ -102,13 +130,27 @@ public final class AgentDetailViewModel {
         switch acp.event {
         case .output(let o):
             if o.isComplete {
-                // Complete output — store as event
+                // Complete output — replace any incomplete output event or create new
                 isStreaming = false
-                let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "output")
-                event.text = o.text; event.isComplete = true
-                modelContext.insert(event); events.append(event); streamingText = ""
+                if let idx = events.lastIndex(where: { $0.eventType == "output" && $0.isComplete == false }) {
+                    events[idx].text = o.text
+                    events[idx].isComplete = true
+                } else {
+                    let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "output")
+                    event.text = o.text; event.isComplete = true
+                    modelContext.insert(event); events.append(event)
+                }
+                streamingText = ""
             } else {
-                // Streaming delta
+                // Streaming delta — remove persisted incomplete event on first delta
+                // (it will be re-saved in stop() if user leaves again)
+                if !isStreaming {
+                    if let idx = events.lastIndex(where: { $0.eventType == "output" && $0.isComplete == false }) {
+                        streamingText = events[idx].text ?? ""
+                        modelContext.delete(events[idx])
+                        events.remove(at: idx)
+                    }
+                }
                 isStreaming = true; streamingText += o.text
             }
         case .thinking(let t):
@@ -207,6 +249,7 @@ public final class AgentDetailViewModel {
 
     private var syncModelContext: ModelContext?
     public var isSyncing = false
+    private var startModelContext: ModelContext?
 
     private func handleHistoryBatch(_ batch: Amux_HistoryBatch) {
         guard let modelContext = syncModelContext else { return }

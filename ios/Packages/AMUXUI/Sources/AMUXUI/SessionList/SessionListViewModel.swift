@@ -87,6 +87,12 @@ public final class SessionListViewModel {
             let id = proto.agentID
             let descriptor = FetchDescriptor<Agent>(predicate: #Predicate { $0.agentId == id })
             if let existing = try? modelContext.fetch(descriptor).first {
+                // Mark unread and update timestamp if there's new activity
+                if existing.lastOutputSummary != proto.lastOutputSummary
+                    || existing.toolUseCount != Int(proto.toolUseCount) {
+                    existing.hasUnread = true
+                    existing.lastEventTime = .now
+                }
                 existing.status = Int(proto.status.rawValue)
                 existing.worktree = proto.worktree
                 existing.branch = proto.branch
@@ -96,7 +102,7 @@ public final class SessionListViewModel {
                 existing.lastOutputSummary = proto.lastOutputSummary
                 existing.toolUseCount = Int(proto.toolUseCount)
             } else {
-                modelContext.insert(Agent(
+                let newAgent = Agent(
                     agentId: proto.agentID,
                     agentType: Int(proto.agentType.rawValue),
                     worktree: proto.worktree,
@@ -105,7 +111,10 @@ public final class SessionListViewModel {
                     startedAt: Date(timeIntervalSince1970: TimeInterval(proto.startedAt)),
                     currentPrompt: proto.currentPrompt,
                     workspaceId: proto.workspaceID
-                ))
+                )
+                newAgent.lastEventTime = .now
+                newAgent.hasUnread = true
+                modelContext.insert(newAgent)
             }
         }
         try? modelContext.save()

@@ -59,11 +59,15 @@ public struct EventBubbleView: View {
             Text(event.text ?? "")
                 .font(.subheadline)
                 .foregroundStyle(.white)
+                .textSelection(.enabled)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(Color.blue)
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .frame(maxWidth: sizeClass == .regular ? 500 : 260, alignment: .trailing)
+                .contextMenu {
+                    MessageContextMenu(text: event.text ?? "")
+                }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
@@ -82,6 +86,9 @@ public struct EventBubbleView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 18))
+            .contextMenu {
+                MessageContextMenu(text: event.text ?? "")
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
@@ -91,6 +98,9 @@ public struct EventBubbleView: View {
 
     private var thinkingBlock: some View {
         ThinkingBlockView(text: event.text ?? "")
+            .contextMenu {
+                MessageContextMenu(text: event.text ?? "")
+            }
     }
 
     // MARK: - Tool Use
@@ -110,6 +120,9 @@ public struct EventBubbleView: View {
         )
         .padding(.horizontal, 16)
         .padding(.vertical, 2)
+        .contextMenu {
+            MessageContextMenu(text: event.text ?? "")
+        }
     }
 
     // MARK: - Tool Result
@@ -191,12 +204,16 @@ struct ErrorBlockView: View {
             Text(message)
                 .font(.caption)
                 .foregroundStyle(.red)
+                .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
         .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
+        .contextMenu {
+            MessageContextMenu(text: message)
+        }
     }
 }
 
@@ -238,5 +255,31 @@ struct TypingIndicatorView: View {
         let offset = Double(index) * 0.15
         let value = sin((phase + offset) * .pi)
         return 0.4 + 0.6 * value
+    }
+}
+
+// MARK: - MessageContextMenu
+
+struct MessageContextMenu: View {
+    let text: String
+
+    var body: some View {
+        Button {
+            UIPasteboard.general.string = text
+        } label: {
+            Label("Copy", systemImage: "doc.on.doc")
+        }
+
+        if let url = URL(string: text), UIApplication.shared.canOpenURL(url) {
+            Button {
+                UIApplication.shared.open(url)
+            } label: {
+                Label("Open Link", systemImage: "safari")
+            }
+        }
+
+        ShareLink(item: text) {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
     }
 }

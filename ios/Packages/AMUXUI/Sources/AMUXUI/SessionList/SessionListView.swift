@@ -279,12 +279,10 @@ struct AgentRowView: View {
 
     private var displayTitle: String {
         if !agent.sessionTitle.isEmpty { return agent.sessionTitle }
-        if agent.worktree.isEmpty { return agent.agentId }
-        let last = agent.worktree.split(separator: "/").last.map(String.init) ?? agent.worktree
-        return last == "." ? workspaceName.split(separator: "/").last.map(String.init) ?? workspaceName : last
+        return "Untitled Session"
     }
 
-    private var isUnread: Bool { agent.isActive }
+    private var isUnread: Bool { agent.hasUnread }
     private var isRunning: Bool { agent.status == 2 }
 
     private var avatarInitial: String {
@@ -314,11 +312,11 @@ struct AgentRowView: View {
             // Left: status dot + avatar
             HStack(spacing: 6) {
                 Circle()
-                    .fill(isUnread ? Color.blue : isRunning ? Color.red : Color.clear)
+                    .fill(isRunning ? Color.red : isUnread ? Color.blue : Color.clear)
                     .frame(width: 8, height: 8)
-                    .opacity(isRunning && !isUnread ? (breathe ? 0.3 : 1.0) : 1.0)
+                    .opacity(isRunning ? (breathe ? 0.3 : 1.0) : 1.0)
                     .animation(
-                        isRunning && !isUnread
+                        isRunning
                             ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
                             : .default,
                         value: breathe

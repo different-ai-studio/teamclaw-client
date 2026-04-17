@@ -606,7 +606,14 @@ final class VoiceRecorder {
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
-        request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
+        request.addsPunctuation = true
+        request.contextualStrings = [
+            "Claude", "Claude Code", "Sonnet", "Opus", "Haiku",
+            "MQTT", "protobuf", "SwiftUI", "SwiftData",
+            "agent", "daemon", "worktree", "workspace",
+            "commit", "push", "merge", "pull request",
+            "API", "JSON", "YAML", "REST", "gRPC",
+        ]
         self.recognitionRequest = request
 
         let audioEngine = AVAudioEngine()
