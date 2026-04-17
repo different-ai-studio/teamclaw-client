@@ -493,6 +493,7 @@ private struct RecordButton: View {
             }
         }
         .buttonStyle(.plain)
+        .liquidGlass(in: Circle())
         .animation(.easeInOut(duration: 0.2), value: isRecording)
     }
 }
