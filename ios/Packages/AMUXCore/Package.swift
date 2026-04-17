@@ -1,9 +1,9 @@
-// swift-tools-version: 5.10
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
     name: "AMUXCore",
-    platforms: [.iOS(.v17)],
+    platforms: [.iOS(.v17), .macOS(.v26)],
     products: [
         .library(name: "AMUXCore", targets: ["AMUXCore"]),
     ],
@@ -18,6 +18,10 @@ let package = Package(
                 .product(name: "CocoaMQTT", package: "CocoaMQTT"),
                 .product(name: "SwiftProtobuf", package: "swift-protobuf"),
             ]
+        ),
+        .testTarget(
+            name: "AMUXCoreTests",
+            dependencies: ["AMUXCore"]
         ),
     ]
 )
