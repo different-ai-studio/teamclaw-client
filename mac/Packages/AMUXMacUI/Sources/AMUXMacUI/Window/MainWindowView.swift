@@ -57,22 +57,12 @@ public struct MainWindowView: View {
     }
 
     private var detail: some View {
-        VStack {
-            Spacer()
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(monitor?.daemonOnline == true ? Color.green : Color.red)
-                    .frame(width: 10, height: 10)
-                Text(monitor?.daemonOnline == true ? "Daemon online" : "Daemon offline")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            Text("\(pairing.brokerHost):\(pairing.brokerPort)  ·  \(pairing.deviceId)")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
-                .padding(.top, 4)
-            Spacer()
-        }
+        DetailPlaceholderView(
+            pairing: pairing,
+            monitor: monitor,
+            selectedSessionId: selectedSessionId,
+            selectedTaskId: selectedTaskId
+        )
         .frame(minWidth: 480)
         .task { await connectIfNeeded() }
     }
