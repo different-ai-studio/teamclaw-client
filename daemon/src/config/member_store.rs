@@ -17,6 +17,8 @@ pub struct StoredMember {
     pub role: String,
     pub token: String,
     pub joined_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub department: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,5 +103,64 @@ impl MemberStore {
 
     pub fn add_invite(&mut self, invite: PendingInvite) {
         self.pending_invites.push(invite);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn sample_member(member_id: &str, department: Option<&str>) -> StoredMember {
+        StoredMember {
+            member_id: member_id.to_string(),
+            display_name: format!("Member {}", member_id),
+            role: "member".into(),
+            token: format!("tok-{}", member_id),
+            joined_at: Utc.with_ymd_and_hms(2026, 4, 17, 12, 0, 0).unwrap(),
+            department: department.map(|s| s.to_string()),
+        }
+    }
+
+    #[test]
+    fn toml_roundtrip_with_department() {
+        let store = MemberStore {
+            members: vec![sample_member("alice", Some("Engineering"))],
+            pending_invites: vec![],
+        };
+        let serialized = toml::to_string_pretty(&store).unwrap();
+        assert!(serialized.contains("department = \"Engineering\""), "serialized:\n{serialized}");
+
+        let parsed: MemberStore = toml::from_str(&serialized).unwrap();
+        assert_eq!(parsed.members[0].department.as_deref(), Some("Engineering"));
+    }
+
+    #[test]
+    fn toml_roundtrip_without_department() {
+        let store = MemberStore {
+            members: vec![sample_member("bob", None)],
+            pending_invites: vec![],
+        };
+        let serialized = toml::to_string_pretty(&store).unwrap();
+        assert!(!serialized.contains("department"), "department should be omitted when None; got:\n{serialized}");
+
+        let parsed: MemberStore = toml::from_str(&serialized).unwrap();
+        assert!(parsed.members[0].department.is_none());
+    }
+
+    #[test]
+    fn loads_old_toml_without_department_field() {
+        // Simulates members.toml written before the department field existed.
+        let legacy_toml = r#"
+[[members]]
+member_id = "carol"
+display_name = "Carol"
+role = "owner"
+token = "tok-carol"
+joined_at = "2026-01-01T00:00:00Z"
+"#;
+        let parsed: MemberStore = toml::from_str(legacy_toml).unwrap();
+        assert_eq!(parsed.members.len(), 1);
+        assert_eq!(parsed.members[0].department, None);
     }
 }

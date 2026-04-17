@@ -37,6 +37,7 @@ pub fn run_init() -> anyhow::Result<()> {
         role: "owner".into(),
         token: owner_token.clone(),
         joined_at: chrono::Utc::now(),
+        department: None,
     });
     store.save(&MemberStore::default_path())?;
     println!("✓ Owner registered in {}\n", MemberStore::default_path().display());
