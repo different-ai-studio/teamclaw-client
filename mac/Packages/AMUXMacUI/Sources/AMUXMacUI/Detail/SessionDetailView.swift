@@ -180,6 +180,22 @@ struct SessionDetailView: View {
                 iconButton(systemImage: "square.and.arrow.up", help: "Share") {
                     print("TODO(v1.1): share for session \(session.sessionId)")
                 }
+
+                // Agent-only: trigger a paginated history sync so the feed
+                // can catch up on events emitted before the app was running.
+                if agentVM != nil {
+                    iconButton(
+                        systemImage: (agentVM?.isSyncing == true)
+                            ? "arrow.triangle.2.circlepath.circle.fill"
+                            : "arrow.triangle.2.circlepath",
+                        highlighted: agentVM?.isSyncing == true,
+                        help: (agentVM?.isSyncing == true) ? "Syncing history…" : "Sync history"
+                    ) {
+                        guard let vm = agentVM, !vm.isSyncing else { return }
+                        let ctx = modelContext
+                        Task { try? await vm.requestFullSync(modelContext: ctx) }
+                    }
+                }
             }
             .padding(.horizontal, 4)
             .padding(.vertical, 2)
