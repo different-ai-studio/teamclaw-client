@@ -82,7 +82,13 @@ public struct MainWindowView: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            SidebarView(selection: sidebarSelectionBinding, members: members.members)
+            SidebarView(
+                selection: sidebarSelectionBinding,
+                members: members.members,
+                mqtt: mqtt,
+                deviceId: pairing.deviceId,
+                peerId: peerId
+            )
             Divider()
             DaemonStatusFooter(pairing: pairing, monitor: monitor)
         }
