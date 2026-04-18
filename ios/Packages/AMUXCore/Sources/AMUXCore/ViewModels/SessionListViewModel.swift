@@ -51,48 +51,60 @@ public final class SessionListViewModel {
         collabSessions = (try? ctx.fetch(FetchDescriptor<CollabSession>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
 
         task?.cancel()
+        let agentsTopic = "amux/\(deviceId)/agents"
+        let workspacesTopic = "amux/\(deviceId)/workspaces"
         task = Task {
-            let agentsTopic = "amux/\(deviceId)/agents"
-
-            // Wait for MQTT to be connected (up to 15s)
-            var waited = 0
-            while mqtt.connectionState != .connected {
-                try? await Task.sleep(for: .milliseconds(200))
-                if Task.isCancelled { return }
-                waited += 200
-                if waited >= 15_000 {
-                    print("[SessionListVM] timed out waiting for MQTT (state: \(mqtt.connectionState))")
-                    isLoading = false
-                    return
-                }
-            }
-
-            let workspacesTopic = "amux/\(deviceId)/workspaces"
-
-            let stream = mqtt.messages()
-            try? await mqtt.subscribe(agentsTopic)
-            try? await mqtt.subscribe(workspacesTopic)
-            isLoading = false
-            print("[SessionListVM] subscribed to \(agentsTopic), waiting...")
-
-            NSLog("[SessionListVM] subscribed to workspaces topic: %@", workspacesTopic)
-            for await msg in stream {
-                if msg.topic == workspacesTopic {
-                    NSLog("[SessionListVM] received workspaces msg, %d bytes", msg.payload.count)
-                    if let list = try? ProtoMQTTCoder.decode(Amux_WorkspaceList.self, from: msg.payload) {
-                        NSLog("[SessionListVM] decoded WorkspaceList: %d workspaces", list.workspaces.count)
-                        syncWorkspaces(list, modelContext: ctx)
-                    } else {
-                        NSLog("[SessionListVM] FAILED to decode WorkspaceList")
+            // Outer loop: each iteration represents a fresh MQTT connection
+            // lifecycle. When the inner stream ends (disconnect clears
+            // continuations), loop back, wait for reconnect, and resubscribe
+            // so the broker re-delivers retained agent/workspace lists.
+            // Mirrors the pattern AgentDetailViewModel uses.
+            while !Task.isCancelled {
+                var waited = 0
+                while mqtt.connectionState != .connected {
+                    try? await Task.sleep(for: .milliseconds(200))
+                    if Task.isCancelled { return }
+                    waited += 200
+                    if waited >= 15_000 {
+                        NSLog("[SessionListVM] timed out waiting for MQTT (state: %@)", String(describing: mqtt.connectionState))
+                        isLoading = false
+                        // Keep looping — user-triggered reconnect will flip
+                        // connectionState and unblock the next iteration.
+                        break
                     }
+                }
+                if Task.isCancelled { return }
+                if mqtt.connectionState != .connected {
+                    try? await Task.sleep(for: .seconds(1))
                     continue
                 }
 
-                guard msg.topic == agentsTopic else { continue }
-                guard let list = try? ProtoMQTTCoder.decode(Amux_AgentList.self, from: msg.payload) else { continue }
-                print("[SessionListVM] AgentList: \(list.agents.count) agents")
-                syncAgents(list, modelContext: ctx)
-                refreshCollabSessions(modelContext: ctx)
+                let stream = mqtt.messages()
+                try? await mqtt.subscribe(agentsTopic)
+                try? await mqtt.subscribe(workspacesTopic)
+                isLoading = false
+                NSLog("[SessionListVM] subscribed to %@ + %@", agentsTopic, workspacesTopic)
+
+                for await msg in stream {
+                    if msg.topic == workspacesTopic {
+                        NSLog("[SessionListVM] received workspaces msg, %d bytes", msg.payload.count)
+                        if let list = try? ProtoMQTTCoder.decode(Amux_WorkspaceList.self, from: msg.payload) {
+                            NSLog("[SessionListVM] decoded WorkspaceList: %d workspaces", list.workspaces.count)
+                            syncWorkspaces(list, modelContext: ctx)
+                        } else {
+                            NSLog("[SessionListVM] FAILED to decode WorkspaceList")
+                        }
+                        continue
+                    }
+
+                    guard msg.topic == agentsTopic else { continue }
+                    guard let list = try? ProtoMQTTCoder.decode(Amux_AgentList.self, from: msg.payload) else { continue }
+                    NSLog("[SessionListVM] AgentList: %d agents", list.agents.count)
+                    syncAgents(list, modelContext: ctx)
+                    refreshCollabSessions(modelContext: ctx)
+                }
+                if Task.isCancelled { return }
+                NSLog("[SessionListVM] stream ended, waiting to resubscribe…")
             }
         }
     }
