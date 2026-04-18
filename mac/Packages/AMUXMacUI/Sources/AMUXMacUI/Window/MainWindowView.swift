@@ -110,7 +110,7 @@ public struct MainWindowView: View {
         Group {
             switch sidebarSelection {
             case .function(.tasks):
-                TaskListColumn(selectedTaskId: $selectedTaskId)
+                TaskListColumn(selectedTaskId: $selectedTaskId, teamclawService: teamclaw)
             case .function(.sessions), .none:
                 SessionListColumn(
                     memberFilter: nil,

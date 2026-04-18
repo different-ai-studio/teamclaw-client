@@ -4,8 +4,10 @@ import AMUXCore
 
 struct TaskListColumn: View {
     @Binding var selectedTaskId: String?
+    let teamclawService: TeamclawService?
 
-    @Query private var allTasks: [WorkItem]
+    @Query(filter: #Predicate<WorkItem> { !$0.archived })
+    private var allTasks: [WorkItem]
     @Query private var allSessions: [CollabSession]
 
     var body: some View {
@@ -17,7 +19,8 @@ struct TaskListColumn: View {
             List(sortedTasks, id: \.workItemId, selection: $selectedTaskId) { task in
                 TaskRow(
                     workItem: task,
-                    sessionTitle: sessionTitle(for: task.sessionId)
+                    sessionTitle: sessionTitle(for: task.sessionId),
+                    teamclawService: teamclawService
                 )
                 .tag(task.workItemId)
             }

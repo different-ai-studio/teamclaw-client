@@ -4,6 +4,9 @@ import AMUXCore
 struct TaskRow: View {
     let workItem: WorkItem
     let sessionTitle: String?
+    let teamclawService: TeamclawService?
+
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -36,6 +39,17 @@ struct TaskRow: View {
             }
         }
         .padding(.vertical, 6)
+        .contextMenu {
+            Button {
+                workItem.archived = true
+                try? modelContext.save()
+                let id = workItem.workItemId
+                let sessionId = workItem.sessionId
+                Task { await teamclawService?.archiveWorkItem(workItemId: id, sessionId: sessionId, archived: true) }
+            } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+        }
     }
 
     @ViewBuilder
