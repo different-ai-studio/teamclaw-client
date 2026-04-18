@@ -78,6 +78,7 @@ impl MessageStore {
             created_at: msg.created_at.timestamp(),
             reply_to_message_id: msg.reply_to_message_id.clone(),
             mentions: msg.mentions.clone(),
+            // TODO(plan6-task4): stamp with AgentManager.current_model when message is from an agent
             model: String::new(),
         }
     }

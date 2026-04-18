@@ -120,6 +120,7 @@ impl TeamclawSessionStore {
                 created_at: s.created_at.timestamp(),
                 participants,
                 summary: s.summary.clone(),
+                // TODO(plan6-task4): set to host's first running agent on session creation
                 primary_agent_id: String::new(),
             }
         })

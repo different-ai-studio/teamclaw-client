@@ -63,6 +63,7 @@ impl AgentHandle {
             session_title: self.session_title.clone(),
             last_output_summary: self.last_output_summary.clone(),
             tool_use_count: self.tool_use_count,
+            // TODO(plan6-task3/4): populate from AgentManager.current_model_per_agent + available_models_for(agent_type)
             available_models: vec![],
             current_model: String::new(),
         }
