@@ -12,8 +12,18 @@ public struct WorkItemSheet: View {
 
     @Binding var showSettings: Bool
 
-    @State private var workItems: [WorkItem] = []
+    // SwiftData-driven list; any mutation from syncWorkItemEvent refreshes
+    // the UI without manual reloads.
+    @Query(filter: #Predicate<WorkItem> { !$0.archived },
+           sort: \WorkItem.createdAt, order: .reverse)
+    private var workItems: [WorkItem]
+
+    // Count of archived items for the "Archived (N)" footer row.
+    @Query(filter: #Predicate<WorkItem> { $0.archived })
+    private var archivedItems: [WorkItem]
+
     @State private var showCreate = false
+    @State private var showArchived = false
 
     public init(pairing: PairingManager, connectionMonitor: ConnectionMonitor, teamclawService: TeamclawService? = nil, showSettings: Binding<Bool>) {
         self.pairing = pairing
@@ -32,6 +42,14 @@ public struct WorkItemSheet: View {
                     List {
                         ForEach(workItems, id: \.workItemId) { item in
                             WorkItemRow(item: item)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button {
+                                        archiveTapped(item)
+                                    } label: {
+                                        Label("Archive", systemImage: "archivebox.fill")
+                                    }
+                                    .tint(.gray)
+                                }
                         }
                     }
                     .listStyle(.plain)
@@ -53,35 +71,62 @@ public struct WorkItemSheet: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                Button {
-                    dismiss()
-                    showSettings = true
-                } label: {
-                    HStack {
-                        Image(systemName: "gearshape")
-                        Text("Settings")
+                VStack(spacing: 0) {
+                    if !archivedItems.isEmpty {
+                        Button {
+                            showArchived = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "archivebox")
+                                Text("Archived (\(archivedItems.count))")
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 16)
+                        }
+                        .buttonStyle(.plain)
+                        Divider()
                     }
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    Button {
+                        dismiss()
+                        showSettings = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "gearshape")
+                            Text("Settings")
+                        }
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 4)
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 4)
             }
-            .task { loadWorkItems() }
             .sheet(isPresented: $showCreate) {
-                CreateWorkItemSheet(teamclawService: teamclawService) {
-                    loadWorkItems()
-                }
+                CreateWorkItemSheet(teamclawService: teamclawService) { }
+            }
+            .sheet(isPresented: $showArchived) {
+                ArchivedWorkItemsView(teamclawService: teamclawService)
             }
         }
     }
 
-    private func loadWorkItems() {
-        let descriptor = FetchDescriptor<WorkItem>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
-        workItems = (try? modelContext.fetch(descriptor)) ?? []
+    private func archiveTapped(_ item: WorkItem) {
+        // Optimistic flip — @Query animates the row out immediately.
+        item.archived = true
+        try? modelContext.save()
+        let id = item.workItemId
+        let sessionId = item.sessionId
+        Task { await teamclawService?.archiveWorkItem(workItemId: id, sessionId: sessionId, archived: true) }
     }
 }
 
