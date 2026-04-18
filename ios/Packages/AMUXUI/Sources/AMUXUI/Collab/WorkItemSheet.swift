@@ -10,13 +10,16 @@ public struct WorkItemSheet: View {
     let connectionMonitor: ConnectionMonitor
     let teamclawService: TeamclawService?
 
+    @Binding var showSettings: Bool
+
     @State private var workItems: [WorkItem] = []
     @State private var showCreate = false
 
-    public init(pairing: PairingManager, connectionMonitor: ConnectionMonitor, teamclawService: TeamclawService? = nil) {
+    public init(pairing: PairingManager, connectionMonitor: ConnectionMonitor, teamclawService: TeamclawService? = nil, showSettings: Binding<Bool>) {
         self.pairing = pairing
         self.connectionMonitor = connectionMonitor
         self.teamclawService = teamclawService
+        self._showSettings = showSettings
     }
 
     public var body: some View {
@@ -48,6 +51,24 @@ public struct WorkItemSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button {
+                    dismiss()
+                    showSettings = true
+                } label: {
+                    HStack {
+                        Image(systemName: "gearshape")
+                        Text("Settings")
+                    }
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 4)
             }
             .task { loadWorkItems() }
             .sheet(isPresented: $showCreate) {
