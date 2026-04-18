@@ -214,7 +214,8 @@ struct SessionDetailView: View {
                 .frame(width: 200)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.top, 36)
+        .padding(.bottom, 8)
     }
 
     private func iconButton(systemImage: String, highlighted: Bool = false, help: String, action: @escaping () -> Void) -> some View {
