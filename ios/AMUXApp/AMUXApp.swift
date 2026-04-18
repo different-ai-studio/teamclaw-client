@@ -6,6 +6,7 @@ import Sentry
 @main
 struct AMUXApp: App {
     @State private var pairing = PairingManager()
+    let modelContainer: ModelContainer
 
     init() {
         SentrySDK.start { options in
@@ -23,12 +24,27 @@ struct AMUXApp: App {
             options.environment = "production"
             #endif
         }
+
+        // Explicit VersionedSchema + migration plan so SwiftData never falls
+        // back to destructive migration on a field-shape change. See
+        // AMUXSchema.swift for the upgrade checklist when models evolve.
+        do {
+            let schema = Schema(versionedSchema: AMUXSchemaV1.self)
+            let config = ModelConfiguration(schema: schema)
+            modelContainer = try ModelContainer(
+                for: schema,
+                migrationPlan: AMUXMigrationPlan.self,
+                configurations: config
+            )
+        } catch {
+            fatalError("Failed to initialise ModelContainer: \(error)")
+        }
     }
 
     var body: some Scene {
         WindowGroup {
             ContentView(pairing: pairing)
         }
-        .modelContainer(for: [Agent.self, AgentEvent.self, Member.self, Workspace.self, CollabSession.self, SessionMessage.self, WorkItem.self])
+        .modelContainer(modelContainer)
     }
 }
