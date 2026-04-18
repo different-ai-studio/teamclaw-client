@@ -136,14 +136,11 @@ extension MQTTService: CocoaMQTTDelegate {
     public func mqttDidReceivePong(_ mqtt: CocoaMQTT) {}
 
     public func mqttDidDisconnect(_ mqtt: CocoaMQTT, withError err: (any Error)?) {
-        if connectionState == .connected {
-            connectionState = .reconnecting
-        } else {
-            connectionState = .disconnected
-            if let continuation = connectContinuation {
-                continuation.resume(throwing: err ?? MQTTConnectionError.connectFailed)
-                connectContinuation = nil
-            }
+        let wasConnecting = connectContinuation != nil
+        connectionState = .disconnected
+        if wasConnecting, let continuation = connectContinuation {
+            connectContinuation = nil
+            continuation.resume(throwing: err ?? MQTTConnectionError.connectFailed)
         }
     }
 

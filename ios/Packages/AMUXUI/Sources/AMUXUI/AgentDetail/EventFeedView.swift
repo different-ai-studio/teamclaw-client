@@ -54,20 +54,27 @@ public struct EventBubbleView: View {
     // MARK: - User Bubble (blue, right-aligned)
 
     private var userBubble: some View {
-        HStack {
-            Spacer()
-            Text(event.text ?? "")
-                .font(.subheadline)
-                .foregroundStyle(.white)
-                .textSelection(.enabled)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.blue)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .frame(maxWidth: sizeClass == .regular ? 500 : 260, alignment: .trailing)
-                .contextMenu {
-                    MessageContextMenu(text: event.text ?? "")
-                }
+        VStack(alignment: .trailing, spacing: 2) {
+            Text("You")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.trailing, 4)
+
+            HStack {
+                Spacer()
+                Text(event.text ?? "")
+                    .font(.subheadline)
+                    .foregroundStyle(.white)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .frame(maxWidth: sizeClass == .regular ? 500 : 260, alignment: .trailing)
+                    .contextMenu {
+                        MessageContextMenu(text: event.text ?? "")
+                    }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 4)

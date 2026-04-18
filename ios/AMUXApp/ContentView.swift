@@ -33,10 +33,9 @@ struct ContentView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active && pairing.isPaired && mqtt.connectionState != .connected {
+            if phase == .active && pairing.isPaired && mqtt.connectionState == .disconnected {
                 logger.info("App became active, reconnecting MQTT...")
                 Task {
-                    await mqtt.disconnect()
                     await connectMQTT()
                 }
             }
@@ -59,9 +58,10 @@ struct ContentView: View {
         logger.info("Connecting to \(pairing.brokerHost):\(pairing.brokerPort) tls=\(pairing.useTLS) user=\(pairing.username)")
         do {
             logger.info("Calling mqtt.connect()...")
+            let clientId = "amux-ios-\(pairing.authToken.prefix(8))"
             try await mqtt.connect(host: pairing.brokerHost, port: pairing.brokerPort,
                 username: pairing.username, password: pairing.password,
-                clientId: "amux-ios-\(UUID().uuidString.prefix(6))", useTLS: pairing.useTLS)
+                clientId: clientId, useTLS: pairing.useTLS)
             logger.info("mqtt.connect() returned successfully")
 
             var cmd = Amux_DeviceCommandEnvelope()
