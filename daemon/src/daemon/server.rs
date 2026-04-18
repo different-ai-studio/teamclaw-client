@@ -448,6 +448,7 @@ impl DaemonServer {
                         // Persist session
                         let stored = StoredSession {
                             session_id: new_id.clone(),
+                            acp_session_id: String::new(),
                             agent_type: at as i32,
                             workspace_id: ws_id.clone(),
                             worktree: worktree.clone(),
