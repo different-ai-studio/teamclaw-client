@@ -67,22 +67,16 @@ public struct SessionListView: View {
             .navigationTitle("Sessions")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                // Left: Settings + Work Items grouped in a liquid-glass capsule
-                ToolbarItem(placement: .navigationBarLeading) {
-                    HStack(spacing: 14) {
-                        Button { showSettings = true } label: {
-                            Image(systemName: "gearshape").font(.title3)
-                        }
-                        .buttonStyle(.plain)
-                        Button { showWorkItems = true } label: {
-                            Image(systemName: "checklist").font(.title3)
-                        }
-                        .buttonStyle(.plain)
+                // Left: Settings + Work Items as a native toolbar group.
+                ToolbarItemGroup(placement: .navigationBarLeading) {
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape").font(.title3).foregroundStyle(.primary)
                     }
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .liquidGlass(in: Capsule())
+                    .buttonStyle(.plain)
+                    Button { showWorkItems = true } label: {
+                        Image(systemName: "checklist").font(.title3).foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
                 }
                 // Right: Workspaces
                 ToolbarItem(placement: .navigationBarTrailing) {
