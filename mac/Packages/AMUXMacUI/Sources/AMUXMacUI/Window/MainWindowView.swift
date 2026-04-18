@@ -124,8 +124,6 @@ public struct MainWindowView: View {
             }
         }
         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
-        .toolbar(removing: .sidebarToggle)
-        .toolbar(.hidden, for: .windowToolbar)
         .ignoresSafeArea(.container, edges: .top)
     }
 
