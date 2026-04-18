@@ -1,8 +1,6 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
-import Speech
-import AVFoundation
 import AMUXCore
 
 // MARK: - AgentDetailView (NetNewsWire Article-style)
@@ -15,7 +13,13 @@ public struct AgentDetailView: View {
     @State private var showSettings = false
     @State private var showMembers = false
     @State private var collaborators: [Member] = []
-    @State private var voiceRecorder = VoiceRecorder()
+    @State private var voiceRecorder = VoiceRecorder(contextualStrings: [
+        "Claude", "Claude Code", "Sonnet", "Opus", "Haiku",
+        "MQTT", "protobuf", "SwiftUI", "SwiftData",
+        "agent", "daemon", "worktree", "workspace",
+        "commit", "push", "merge", "pull request",
+        "API", "JSON", "YAML", "REST", "gRPC",
+    ])
 
     let allAgentIds: [String]
     @Binding var navigationPath: [String]
@@ -553,9 +557,9 @@ private struct RecordButton: View {
     var body: some View {
         Button {
             switch voiceRecorder.state {
-            case .idle: voiceRecorder.startRecording()
             case .recording: voiceRecorder.stopRecording()
-            case .done: voiceRecorder.startRecording()
+            // idle / done / denied / error all kick off a fresh recording.
+            case .idle, .done, .denied, .error: voiceRecorder.startRecording()
             }
         } label: {
             ZStack {
@@ -584,115 +588,3 @@ private struct RecordButton: View {
     }
 }
 
-// MARK: - VoiceRecorder
-
-@Observable @MainActor
-final class VoiceRecorder {
-    enum State { case idle, recording, done }
-
-    private(set) var state: State = .idle
-    private(set) var transcribedText: String?
-    private(set) var audioLevel: Float = 0
-
-    private var audioEngine: AVAudioEngine?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-
-    func startRecording() {
-        transcribedText = nil
-        state = .recording
-
-        SFSpeechRecognizer.requestAuthorization { [weak self] authStatus in
-            Task { @MainActor in
-                guard authStatus == .authorized else {
-                    self?.state = .idle
-                    return
-                }
-                self?.beginAudioSession()
-            }
-        }
-    }
-
-    private func beginAudioSession() {
-        let recognizer = SFSpeechRecognizer(locale: Locale.current)
-        guard let recognizer, recognizer.isAvailable else { state = .idle; return }
-
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        request.addsPunctuation = true
-        request.contextualStrings = [
-            "Claude", "Claude Code", "Sonnet", "Opus", "Haiku",
-            "MQTT", "protobuf", "SwiftUI", "SwiftData",
-            "agent", "daemon", "worktree", "workspace",
-            "commit", "push", "merge", "pull request",
-            "API", "JSON", "YAML", "REST", "gRPC",
-        ]
-        self.recognitionRequest = request
-
-        let audioEngine = AVAudioEngine()
-        self.audioEngine = audioEngine
-
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.record, mode: .measurement, options: .duckOthers)
-        try? session.setActive(true, options: .notifyOthersOnDeactivation)
-
-        let inputNode = audioEngine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            request.append(buffer)
-            // Calculate audio level for waveform visualization
-            guard let channelData = buffer.floatChannelData?[0] else { return }
-            let frameLength = Int(buffer.frameLength)
-            var sum: Float = 0
-            for i in 0..<frameLength { sum += abs(channelData[i]) }
-            let avg = sum / Float(max(frameLength, 1))
-            let level = min(max(avg * 5, 0), 1) // normalize to 0...1
-            Task { @MainActor in self?.audioLevel = level }
-        }
-
-        audioEngine.prepare()
-        try? audioEngine.start()
-
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            Task { @MainActor in
-                if let result {
-                    self?.transcribedText = result.bestTranscription.formattedString
-                }
-                if error != nil || (result?.isFinal == true) {
-                    self?.finishAudio()
-                }
-            }
-        }
-    }
-
-    func stopRecording() {
-        recognitionRequest?.endAudio()
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        // State transitions to .done when recognition finishes via the callback
-        // But set a fallback in case recognition is instant
-        if state == .recording {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(500))
-                if state == .recording { state = .done }
-            }
-        }
-    }
-
-    func reset() {
-        finishAudio()
-        transcribedText = nil
-        state = .idle
-    }
-
-    private func finishAudio() {
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        recognitionTask?.cancel()
-        audioEngine = nil
-        recognitionTask = nil
-        recognitionRequest = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        if state == .recording { state = .done }
-    }
-}
