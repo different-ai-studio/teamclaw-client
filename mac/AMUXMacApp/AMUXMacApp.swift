@@ -16,6 +16,7 @@ struct AMUXMacApp: App {
                 .preferredColorScheme(currentAppearance.colorScheme)
         }
         .windowResizability(.contentMinSize)
+        .windowStyle(.hiddenTitleBar)
         .modelContainer(for: [
             Member.self,
             CollabSession.self,
