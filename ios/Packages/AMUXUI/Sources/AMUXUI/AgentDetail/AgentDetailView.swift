@@ -284,7 +284,7 @@ public struct AgentDetailView: View {
             if let agent = viewModel.agent {
                 AgentSettingsSheet(
                     agent: agent,
-                    onSync: { Task { try? await viewModel.requestFullSync(modelContext: modelContext) } },
+                    onSync: { Task { try? await viewModel.requestIncrementalSync(modelContext: modelContext) } },
                     isSyncing: viewModel.isSyncing
                 )
                 .presentationDetents([.medium])

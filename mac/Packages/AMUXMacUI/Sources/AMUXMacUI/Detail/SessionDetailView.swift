@@ -200,7 +200,7 @@ struct SessionDetailView: View {
                     ) {
                         guard let vm = agentVM, !vm.isSyncing else { return }
                         let ctx = modelContext
-                        Task { try? await vm.requestFullSync(modelContext: ctx) }
+                        Task { try? await vm.requestIncrementalSync(modelContext: ctx) }
                     }
                 }
             }

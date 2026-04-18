@@ -33,9 +33,16 @@ struct ContentView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active && pairing.isPaired && mqtt.connectionState == .disconnected {
-                logger.info("App became active, reconnecting MQTT...")
+            // iOS freezes sockets when backgrounded but rarely delivers a
+            // clean disconnect callback, so `connectionState` can stay
+            // `.connected` on a dead socket ("zombie"). On foreground we
+            // force a full reconnect regardless of reported state; the
+            // AgentDetailViewModel loop will resubscribe and trigger an
+            // incremental history sync once MQTT is back up.
+            if phase == .active && pairing.isPaired {
+                logger.info("App became active, forcing MQTT reconnect…")
                 Task {
+                    await mqtt.disconnect()
                     await connectMQTT()
                 }
             }

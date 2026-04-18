@@ -83,21 +83,35 @@ public final class AgentDetailViewModel {
             isStreaming = agent.isActive
         }
 
+        let eventsTopic = "amux/\(deviceId)/agent/\(agentId)/events"
         task = Task {
-            // Wait for MQTT to be connected
-            while mqtt.connectionState != .connected {
-                try? await Task.sleep(for: .milliseconds(200))
-                if Task.isCancelled { return }
-            }
+            // Outer loop: each iteration represents a fresh MQTT connection lifecycle.
+            // When the inner stream finishes (e.g. after disconnect clears continuations),
+            // we loop back, wait for reconnect, resubscribe, and trigger an incremental
+            // sync to fetch any events missed during the gap.
+            while !Task.isCancelled {
+                // Wait for MQTT to be connected
+                while mqtt.connectionState != .connected {
+                    try? await Task.sleep(for: .milliseconds(200))
+                    if Task.isCancelled { return }
+                }
 
-            let eventsTopic = "amux/\(deviceId)/agent/\(agentId)/events"
-            let stream = mqtt.messages()
-            try? await mqtt.subscribe(eventsTopic)
-            print("[AgentDetailVM] subscribed to \(eventsTopic)")
-            for await msg in stream {
-                guard msg.topic == eventsTopic else { continue }
-                guard let envelope = try? ProtoMQTTCoder.decode(Amux_Envelope.self, from: msg.payload) else { continue }
-                handleEnvelope(envelope, modelContext: modelContext)
+                let stream = mqtt.messages()
+                try? await mqtt.subscribe(eventsTopic)
+                print("[AgentDetailVM] subscribed to \(eventsTopic)")
+
+                // Pull any events we missed while disconnected (no-op on first
+                // connect if local cache is empty and daemon has nothing newer).
+                try? await requestIncrementalSync(modelContext: modelContext)
+
+                for await msg in stream {
+                    guard msg.topic == eventsTopic else { continue }
+                    guard let envelope = try? ProtoMQTTCoder.decode(Amux_Envelope.self, from: msg.payload) else { continue }
+                    handleEnvelope(envelope, modelContext: modelContext)
+                }
+                // Stream finished — connection likely dropped. Loop and resubscribe.
+                if Task.isCancelled { return }
+                print("[AgentDetailVM] stream ended, waiting to resubscribe…")
             }
         }
     }
@@ -294,10 +308,23 @@ public final class AgentDetailViewModel {
         }
     }
 
-    public func requestFullSync(modelContext: ModelContext) async throws {
+    /// Fetch events newer than our local max sequence from the daemon.
+    /// Cursor-based + paginated — cheap to call on every reconnect / foreground.
+    ///
+    /// Also clears any stale streaming UI state: if the app was backgrounded
+    /// mid-stream and missed the `isComplete=true` or `status_change=idle`
+    /// event, `isStreaming` could be stuck showing a typing indicator. The
+    /// history batch will restore the correct state (and if the agent is
+    /// actually still streaming, incoming deltas will flip `isStreaming` back).
+    public func requestIncrementalSync(modelContext: ModelContext) async throws {
         guard agent != nil else { return }
         self.syncModelContext = modelContext
         isSyncing = true
+        // Clear stale streaming state — will be re-established by the batch
+        // (if agent is idle now) or by fresh deltas (if it's still active).
+        isStreaming = false
+        streamingText = ""
+        streamingModel = nil
         let maxSeq = events.compactMap({ $0.sequence != 0 ? $0.sequence : nil }).max() ?? 0
         try await requestHistoryPage(afterSequence: UInt64(maxSeq))
     }
