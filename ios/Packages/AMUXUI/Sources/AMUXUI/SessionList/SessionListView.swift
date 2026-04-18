@@ -67,12 +67,22 @@ public struct SessionListView: View {
             .navigationTitle("Sessions")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                // Left: Work Items
+                // Left: Settings + Work Items grouped in a liquid-glass capsule
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button { showWorkItems = true } label: {
-                        Image(systemName: "checklist").font(.title3).foregroundStyle(.primary)
+                    HStack(spacing: 14) {
+                        Button { showSettings = true } label: {
+                            Image(systemName: "gearshape").font(.title3)
+                        }
+                        .buttonStyle(.plain)
+                        Button { showWorkItems = true } label: {
+                            Image(systemName: "checklist").font(.title3)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .liquidGlass(in: Capsule())
                 }
                 // Right: Workspaces
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -127,7 +137,7 @@ public struct SessionListView: View {
                 }
             }
             .sheet(isPresented: $showWorkItems) {
-                WorkItemSheet(pairing: pairing, connectionMonitor: connectionMonitor, teamclawService: teamclawService, showSettings: $showSettings)
+                WorkItemSheet(pairing: pairing, connectionMonitor: connectionMonitor, teamclawService: teamclawService)
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView(pairing: pairing, connectionMonitor: connectionMonitor)

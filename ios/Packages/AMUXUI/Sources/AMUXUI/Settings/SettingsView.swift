@@ -10,6 +10,14 @@ public struct SettingsView: View {
         self.pairing = pairing; self.connectionMonitor = connectionMonitor
     }
 
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+    }
+
+    private var buildNumber: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+    }
+
     public var body: some View {
         NavigationStack {
             List {
@@ -29,6 +37,15 @@ public struct SettingsView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                    }
+                }
+                Section("About") {
+                    HStack {
+                        Text("Version")
+                        Spacer()
+                        Text("\(appVersion) (\(buildNumber))")
+                            .foregroundStyle(.secondary)
+                            .font(.caption.monospaced())
                     }
                 }
                 Section {

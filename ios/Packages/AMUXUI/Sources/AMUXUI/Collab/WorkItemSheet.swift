@@ -11,8 +11,6 @@ public struct WorkItemSheet: View {
     let connectionMonitor: ConnectionMonitor
     let teamclawService: TeamclawService?
 
-    @Binding var showSettings: Bool
-
     // SwiftData-driven list; any mutation from syncWorkItemEvent refreshes
     // the UI without manual reloads.
     @Query(filter: #Predicate<WorkItem> { !$0.archived },
@@ -26,11 +24,10 @@ public struct WorkItemSheet: View {
     @State private var showCreate = false
     @State private var showArchived = false
 
-    public init(pairing: PairingManager, connectionMonitor: ConnectionMonitor, teamclawService: TeamclawService? = nil, showSettings: Binding<Bool>) {
+    public init(pairing: PairingManager, connectionMonitor: ConnectionMonitor, teamclawService: TeamclawService? = nil) {
         self.pairing = pairing
         self.connectionMonitor = connectionMonitor
         self.teamclawService = teamclawService
-        self._showSettings = showSettings
     }
 
     public var body: some View {
@@ -72,44 +69,25 @@ public struct WorkItemSheet: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 0) {
-                    if !archivedItems.isEmpty {
-                        Button {
-                            showArchived = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "archivebox")
-                                Text("Archived (\(archivedItems.count))")
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .font(.body)
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .padding(.horizontal, 16)
-                        }
-                        .buttonStyle(.plain)
-                        Divider()
-                    }
+                if !archivedItems.isEmpty {
                     Button {
-                        dismiss()
-                        showSettings = true
+                        showArchived = true
                     } label: {
                         HStack {
-                            Image(systemName: "gearshape")
-                            Text("Settings")
+                            Image(systemName: "archivebox")
+                            Text("Archived (\(archivedItems.count))")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
                         }
                         .font(.body)
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
                     }
                     .buttonStyle(.plain)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 4)
                 }
             }
             .sheet(isPresented: $showCreate) {
