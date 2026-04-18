@@ -227,6 +227,8 @@ public struct Teamclaw_SessionInfo: Sendable {
 
   public var summary: String = String()
 
+  public var primaryAgentID: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -308,6 +310,8 @@ public struct Teamclaw_Message: Sendable {
   public var replyToMessageID: String = String()
 
   public var mentions: [String] = []
+
+  public var model: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -990,7 +994,7 @@ extension Teamclaw_Actor: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
 
 extension Teamclaw_SessionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SessionInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}session_type\0\u{3}team_id\0\u{1}title\0\u{3}host_device_id\0\u{3}created_by\0\u{3}created_at\0\u{1}participants\0\u{1}summary\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}session_type\0\u{3}team_id\0\u{1}title\0\u{3}host_device_id\0\u{3}created_by\0\u{3}created_at\0\u{1}participants\0\u{1}summary\0\u{3}primary_agent_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1007,6 +1011,7 @@ extension Teamclaw_SessionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 7: try { try decoder.decodeSingularInt64Field(value: &self.createdAt) }()
       case 8: try { try decoder.decodeRepeatedMessageField(value: &self.participants) }()
       case 9: try { try decoder.decodeSingularStringField(value: &self.summary) }()
+      case 10: try { try decoder.decodeSingularStringField(value: &self.primaryAgentID) }()
       default: break
       }
     }
@@ -1040,6 +1045,9 @@ extension Teamclaw_SessionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if !self.summary.isEmpty {
       try visitor.visitSingularStringField(value: self.summary, fieldNumber: 9)
     }
+    if !self.primaryAgentID.isEmpty {
+      try visitor.visitSingularStringField(value: self.primaryAgentID, fieldNumber: 10)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1053,6 +1061,7 @@ extension Teamclaw_SessionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.createdAt != rhs.createdAt {return false}
     if lhs.participants != rhs.participants {return false}
     if lhs.summary != rhs.summary {return false}
+    if lhs.primaryAgentID != rhs.primaryAgentID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1200,7 +1209,7 @@ extension Teamclaw_SessionIndex: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
 
 extension Teamclaw_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}message_id\0\u{3}session_id\0\u{3}sender_actor_id\0\u{1}kind\0\u{1}content\0\u{3}created_at\0\u{3}reply_to_message_id\0\u{1}mentions\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}message_id\0\u{3}session_id\0\u{3}sender_actor_id\0\u{1}kind\0\u{1}content\0\u{3}created_at\0\u{3}reply_to_message_id\0\u{1}mentions\0\u{1}model\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1216,6 +1225,7 @@ extension Teamclaw_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       case 6: try { try decoder.decodeSingularInt64Field(value: &self.createdAt) }()
       case 7: try { try decoder.decodeSingularStringField(value: &self.replyToMessageID) }()
       case 8: try { try decoder.decodeRepeatedStringField(value: &self.mentions) }()
+      case 9: try { try decoder.decodeSingularStringField(value: &self.model) }()
       default: break
       }
     }
@@ -1246,6 +1256,9 @@ extension Teamclaw_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     if !self.mentions.isEmpty {
       try visitor.visitRepeatedStringField(value: self.mentions, fieldNumber: 8)
     }
+    if !self.model.isEmpty {
+      try visitor.visitSingularStringField(value: self.model, fieldNumber: 9)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1258,6 +1271,7 @@ extension Teamclaw_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     if lhs.createdAt != rhs.createdAt {return false}
     if lhs.replyToMessageID != rhs.replyToMessageID {return false}
     if lhs.mentions != rhs.mentions {return false}
+    if lhs.model != rhs.model {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

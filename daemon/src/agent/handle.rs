@@ -50,7 +50,17 @@ impl AgentHandle {
         self.sequence
     }
 
-    pub fn to_proto_info(&self) -> amux::AgentInfo {
+    /// Build an `AgentInfo` for this agent.
+    ///
+    /// `available_models` and `current_model` are passed in by the caller
+    /// (typically `AgentManager`) so that the handle does not need to know
+    /// about the model registry or the daemon-side `current_model_per_agent`
+    /// map. Pass an empty Vec / empty String for unknown / unset.
+    pub fn to_proto_info(
+        &self,
+        available_models: Vec<amux::ModelInfo>,
+        current_model: String,
+    ) -> amux::AgentInfo {
         amux::AgentInfo {
             agent_id: self.agent_id.clone(),
             agent_type: self.agent_type as i32,
@@ -63,6 +73,8 @@ impl AgentHandle {
             session_title: self.session_title.clone(),
             last_output_summary: self.last_output_summary.clone(),
             tool_use_count: self.tool_use_count,
+            available_models,
+            current_model,
         }
     }
 

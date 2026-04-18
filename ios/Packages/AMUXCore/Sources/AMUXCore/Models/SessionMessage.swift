@@ -11,6 +11,7 @@ public final class SessionMessage {
     public var createdAt: Date
     public var replyToMessageId: String
     public var mentions: String         // comma-separated actor IDs
+    public var model: String?
 
     public init(
         messageId: String,

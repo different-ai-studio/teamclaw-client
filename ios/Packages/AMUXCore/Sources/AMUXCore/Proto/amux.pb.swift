@@ -608,6 +608,8 @@ public struct Amux_AcpSendPrompt: Sendable {
 
   public var text: String = String()
 
+  public var modelID: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1235,6 +1237,24 @@ public struct Amux_AgentInfo: Sendable {
   public var lastOutputSummary: String = String()
 
   public var toolUseCount: Int32 = 0
+
+  public var availableModels: [Amux_ModelInfo] = []
+
+  public var currentModel: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Amux_ModelInfo: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var id: String = String()
+
+  public var displayName: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2302,7 +2322,7 @@ extension Amux_AcpRequestHistory: SwiftProtobuf.Message, SwiftProtobuf._MessageI
 
 extension Amux_AcpSendPrompt: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AcpSendPrompt"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}text\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}text\0\u{3}model_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2311,6 +2331,7 @@ extension Amux_AcpSendPrompt: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.text) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.modelID) }()
       default: break
       }
     }
@@ -2320,11 +2341,15 @@ extension Amux_AcpSendPrompt: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if !self.text.isEmpty {
       try visitor.visitSingularStringField(value: self.text, fieldNumber: 1)
     }
+    if !self.modelID.isEmpty {
+      try visitor.visitSingularStringField(value: self.modelID, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Amux_AcpSendPrompt, rhs: Amux_AcpSendPrompt) -> Bool {
     if lhs.text != rhs.text {return false}
+    if lhs.modelID != rhs.modelID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -3606,7 +3631,7 @@ extension Amux_WorkspaceList: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
 
 extension Amux_AgentInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AgentInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agent_id\0\u{3}agent_type\0\u{1}worktree\0\u{1}branch\0\u{1}status\0\u{3}started_at\0\u{3}current_prompt\0\u{3}workspace_id\0\u{3}session_title\0\u{3}last_output_summary\0\u{3}tool_use_count\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agent_id\0\u{3}agent_type\0\u{1}worktree\0\u{1}branch\0\u{1}status\0\u{3}started_at\0\u{3}current_prompt\0\u{3}workspace_id\0\u{3}session_title\0\u{3}last_output_summary\0\u{3}tool_use_count\0\u{3}available_models\0\u{3}current_model\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3625,6 +3650,8 @@ extension Amux_AgentInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
       case 9: try { try decoder.decodeSingularStringField(value: &self.sessionTitle) }()
       case 10: try { try decoder.decodeSingularStringField(value: &self.lastOutputSummary) }()
       case 11: try { try decoder.decodeSingularInt32Field(value: &self.toolUseCount) }()
+      case 12: try { try decoder.decodeRepeatedMessageField(value: &self.availableModels) }()
+      case 13: try { try decoder.decodeSingularStringField(value: &self.currentModel) }()
       default: break
       }
     }
@@ -3664,6 +3691,12 @@ extension Amux_AgentInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
     if self.toolUseCount != 0 {
       try visitor.visitSingularInt32Field(value: self.toolUseCount, fieldNumber: 11)
     }
+    if !self.availableModels.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.availableModels, fieldNumber: 12)
+    }
+    if !self.currentModel.isEmpty {
+      try visitor.visitSingularStringField(value: self.currentModel, fieldNumber: 13)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3679,6 +3712,43 @@ extension Amux_AgentInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
     if lhs.sessionTitle != rhs.sessionTitle {return false}
     if lhs.lastOutputSummary != rhs.lastOutputSummary {return false}
     if lhs.toolUseCount != rhs.toolUseCount {return false}
+    if lhs.availableModels != rhs.availableModels {return false}
+    if lhs.currentModel != rhs.currentModel {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Amux_ModelInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ModelInfo"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}display_name\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.displayName) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    if !self.displayName.isEmpty {
+      try visitor.visitSingularStringField(value: self.displayName, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Amux_ModelInfo, rhs: Amux_ModelInfo) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.displayName != rhs.displayName {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

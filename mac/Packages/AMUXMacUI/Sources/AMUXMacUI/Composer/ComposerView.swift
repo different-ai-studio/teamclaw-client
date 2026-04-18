@@ -5,10 +5,12 @@ struct ComposerView: View {
     let teamclawService: TeamclawService
     let sessionId: String
     let actorId: String
+    let agent: Agent?
 
     @State private var text: String = ""
     @State private var isSending = false
     @State private var voice = VoiceRecorder()
+    @State private var selectedModelId: String?
     @FocusState private var inputFocused: Bool
 
     var body: some View {
@@ -25,7 +27,7 @@ struct ComposerView: View {
                     .onSubmit { send() }
 
                 HStack(spacing: 8) {
-                    ModelPicker(sessionId: sessionId)
+                    ModelPicker(agent: agent, selectedModelId: $selectedModelId)
                     Spacer()
                     Button(action: micTapped) {
                         Image(systemName: voice.state == .recording ? "mic.fill" : "mic")
@@ -72,7 +74,8 @@ struct ComposerView: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isSending else { return }
         isSending = true
-        teamclawService.sendMessage(sessionId: sessionId, content: trimmed, actorId: actorId)
+        let model = selectedModelId ?? agent?.currentModel
+        teamclawService.sendMessage(sessionId: sessionId, content: trimmed, actorId: actorId, modelId: model)
         text = ""
         isSending = false
     }

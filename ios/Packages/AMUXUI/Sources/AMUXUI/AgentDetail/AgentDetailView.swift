@@ -267,9 +267,10 @@ public struct AgentDetailView: View {
                        isDisabled: !viewModel.isIdle,
                        isStreaming: viewModel.isStreaming,
                        hasAgent: viewModel.hasAgent,
-                       onSend: {
+                       agent: viewModel.agent,
+                       onSend: { modelId in
                            let t = promptText; promptText = ""
-                           Task { try? await viewModel.sendPrompt(t, modelContext: modelContext) }
+                           Task { try? await viewModel.sendPrompt(t, modelId: modelId, modelContext: modelContext) }
                        },
                        onCancel: { Task { try? await viewModel.cancelTask() } })
                 .presentationDetents([.medium])
@@ -334,14 +335,19 @@ private struct ReplySheet: View {
     let isDisabled: Bool
     let isStreaming: Bool
     let hasAgent: Bool
-    let onSend: () -> Void
+    let agent: Agent?
+    let onSend: (String?) -> Void
     let onCancel: () -> Void
     @FocusState private var isFocused: Bool
     @State private var showFilePicker = false
-    @AppStorage("selectedModel") private var selectedModel = "Sonnet"
+    @State private var selectedModelId: String?
     @State private var attachedFiles: [String] = []
 
-    private let models = ["Haiku", "Sonnet", "Opus"]
+    private var resolvedModelId: String? {
+        if let selectedModelId, !selectedModelId.isEmpty { return selectedModelId }
+        if let current = agent?.currentModel, !current.isEmpty { return current }
+        return nil
+    }
 
     private var canSend: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isDisabled && !isStreaming
@@ -420,20 +426,26 @@ private struct ReplySheet: View {
 
                     Button { showFilePicker = true } label: { Image(systemName: "paperclip").font(.title3) }
 
-                    if hasAgent {
+                    if hasAgent, let agent, !agent.availableModels.isEmpty {
+                        let models = agent.availableModels
+                        let pickerLabel = models.first(where: { $0.id == resolvedModelId })?.displayName ?? "Default"
                         Menu {
-                            ForEach(models, id: \.self) { model in
+                            ForEach(models) { model in
                                 Button {
-                                    selectedModel = model
+                                    selectedModelId = model.id
                                 } label: {
-                                    Label(model, systemImage: selectedModel == model ? "checkmark" : "")
+                                    if model.id == resolvedModelId {
+                                        Label(model.displayName, systemImage: "checkmark")
+                                    } else {
+                                        Text(model.displayName)
+                                    }
                                 }
                             }
                         } label: {
                             HStack(spacing: 3) {
                                 Image(systemName: "cpu")
                                     .font(.caption)
-                                Text(selectedModel)
+                                Text(pickerLabel)
                                     .font(.caption)
                                     .fontWeight(.medium)
                             }
@@ -445,7 +457,7 @@ private struct ReplySheet: View {
                     }
 
                     Button {
-                        onSend()
+                        onSend(resolvedModelId)
                         dismiss()
                     } label: {
                         Image(systemName: "arrow.up")

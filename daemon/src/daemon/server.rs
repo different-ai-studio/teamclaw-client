@@ -243,8 +243,13 @@ impl DaemonServer {
                 // Publish completed output to collab sessions this agent participates in
                 if let Some(tc) = &self.teamclaw {
                     let collab_sessions = tc.sessions_for_agent(agent_id);
+                    // Safe to read current_model here: the daemon event loop is single-threaded and
+                    // check_agent_busy prevents prompt overlap, so no SetModel can interleave between
+                    // the agent's reply and this lookup. If those invariants change, capture the model
+                    // at prompt arrival on the AcpEvent instead.
+                    let model = self.agents.current_model(agent_id).cloned().unwrap_or_default();
                     for sid in &collab_sessions {
-                        tc.publish_agent_message(sid, agent_id, &output.text).await;
+                        tc.publish_agent_message(sid, agent_id, &output.text, &model).await;
                     }
                 }
             }
@@ -291,8 +296,12 @@ impl DaemonServer {
                 self.handle_device_collab(envelope).await;
             }
             subscriber::IncomingMessage::TeamclawRpc { topic, payload } => {
+                // Pre-compute the host's primary agent_id so SessionManager
+                // can stamp it onto any newly created session without needing
+                // a back-reference into AgentManager.
+                let primary = self.agents.first_running_agent_id();
                 if let Some(tc) = &mut self.teamclaw {
-                    tc.handle_rpc_request(&topic, &payload).await;
+                    tc.handle_rpc_request(&topic, &payload, primary).await;
                 }
             }
             subscriber::IncomingMessage::TeamclawSessionMessage { session_id, payload } => {
@@ -419,8 +428,8 @@ impl DaemonServer {
                         self.sessions.upsert(stored);
                         let _ = self.sessions.save(&self.sessions_path);
                         let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
-                        if let Some(handle) = self.agents.get_handle(&new_id) {
-                            let _ = publisher.publish_agent_state(&new_id, &handle.to_proto_info()).await;
+                        if let Some(info) = self.agents.to_proto_info(&new_id) {
+                            let _ = publisher.publish_agent_state(&new_id, &info).await;
                         }
                     }
                     Err(e) => {
@@ -451,6 +460,25 @@ impl DaemonServer {
                             })),
                         }).await;
                         return;
+                    }
+                }
+
+                // If the client requested a specific model and it differs from
+                // the one we last applied, forward a SetModel command before
+                // the prompt so the new turn runs on the requested model.
+                let desired_model = prompt.model_id.clone();
+                if !desired_model.is_empty() {
+                    let current = self.agents.current_model(agent_id).cloned().unwrap_or_default();
+                    if desired_model != current {
+                        match self.agents.send_set_model(agent_id, &desired_model).await {
+                            Ok(()) => {
+                                self.agents.set_current_model(agent_id, &desired_model);
+                                let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
+                            }
+                            Err(e) => {
+                                warn!(agent_id, model_id = %desired_model, "send_set_model failed: {}", e);
+                            }
+                        }
                     }
                 }
 

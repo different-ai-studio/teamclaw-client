@@ -94,7 +94,17 @@ impl SessionManager {
     }
 
     /// Handle an incoming RPC request on topic with the given payload.
-    pub async fn handle_rpc_request(&mut self, topic: &str, payload: &[u8]) {
+    ///
+    /// `host_primary_agent_id` is the agent_id this device should record as
+    /// the new session's primary agent if a CreateSession RPC arrives. The
+    /// caller (DaemonServer) computes this from `AgentManager` so that the
+    /// SessionManager doesn't need a back-reference into agent state.
+    pub async fn handle_rpc_request(
+        &mut self,
+        topic: &str,
+        payload: &[u8],
+        host_primary_agent_id: Option<String>,
+    ) {
         let (request_id, req) = match RpcServer::parse_request(topic, payload) {
             Some(pair) => pair,
             None => {
@@ -106,7 +116,7 @@ impl SessionManager {
         let response = match &req.method {
             Some(teamclaw::rpc_request::Method::CreateSession(r)) => {
                 let r = r.clone();
-                self.handle_create_session(&req, r).await
+                self.handle_create_session(&req, r, host_primary_agent_id.clone()).await
             }
             Some(teamclaw::rpc_request::Method::FetchSession(r)) => {
                 let r = r.clone();
@@ -164,6 +174,7 @@ impl SessionManager {
         &mut self,
         req: &RpcRequest,
         r: teamclaw::CreateSessionRequest,
+        host_primary_agent_id: Option<String>,
     ) -> RpcResponse {
         let session_id = Uuid::new_v4().to_string();
         let session_type = match r.session_type {
@@ -181,6 +192,7 @@ impl SessionManager {
             created_at: Utc::now(),
             summary: r.summary.clone(),
             participants: vec![],
+            primary_agent_id: host_primary_agent_id.unwrap_or_default(),
         };
 
         self.sessions.upsert(session);
@@ -781,6 +793,10 @@ impl SessionManager {
                 created_at: Utc::now(),
                 summary: String::new(),
                 participants: vec![],
+                // primary_agent_id is host-local state; the team host stores
+                // a stub (empty) on RegisterSession and lets the host's own
+                // SessionMeta publish carry the authoritative value.
+                primary_agent_id: String::new(),
             };
             self.sessions.upsert(stored);
             if let Err(e) = self.sessions.save(&self.sessions_path) {
@@ -917,11 +933,16 @@ impl SessionManager {
     }
 
     /// Publish an agent's output as a session message.
+    ///
+    /// `model` is the model id the agent was running on when it produced this
+    /// reply (looked up from `AgentManager.current_model` by the caller).
+    /// Pass an empty string for legacy / unknown.
     pub async fn publish_agent_message(
         &self,
         session_id: &str,
         agent_actor_id: &str,
         content: &str,
+        model: &str,
     ) {
         let msg = teamclaw::Message {
             message_id: Uuid::new_v4().to_string()[..8].to_string(),
@@ -930,6 +951,7 @@ impl SessionManager {
             kind: teamclaw::MessageKind::Text as i32,
             content: content.to_string(),
             created_at: Utc::now().timestamp(),
+            model: model.to_string(),
             ..Default::default()
         };
         let envelope = teamclaw::SessionMessageEnvelope {
@@ -1061,6 +1083,7 @@ mod tests {
             created_at: Utc::now(),
             summary: String::new(),
             participants: vec![],
+            primary_agent_id: String::new(),
         }
     }
 

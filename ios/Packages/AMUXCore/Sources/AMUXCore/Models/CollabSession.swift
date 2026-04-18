@@ -15,6 +15,7 @@ public final class CollabSession {
     public var lastMessagePreview: String
     public var lastMessageAt: Date?
     public var workItemId: String
+    public var primaryAgentId: String?
 
     public init(
         sessionId: String,

@@ -359,6 +359,12 @@ public struct NewSessionSheet: View {
                                 summary: info.summary,
                                 participantCount: info.participants.count
                             )
+                            // v1: only the host of a CreateSession path gets primaryAgentId stamped here.
+                            // Sessions discovered via SessionIndex don't carry primary_agent_id (proto
+                            // only puts it on SessionInfo). Non-host members get nil → composer hides
+                            // the model picker per Plan 6 spec. /session/{id}/meta decoding for non-host
+                            // primary agent discovery is a v1.1 follow-up.
+                            session.primaryAgentId = info.primaryAgentID.isEmpty ? nil : info.primaryAgentID
                             modelContext.insert(session)
                             try? modelContext.save()
                             // Also refresh the viewModel

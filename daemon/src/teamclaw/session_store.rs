@@ -23,6 +23,12 @@ pub struct StoredCollabSession {
     pub summary: String,
     #[serde(default)]
     pub participants: Vec<StoredParticipant>,
+    /// The host's primary agent_id when this session was created. Used to
+    /// populate `SessionInfo.primary_agent_id` so clients know which agent
+    /// receives messages by default. Empty for sessions created when no
+    /// agent was running, for non-host views, or for pre-Plan-6 sessions.
+    #[serde(default)]
+    pub primary_agent_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,6 +126,7 @@ impl TeamclawSessionStore {
                 created_at: s.created_at.timestamp(),
                 participants,
                 summary: s.summary.clone(),
+                primary_agent_id: s.primary_agent_id.clone(),
             }
         })
     }
@@ -159,6 +166,7 @@ mod tests {
             created_at: Utc::now(),
             summary: String::new(),
             participants: vec![],
+            primary_agent_id: String::new(),
         }
     }
 

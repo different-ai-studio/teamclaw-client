@@ -61,11 +61,15 @@ fn main() -> anyhow::Result<()> {
                 let binary = "claude".to_string();
                 println!("Spawning ACP agent: {} with prompt \"{}\" in {}", binary, prompt, worktree);
 
+                let (initial_model_tx, _initial_model_rx) =
+                    tokio::sync::oneshot::channel::<Option<String>>();
                 let _cmd_tx = agent::adapter::spawn_acp_agent(
                     binary,
                     worktree.clone(),
                     prompt.clone(),
+                    proto::amux::AgentType::ClaudeCode,
                     tx,
+                    initial_model_tx,
                 )?;
 
                 println!("--- Streaming events (Ctrl+C to stop) ---\n");

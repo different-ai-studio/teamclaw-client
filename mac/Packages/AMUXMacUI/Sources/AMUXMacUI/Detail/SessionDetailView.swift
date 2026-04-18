@@ -10,6 +10,12 @@ struct SessionDetailView: View {
     @Environment(\.modelContext) private var modelContext
 
     @Query private var allMessages: [SessionMessage]
+    @Query private var allAgents: [Agent]
+
+    private var primaryAgent: Agent? {
+        guard let id = session.primaryAgentId else { return nil }
+        return allAgents.first(where: { $0.agentId == id })
+    }
 
     var body: some View {
         let messages = allMessages
@@ -37,7 +43,8 @@ struct SessionDetailView: View {
             ComposerView(
                 teamclawService: teamclawService,
                 sessionId: session.sessionId,
-                actorId: actorId
+                actorId: actorId,
+                agent: primaryAgent
             )
         }
         .task(id: session.sessionId) {
@@ -65,7 +72,21 @@ struct SessionDetailView: View {
         } else if message.senderActorId == actorId {
             MessageRowUser(message: message, senderName: senderName(for: message.senderActorId))
         } else {
-            MessageRowAgent(message: message, senderName: senderName(for: message.senderActorId))
+            MessageRowAgent(
+                message: message,
+                senderName: senderName(for: message.senderActorId),
+                modelLabel: modelLabel(for: message)
+            )
         }
+    }
+
+    private var modelLookup: [String: String] {
+        guard let agent = primaryAgent else { return [:] }
+        return Dictionary(uniqueKeysWithValues: agent.availableModels.map { ($0.id, $0.displayName) })
+    }
+
+    private func modelLabel(for message: SessionMessage) -> String? {
+        guard let modelId = message.model, !modelId.isEmpty else { return nil }
+        return modelLookup[modelId] ?? modelId
     }
 }

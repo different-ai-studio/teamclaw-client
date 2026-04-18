@@ -218,6 +218,7 @@ public final class TeamclawService {
             replyToMessageId: message.replyToMessageID,
             mentions: message.mentions.joined(separator: ",")
         )
+        sessionMessage.model = message.model.isEmpty ? nil : message.model
         modelContext.insert(sessionMessage)
         try? modelContext.save()
     }
@@ -325,8 +326,21 @@ public final class TeamclawService {
 
     // MARK: - Outbound
 
-    public func sendMessage(sessionId: String, content: String, actorId: String) {
+    /// Send a text message to a collab session.
+    ///
+    /// - Parameter modelId: Optional model identifier the user picked in the composer.
+    ///   v1 limitation: this parameter is accepted for API completeness but is not yet
+    ///   forwarded to the daemon's agent prompt path. Collab→agent dispatch is not a
+    ///   single direct path today; the model on the resulting `Message` proto is stamped
+    ///   by the daemon when it forwards a prompt to its agent. See plan
+    ///   `docs/plans/end-to-end-model-selection.md` Task 6 for context.
+    public func sendMessage(sessionId: String, content: String, actorId: String, modelId: String? = nil) {
         guard let mqtt else { return }
+        // TODO(plan-6-v2): forward modelId to daemon's agent prompt path
+        // (collab→agent dispatch is daemon-mediated; daemon doesn't yet promote
+        // a Teamclaw_Message into an AcpSendPrompt.modelId. Until then this
+        // parameter is accepted but ignored.)
+        _ = modelId
         var message = Teamclaw_Message()
         message.messageID = UUID().uuidString
         message.sessionID = sessionId

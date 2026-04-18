@@ -129,6 +129,7 @@ message AcpRequestHistory {
 
 message AcpSendPrompt {
   string text = 1;
+  string model_id = 2;
 }
 
 message AcpCancel {}
@@ -331,6 +332,13 @@ message AgentInfo {
   string session_title = 9;
   string last_output_summary = 10;
   int32 tool_use_count = 11;
+  repeated ModelInfo available_models = 12;
+  string current_model = 13;
+}
+
+message ModelInfo {
+  string id = 1;
+  string display_name = 2;
 }
 
 message AgentList {
