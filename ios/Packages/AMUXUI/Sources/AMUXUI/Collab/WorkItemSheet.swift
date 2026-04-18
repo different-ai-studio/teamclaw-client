@@ -157,6 +157,7 @@ struct CreateWorkItemSheet: View {
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $text)
                         .focused($isFocused)
+                        .disabled(isRecording)
                         .font(.body)
                         .scrollContentBackground(.hidden)
                         .padding(.horizontal, 16)
