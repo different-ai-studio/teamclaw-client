@@ -17,6 +17,9 @@ public final class Agent {
     public var lastOutputSummary: String
     public var toolUseCount: Int
     public var hasUnread: Bool
+    /// Stored as JSON because SwiftData doesn't store [Codable] arrays cleanly.
+    /// Read via the `availableModels` extension; refactor to a @Model relationship
+    /// if the model list grows beyond the daemon-hardcoded handful.
     public var availableModelsJSON: String = ""
     public var currentModel: String?
 
