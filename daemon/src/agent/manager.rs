@@ -9,6 +9,12 @@ use super::handle::AgentHandle;
 pub struct AgentManager {
     agents: HashMap<String, AgentHandle>,
     claude_binary: String,
+    /// Tracks the model id currently applied to each agent's ACP session.
+    /// Populated on spawn (after the adapter sends the initial set_model)
+    /// and updated whenever set_current_model is called. The adapter is
+    /// responsible for actually calling ACP `session/set_model`; this map
+    /// is the daemon-side mirror used to populate AgentInfo.current_model.
+    pub current_model_per_agent: HashMap<String, String>,
 }
 
 impl AgentManager {
@@ -16,7 +22,21 @@ impl AgentManager {
         Self {
             agents: HashMap::new(),
             claude_binary: binary,
+            current_model_per_agent: HashMap::new(),
         }
+    }
+
+    /// Records that an agent's session is now running on `model_id`.
+    /// Caller is responsible for actually invoking ACP set_model on the
+    /// adapter; this only updates the tracking map.
+    pub fn set_current_model(&mut self, agent_id: &str, model_id: &str) {
+        self.current_model_per_agent
+            .insert(agent_id.to_string(), model_id.to_string());
+    }
+
+    /// Returns the model id last recorded for `agent_id`, if any.
+    pub fn current_model(&self, agent_id: &str) -> Option<&String> {
+        self.current_model_per_agent.get(agent_id)
     }
 
     pub async fn spawn_agent(
@@ -30,11 +50,15 @@ impl AgentManager {
         let mut handle = AgentHandle::new(agent_id.clone(), agent_type, worktree.into(), workspace_id.into());
         handle.current_prompt = prompt.into();
 
+        let (initial_model_tx, initial_model_rx) = tokio::sync::oneshot::channel::<String>();
+
         let cmd_tx = adapter::spawn_acp_agent(
             self.claude_binary.clone(),
             worktree.to_string(),
             prompt.to_string(),
+            agent_type,
             handle.event_tx.clone(),
+            initial_model_tx,
         )?;
 
         handle.cmd_tx = Some(cmd_tx);
@@ -42,6 +66,17 @@ impl AgentManager {
 
         info!(agent_id, worktree, "agent spawned via ACP");
         self.agents.insert(agent_id.clone(), handle);
+
+        // Wait for the adapter to report the model it applied. An empty
+        // string means no model was applied (no models known for this
+        // agent type, or the ACP call failed); skip recording in that case.
+        if let Ok(model_id) = initial_model_rx.await {
+            if !model_id.is_empty() {
+                self.current_model_per_agent
+                    .insert(agent_id.clone(), model_id);
+            }
+        }
+
         Ok(agent_id)
     }
 
@@ -115,5 +150,26 @@ impl AgentManager {
 
     pub fn agent_ids(&self) -> Vec<String> {
         self.agents.keys().cloned().collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_current_model_records_value() {
+        let mut mgr = AgentManager::new("claude".to_string(), vec![]);
+        mgr.set_current_model("agent-1", "claude-sonnet-4-6");
+        assert_eq!(
+            mgr.current_model("agent-1").map(|s| s.as_str()),
+            Some("claude-sonnet-4-6")
+        );
+    }
+
+    #[test]
+    fn current_model_returns_none_for_unknown_agent() {
+        let mgr = AgentManager::new("claude".to_string(), vec![]);
+        assert_eq!(mgr.current_model("agent-1"), None);
     }
 }

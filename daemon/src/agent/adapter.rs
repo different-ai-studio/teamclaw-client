@@ -22,6 +22,8 @@ pub enum AcpCommand {
     Cancel,
     /// Resolve a pending permission request.
     ResolvePermission { request_id: String, granted: bool },
+    /// Switch the model used by the current session.
+    SetModel { model_id: String },
     /// Shut down the agent.
     Shutdown,
 }
@@ -355,11 +357,20 @@ fn extract_text(content: &acp::ContentBlock) -> String {
 /// permission responses, and cancellation signals.
 ///
 /// Events from the agent flow through `event_tx`.
+///
+/// `agent_type` is used to look up the default model from
+/// `crate::agent::models::available_models_for` and apply it via
+/// `session/set_model` immediately after Initialize.
+///
+/// `initial_model_tx` receives the model id that was applied (empty if
+/// no models are configured for `agent_type`).
 pub fn spawn_acp_agent(
     binary: String,
     worktree: String,
     initial_prompt: String,
+    agent_type: amux::AgentType,
     event_tx: mpsc::Sender<amux::AcpEvent>,
+    initial_model_tx: oneshot::Sender<String>,
 ) -> crate::error::Result<mpsc::Sender<AcpCommand>> {
     let (cmd_tx, cmd_rx) = mpsc::channel::<AcpCommand>(64);
 
@@ -375,8 +386,16 @@ pub fn spawn_acp_agent(
 
             let local_set = tokio::task::LocalSet::new();
             rt.block_on(local_set.run_until(async move {
-                if let Err(e) =
-                    run_acp_session(binary, worktree, initial_prompt, event_tx, cmd_rx).await
+                if let Err(e) = run_acp_session(
+                    binary,
+                    worktree,
+                    initial_prompt,
+                    agent_type,
+                    event_tx,
+                    cmd_rx,
+                    initial_model_tx,
+                )
+                .await
                 {
                     error!("ACP agent session failed: {}", e);
                 }
@@ -392,8 +411,10 @@ async fn run_acp_session(
     binary: String,
     worktree: String,
     initial_prompt: String,
+    agent_type: amux::AgentType,
     event_tx: mpsc::Sender<amux::AcpEvent>,
     mut cmd_rx: mpsc::Receiver<AcpCommand>,
+    initial_model_tx: oneshot::Sender<String>,
 ) -> anyhow::Result<()> {
     // Spawn the ACP agent process
     // Use claude-agent-acp wrapper (Node.js) which speaks ACP JSON-RPC over stdio
@@ -470,6 +491,34 @@ async fn run_acp_session(
 
     let session_id = session_resp.session_id.clone();
     info!(session_id = %session_id, "ACP session created");
+
+    // Apply the default model from the hardcoded list before any prompt runs.
+    // This ensures the very first turn is on the chosen model.
+    let initial_model_id: String = {
+        let models = crate::agent::models::available_models_for(agent_type);
+        if let Some(first) = models.first() {
+            let req = acp::SetSessionModelRequest::new(
+                session_id.clone(),
+                acp::ModelId::new(first.id.clone()),
+            );
+            match conn.set_session_model(req).await {
+                Ok(_) => {
+                    info!(model_id = %first.id, "ACP initial set_session_model applied");
+                    first.id.clone()
+                }
+                Err(e) => {
+                    warn!(error = %e, "initial set_session_model failed");
+                    String::new()
+                }
+            }
+        } else {
+            String::new()
+        }
+    };
+    // Notify the caller (manager) of the chosen model. Empty string means
+    // no model could be applied (no models known for this agent type, or the
+    // ACP call failed); the manager decides what to record.
+    let _ = initial_model_tx.send(initial_model_id);
 
     // Use Rc to share conn across spawn_local tasks
     let conn = Rc::new(conn);
@@ -580,6 +629,17 @@ async fn run_acp_session(
                     let _ = tx.send(granted);
                 } else {
                     warn!(request_id, "no pending permission request found");
+                }
+            }
+            AcpCommand::SetModel { model_id } => {
+                let req = acp::SetSessionModelRequest::new(
+                    session_id.clone(),
+                    acp::ModelId::new(model_id.clone()),
+                );
+                if let Err(e) = conn.set_session_model(req).await {
+                    warn!(error = %e, model_id = %model_id, "set_session_model failed");
+                } else {
+                    info!(model_id = %model_id, "set_session_model applied");
                 }
             }
             AcpCommand::Shutdown => {
