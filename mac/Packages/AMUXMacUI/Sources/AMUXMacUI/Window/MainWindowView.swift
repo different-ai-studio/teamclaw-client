@@ -10,6 +10,8 @@ public struct MainWindowView: View {
     @SceneStorage("amux.mainWindow.selectedTask") private var selectedTaskId: String?
     @State private var mqtt: MQTTService?
     @State private var monitor: ConnectionMonitor?
+    @State private var peerId: String = "mac-\(UUID().uuidString.prefix(6))"
+    @State private var showNewSession = false
     let teamclaw: TeamclawService
     @State private var members = MemberListViewModel()
 
@@ -50,11 +52,47 @@ public struct MainWindowView: View {
             detail
         }
         .navigationSplitViewStyle(.balanced)
+        .navigationTitle("")
+        .toolbar(removing: .title)
+        .toolbarBackground(.hidden, for: .windowToolbar)
+        .sheet(isPresented: $showNewSession) {
+            if let mqtt {
+                NewSessionSheet(
+                    mqtt: mqtt,
+                    deviceId: pairing.deviceId,
+                    peerId: peerId,
+                    onSessionCreated: { agentId in
+                        selectedSessionId = agentId
+                    }
+                )
+            } else {
+                VStack(spacing: 12) {
+                    Text("Not connected")
+                        .font(.headline)
+                    Text("Connect to the daemon before creating a session.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Button("Close") { showNewSession = false }
+                }
+                .padding(32)
+                .frame(minWidth: 320)
+            }
+        }
     }
 
     private var sidebar: some View {
-        SidebarView(selection: sidebarSelectionBinding, members: members.members)
-            .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 320)
+        VStack(spacing: 0) {
+            SidebarView(
+                selection: sidebarSelectionBinding,
+                members: members.members,
+                mqtt: mqtt,
+                deviceId: pairing.deviceId,
+                peerId: peerId
+            )
+            Divider()
+            DaemonStatusFooter(pairing: pairing, monitor: monitor)
+        }
+        .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 320)
     }
 
     private var sidebarSelectionBinding: Binding<SidebarItem?> {
@@ -72,28 +110,36 @@ public struct MainWindowView: View {
             case .function(.sessions), .none:
                 SessionListColumn(
                     memberFilter: nil,
-                    selectedSessionId: $selectedSessionId
+                    memberName: nil,
+                    selectedSessionId: $selectedSessionId,
+                    onNewSession: handleNewSession
                 )
             case .member(let id):
                 SessionListColumn(
                     memberFilter: id,
-                    selectedSessionId: $selectedSessionId
+                    memberName: members.members.first(where: { $0.memberId == id })?.displayName,
+                    selectedSessionId: $selectedSessionId,
+                    onNewSession: handleNewSession
                 )
             }
         }
-        .navigationSplitViewColumnWidth(min: 280, ideal: 360, max: 480)
+        .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
+        .ignoresSafeArea(.container, edges: .top)
+    }
+
+    private func handleNewSession() {
+        showNewSession = true
     }
 
     private var detail: some View {
         DetailPlaceholderView(
-            pairing: pairing,
-            monitor: monitor,
             teamclawService: teamclaw,
             actorId: pairing.deviceId,
             selectedSessionId: selectedSessionId,
             selectedTaskId: selectedTaskId
         )
-        .frame(minWidth: 480)
+        .ignoresSafeArea(.container, edges: .top)
+        .frame(minWidth: 360)
         .task { await connectIfNeeded() }
     }
 
@@ -117,8 +163,8 @@ public struct MainWindowView: View {
         self.mqtt = service
         self.monitor = mon
 
-        // Start data sync
-        let peerId = "mac-\(UUID().uuidString.prefix(6))"
+        // Start data sync (peerId persisted on the view's state so the
+        // NewSessionSheet can publish commands with the same peer identity).
         teamclaw.start(
             mqtt: service,
             teamId: Self.teamId,

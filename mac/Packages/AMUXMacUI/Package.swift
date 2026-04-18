@@ -15,7 +15,8 @@ let package = Package(
             name: "AMUXMacUI",
             dependencies: [
                 .product(name: "AMUXCore", package: "AMUXCore"),
-            ]
+            ],
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "AMUXMacUITests",

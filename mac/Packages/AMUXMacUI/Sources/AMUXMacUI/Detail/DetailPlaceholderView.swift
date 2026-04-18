@@ -3,8 +3,6 @@ import SwiftData
 import AMUXCore
 
 struct DetailPlaceholderView: View {
-    let pairing: PairingManager
-    let monitor: ConnectionMonitor?
     let teamclawService: TeamclawService
     let actorId: String
     let selectedSessionId: String?
@@ -15,9 +13,6 @@ struct DetailPlaceholderView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            DaemonStatusBar(pairing: pairing, monitor: monitor)
-            Divider()
-
             Group {
                 if let session = selectedSession {
                     SessionDetailView(session: session, teamclawService: teamclawService, actorId: actorId)
@@ -65,26 +60,3 @@ struct DetailPlaceholderView: View {
     }
 }
 
-private struct DaemonStatusBar: View {
-    let pairing: PairingManager
-    let monitor: ConnectionMonitor?
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(monitor?.daemonOnline == true ? Color.green : Color.red)
-                .frame(width: 8, height: 8)
-            Text(monitor?.daemonOnline == true ? "Daemon online" : "Daemon offline")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text("\(pairing.brokerHost):\(pairing.brokerPort) · \(pairing.deviceId)")
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-    }
-}
