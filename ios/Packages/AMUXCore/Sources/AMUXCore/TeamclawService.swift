@@ -134,6 +134,17 @@ public final class TeamclawService {
             }
             return
         }
+
+        if topic.contains("/session/") && topic.hasSuffix("/meta") {
+            guard let envelope = try? Teamclaw_SessionMetaEnvelope(serializedBytes: incoming.payload) else {
+                print("[TeamclawService] failed to decode SessionMetaEnvelope from topic: \(topic)")
+                return
+            }
+            if envelope.hasSession {
+                syncSessionMeta(envelope.session, modelContext: modelContext)
+            }
+            return
+        }
     }
 
     // MARK: - Sync Handlers
@@ -186,6 +197,27 @@ public final class TeamclawService {
         sessions = (try? modelContext.fetch(FetchDescriptor<CollabSession>(
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         ))) ?? []
+    }
+
+    private func syncSessionMeta(_ proto: Teamclaw_SessionInfo, modelContext: ModelContext) {
+        let sessionId = proto.sessionID
+        guard !sessionId.isEmpty else { return }
+
+        let descriptor = FetchDescriptor<CollabSession>(
+            predicate: #Predicate { $0.sessionId == sessionId }
+        )
+        guard let existing = (try? modelContext.fetch(descriptor))?.first else {
+            // No local CollabSession yet — the SessionIndex sync path will create one
+            // when the retained /sessions message arrives. Avoid speculative inserts
+            // to prevent duplicates; syncSessionMeta will be re-triggered on the
+            // next retained delivery or can be applied once the session exists.
+            return
+        }
+
+        existing.primaryAgentId = proto.primaryAgentID.isEmpty ? nil : proto.primaryAgentID
+        if !proto.title.isEmpty { existing.title = proto.title }
+        if !proto.summary.isEmpty { existing.summary = proto.summary }
+        try? modelContext.save()
     }
 
     private func syncMessage(_ message: Teamclaw_Message, modelContext: ModelContext) {
