@@ -57,6 +57,11 @@ message AcpEvent {
     AcpTodoUpdate todo_update = 8;
     AcpRawJson raw = 15;           // Catch-all for new ACP events not yet mapped
   }
+  // Model id that produced this event. Set by the daemon for agent-reply
+  // events (Output, Thinking) so iOS bubbles can show which model spoke.
+  // Empty for non-reply events (status changes, tool calls, user prompts,
+  // permission requests, etc).
+  string model = 16;
 }
 
 message AcpThinking {

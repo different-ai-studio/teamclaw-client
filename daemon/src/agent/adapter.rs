@@ -69,6 +69,7 @@ impl acp::Client for AmuxClient {
                         params: Default::default(),
                     },
                 )),
+                model: String::new(),
             })
             .await;
 
@@ -211,6 +212,7 @@ fn translate_session_update(update: acp::SessionUpdate) -> Vec<amux::AcpEvent> {
                     text,
                     is_complete: false,
                 })),
+                model: String::new(),
             }]
         }
         acp::SessionUpdate::AgentThoughtChunk(chunk) => {
@@ -220,6 +222,7 @@ fn translate_session_update(update: acp::SessionUpdate) -> Vec<amux::AcpEvent> {
             }
             vec![amux::AcpEvent {
                 event: Some(amux::acp_event::Event::Thinking(amux::AcpThinking { text })),
+                model: String::new(),
             }]
         }
         acp::SessionUpdate::ToolCall(tc) => {
@@ -249,6 +252,7 @@ fn translate_session_update(update: acp::SessionUpdate) -> Vec<amux::AcpEvent> {
                     description,
                     params: Default::default(),
                 })),
+                model: String::new(),
             }]
         }
         acp::SessionUpdate::ToolCallUpdate(tcu) => {
@@ -284,6 +288,7 @@ fn translate_session_update(update: acp::SessionUpdate) -> Vec<amux::AcpEvent> {
                         success,
                         summary,
                     })),
+                    model: String::new(),
                 }]
             } else if let Some(title) = tcu.fields.title {
                 // Title update — emit as a ToolUse with updated name so iOS can refresh
@@ -294,6 +299,7 @@ fn translate_session_update(update: acp::SessionUpdate) -> Vec<amux::AcpEvent> {
                             method: "tool_title_update".into(),
                             json_payload: format!("{}|{}", tool_id, clean_title).into_bytes(),
                         })),
+                        model: String::new(),
                     }]
                 } else {
                     vec![]
@@ -310,6 +316,7 @@ fn translate_session_update(update: acp::SessionUpdate) -> Vec<amux::AcpEvent> {
                         method: "session_title".into(),
                         json_payload: title.into_bytes(),
                     })),
+                    model: String::new(),
                 }]
             } else {
                 vec![]
@@ -541,6 +548,7 @@ async fn run_acp_session(
                             new_status: amux::AgentStatus::Active as i32,
                         },
                     )),
+                    model: String::new(),
                 })
                 .await;
 
@@ -564,6 +572,7 @@ async fn run_acp_session(
                             new_status: amux::AgentStatus::Idle as i32,
                         },
                     )),
+                    model: String::new(),
                 })
                 .await;
         });
@@ -587,6 +596,7 @@ async fn run_acp_session(
                                     new_status: amux::AgentStatus::Active as i32,
                                 },
                             )),
+                            model: String::new(),
                         })
                         .await;
 
@@ -610,6 +620,7 @@ async fn run_acp_session(
                                     new_status: amux::AgentStatus::Idle as i32,
                                 },
                             )),
+                            model: String::new(),
                         })
                         .await;
                 });

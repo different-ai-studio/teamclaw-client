@@ -13,6 +13,10 @@ public final class AgentEvent {
     public var toolId: String?
     public var isComplete: Bool
     public var success: Bool?
+    /// Model id that produced this event (set by the daemon on agent-reply
+    /// events: output and thinking). nil for user prompts, tool events,
+    /// status changes, errors, permission requests.
+    public var model: String?
 
     public init(agentId: String, sequence: Int, eventType: String) {
         self.id = UUID().uuidString
@@ -21,5 +25,16 @@ public final class AgentEvent {
         self.timestamp = .now
         self.eventType = eventType
         self.isComplete = false
+    }
+}
+
+public extension AgentEvent {
+    /// Returns the human display name for `model` resolved against the agent's
+    /// available models, or nil if no model is stamped. Falls back to the raw
+    /// model id when no display name is registered (e.g. proto-only model id
+    /// from a future daemon).
+    func modelDisplayName(via agent: Agent) -> String? {
+        guard let modelId = self.model, !modelId.isEmpty else { return nil }
+        return agent.availableModels.first(where: { $0.id == modelId })?.displayName ?? modelId
     }
 }

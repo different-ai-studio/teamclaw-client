@@ -171,7 +171,23 @@ impl DaemonServer {
     }
 
     /// Forward an agent event to MQTT as an Envelope on the agent's events topic
-    async fn forward_agent_event(&mut self, agent_id: &str, acp_event: amux::AcpEvent) {
+    async fn forward_agent_event(&mut self, agent_id: &str, mut acp_event: amux::AcpEvent) {
+        // Stamp the current model on agent-reply events (Output, Thinking) so iOS
+        // bubbles can show which model produced the response. Other event types
+        // (status changes, tool calls, permission requests, raw control messages)
+        // are not model-attributable and stay empty. Safe to read current_model
+        // here for the same reason as the collab publish path: the daemon event
+        // loop is single-threaded, so no SetModel can interleave between the
+        // agent's reply and this lookup.
+        if matches!(
+            acp_event.event,
+            Some(amux::acp_event::Event::Output(_)) | Some(amux::acp_event::Event::Thinking(_))
+        ) {
+            if let Some(model) = self.agents.current_model(agent_id) {
+                acp_event.model = model.clone();
+            }
+        }
+
         // Register permission requests for later resolution
         if let Some(amux::acp_event::Event::PermissionRequest(ref pr)) = acp_event.event {
             self.permissions.register_pending(&pr.request_id);
@@ -198,6 +214,7 @@ impl DaemonServer {
                             method: "tool_title_update".into(),
                             json_payload: raw.json_payload.clone(),
                         })),
+                        model: String::new(),
                     };
                     let seq = self.agents.get_handle_mut(agent_id).map(|h| h.next_sequence()).unwrap_or(0);
                     let envelope = amux::Envelope {
