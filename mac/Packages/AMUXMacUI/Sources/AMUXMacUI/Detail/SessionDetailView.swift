@@ -68,7 +68,8 @@ struct SessionDetailView: View {
                 teamclawService: teamclawService,
                 sessionId: session.sessionId,
                 actorId: actorId,
-                agent: primaryAgent
+                agent: primaryAgent,
+                agentVM: agentVM
             )
         }
         .task(id: session.sessionId) {

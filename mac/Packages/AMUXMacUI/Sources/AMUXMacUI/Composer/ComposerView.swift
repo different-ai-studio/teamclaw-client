@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import AMUXCore
 
 struct ComposerView: View {
@@ -6,7 +7,13 @@ struct ComposerView: View {
     let sessionId: String
     let actorId: String
     let agent: Agent?
+    /// When non-nil, prompts are routed through ACP (Amux_AcpSendPrompt) via
+    /// the shared AgentDetailViewModel so the daemon and agent receive them
+    /// as real prompts. When nil (collab-only sessions), prompts fall back
+    /// to TeamclawService.sendMessage which only broadcasts a chat bubble.
+    let agentVM: AgentDetailViewModel?
 
+    @Environment(\.modelContext) private var modelContext
     @State private var text: String = ""
     @State private var isSending = false
     @State private var voice = VoiceRecorder()
@@ -75,9 +82,21 @@ struct ComposerView: View {
         guard !trimmed.isEmpty, !isSending else { return }
         isSending = true
         let model = selectedModelId ?? agent?.currentModel
-        teamclawService.sendMessage(sessionId: sessionId, content: trimmed, actorId: actorId, modelId: model)
         text = ""
-        isSending = false
+        if let agentVM {
+            // Agent session - route through ACP so the daemon actually
+            // delivers the prompt to the agent process. Mirrors iOS
+            // AgentDetailView's ReplySheet onSend handler.
+            let ctx = modelContext
+            Task {
+                defer { Task { @MainActor in isSending = false } }
+                try? await agentVM.sendPrompt(trimmed, modelId: model, modelContext: ctx)
+            }
+        } else {
+            // Collab-only session - broadcast a chat bubble via Teamclaw.
+            teamclawService.sendMessage(sessionId: sessionId, content: trimmed, actorId: actorId, modelId: model)
+            isSending = false
+        }
     }
 
     private func micTapped() {
