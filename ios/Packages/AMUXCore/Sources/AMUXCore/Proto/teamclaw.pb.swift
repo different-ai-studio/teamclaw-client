@@ -343,6 +343,8 @@ public struct Teamclaw_WorkItem: Sendable {
 
   public var submissions: [Teamclaw_Submission] = []
 
+  public var archived: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -896,9 +898,20 @@ public struct Teamclaw_UpdateWorkItemRequest: Sendable {
 
   public var description_p: String = String()
 
+  public var archived: Bool {
+    get {_archived ?? false}
+    set {_archived = newValue}
+  }
+  /// Returns true if `archived` has been explicitly set.
+  public var hasArchived: Bool {self._archived != nil}
+  /// Clears the value of `archived`. Subsequent reads from it will return its default value.
+  public mutating func clearArchived() {self._archived = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _archived: Bool? = nil
 }
 
 public struct Teamclaw_RegisterSessionRequest: Sendable {
@@ -1279,7 +1292,7 @@ extension Teamclaw_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
 extension Teamclaw_WorkItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".WorkItem"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}work_item_id\0\u{3}session_id\0\u{1}title\0\u{1}description\0\u{1}status\0\u{3}parent_id\0\u{3}created_by\0\u{3}created_at\0\u{1}claims\0\u{1}submissions\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}work_item_id\0\u{3}session_id\0\u{1}title\0\u{1}description\0\u{1}status\0\u{3}parent_id\0\u{3}created_by\0\u{3}created_at\0\u{1}claims\0\u{1}submissions\0\u{1}archived\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1297,6 +1310,7 @@ extension Teamclaw_WorkItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
       case 8: try { try decoder.decodeSingularInt64Field(value: &self.createdAt) }()
       case 9: try { try decoder.decodeRepeatedMessageField(value: &self.claims) }()
       case 10: try { try decoder.decodeRepeatedMessageField(value: &self.submissions) }()
+      case 11: try { try decoder.decodeSingularBoolField(value: &self.archived) }()
       default: break
       }
     }
@@ -1333,6 +1347,9 @@ extension Teamclaw_WorkItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
     if !self.submissions.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.submissions, fieldNumber: 10)
     }
+    if self.archived != false {
+      try visitor.visitSingularBoolField(value: self.archived, fieldNumber: 11)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1347,6 +1364,7 @@ extension Teamclaw_WorkItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
     if lhs.createdAt != rhs.createdAt {return false}
     if lhs.claims != rhs.claims {return false}
     if lhs.submissions != rhs.submissions {return false}
+    if lhs.archived != rhs.archived {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2474,7 +2492,7 @@ extension Teamclaw_SubmitWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
 
 extension Teamclaw_UpdateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateWorkItemRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}work_item_id\0\u{1}status\0\u{1}title\0\u{1}description\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}work_item_id\0\u{1}status\0\u{1}title\0\u{1}description\0\u{1}archived\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2487,12 +2505,17 @@ extension Teamclaw_UpdateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
       case 3: try { try decoder.decodeSingularEnumField(value: &self.status) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.title) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self._archived) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.sessionID.isEmpty {
       try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 1)
     }
@@ -2508,6 +2531,9 @@ extension Teamclaw_UpdateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
     if !self.description_p.isEmpty {
       try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 5)
     }
+    try { if let v = self._archived {
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 6)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2517,6 +2543,7 @@ extension Teamclaw_UpdateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
     if lhs.status != rhs.status {return false}
     if lhs.title != rhs.title {return false}
     if lhs.description_p != rhs.description_p {return false}
+    if lhs._archived != rhs._archived {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

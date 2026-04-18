@@ -98,6 +98,7 @@ message WorkItem {
   int64 created_at = 8;
   repeated Claim claims = 9;
   repeated Submission submissions = 10;
+  bool archived = 11;
 }
 
 message Claim {
@@ -248,6 +249,7 @@ message UpdateWorkItemRequest {
   WorkItemStatus status = 3;
   string title = 4;
   string description = 5;
+  optional bool archived = 6;
 }
 
 message RegisterSessionRequest {
