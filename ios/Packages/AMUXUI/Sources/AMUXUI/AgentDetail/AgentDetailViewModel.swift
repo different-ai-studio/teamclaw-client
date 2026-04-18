@@ -306,7 +306,7 @@ public final class AgentDetailViewModel {
         try await mqtt.publish(topic: "amux/\(deviceId)/agent/\(agent.agentId)/commands", payload: data)
     }
 
-    public func sendPrompt(_ text: String, modelContext: ModelContext? = nil) async throws {
+    public func sendPrompt(_ text: String, modelId: String? = nil, modelContext: ModelContext? = nil) async throws {
         if let agent {
             // Agent session: send ACP command
             let seq = (events.last?.sequence ?? 0) + 1
@@ -316,6 +316,9 @@ public final class AgentDetailViewModel {
             events.append(userEvent)
 
             var p = Amux_AcpSendPrompt(); p.text = text
+            if let modelId, !modelId.isEmpty {
+                p.modelID = modelId
+            }
             try await sendCommand { $0.command = .sendPrompt(p) }
         } else if let collabSession, let teamclawService {
             // Collab session: add local bubble + send via TeamclawService
