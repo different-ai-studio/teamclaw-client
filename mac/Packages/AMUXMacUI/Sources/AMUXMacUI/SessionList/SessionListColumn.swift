@@ -150,7 +150,7 @@ struct SessionListColumn: View {
             }
             .padding(.horizontal, 4)
             .padding(.vertical, 2)
-            .background(Color.secondary.opacity(0.12), in: Capsule())
+            .glassEffect(in: Capsule())
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
@@ -188,7 +188,7 @@ struct SessionListColumn: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .glassEffect(in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private func buildSessionSenders() -> [String: Set<String>] {

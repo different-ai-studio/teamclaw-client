@@ -117,7 +117,7 @@ public struct MainWindowView: View {
                 )
             }
         }
-        .navigationSplitViewColumnWidth(min: 280, ideal: 360, max: 480)
+        .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
     }
 
     private func handleNewSession() {
@@ -131,7 +131,7 @@ public struct MainWindowView: View {
             selectedSessionId: selectedSessionId,
             selectedTaskId: selectedTaskId
         )
-        .frame(minWidth: 480)
+        .frame(minWidth: 360)
         .task { await connectIfNeeded() }
     }
 
