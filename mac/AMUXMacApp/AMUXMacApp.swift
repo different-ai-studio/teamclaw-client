@@ -7,6 +7,7 @@ import AMUXMacUI
 struct AMUXMacApp: App {
     @State private var pairing = PairingManager(store: KeychainCredentialStore())
     @State private var detailTeamclaw = TeamclawService()
+    @State private var shared = SharedConnection()
     @AppStorage(AppAppearance.storageKey) private var appearanceRaw: String = AppAppearance.system.rawValue
 
     var body: some Scene {
@@ -14,6 +15,7 @@ struct AMUXMacApp: App {
             RootView(pairing: pairing, teamclaw: detailTeamclaw)
                 .frame(minWidth: 1100, minHeight: 700)
                 .preferredColorScheme(currentAppearance.colorScheme)
+                .environment(shared)
         }
         .windowResizability(.contentMinSize)
         .windowStyle(.hiddenTitleBar)
@@ -28,6 +30,7 @@ struct AMUXMacApp: App {
         ])
 
         DetailWindowScene(pairing: pairing, teamclawService: detailTeamclaw)
+            .environment(shared)
 
         SettingsScene(pairing: pairing)
     }

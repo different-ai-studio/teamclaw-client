@@ -28,28 +28,34 @@ private struct DetachedSessionRoot: View {
     let pairing: PairingManager
     let teamclawService: TeamclawService
 
+    @Environment(SharedConnection.self) private var shared
     @Query private var sessions: [CollabSession]
 
     var body: some View {
-        if let sessionId, let session = sessions.first(where: { $0.sessionId == sessionId }) {
-            // Detached windows currently don't own an MQTT connection, so
-            // AgentDetailViewModel won't be wired here and only the collab
-            // message fallback is shown. TODO: share MQTT from MainWindow or
-            // spin up a second connection for this window.
-            SessionDetailView(
-                session: session,
-                teamclawService: teamclawService,
-                actorId: pairing.deviceId,
-                mqtt: nil,
-                deviceId: pairing.deviceId,
-                peerId: "mac-detached-\(UUID().uuidString.prefix(6))"
-            )
-        } else {
-            ContentUnavailableView(
-                "Session not found",
-                systemImage: "exclamationmark.triangle",
-                description: Text("This session may have been deleted or hasn't synced yet.")
-            )
+        Group {
+            if let sessionId, let session = sessions.first(where: { $0.sessionId == sessionId }) {
+                // Reuse the process-wide MQTT session so the agent-event feed
+                // and prompt composer work in detached windows the same way
+                // they do in the main window.
+                SessionDetailView(
+                    session: session,
+                    teamclawService: teamclawService,
+                    actorId: pairing.deviceId,
+                    mqtt: shared.mqtt,
+                    deviceId: pairing.deviceId,
+                    peerId: shared.peerId
+                )
+            } else {
+                ContentUnavailableView(
+                    "Session not found",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text("This session may have been deleted or hasn't synced yet.")
+                )
+            }
         }
+        // Opening a detached window before the main window has connected
+        // would otherwise leave the session dark; kick the shared connection
+        // so a solo detached window still wires up MQTT.
+        .task { await shared.connectIfNeeded(pairing: pairing) }
     }
 }

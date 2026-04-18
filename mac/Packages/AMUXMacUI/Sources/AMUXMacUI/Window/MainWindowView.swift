@@ -5,16 +5,15 @@ import AMUXCore
 public struct MainWindowView: View {
     let pairing: PairingManager
     @Environment(\.modelContext) private var modelContext
+    @Environment(SharedConnection.self) private var shared
     @SceneStorage("amux.mainWindow.sidebar") private var sidebarStorage: String = "function:sessions"
     @SceneStorage("amux.mainWindow.selectedSession") private var selectedSessionId: String?
     @SceneStorage("amux.mainWindow.selectedTask") private var selectedTaskId: String?
-    @State private var mqtt: MQTTService?
-    @State private var monitor: ConnectionMonitor?
-    @State private var peerId: String = "mac-\(UUID().uuidString.prefix(6))"
     @State private var showNewSession = false
     let teamclaw: TeamclawService
     @State private var members = MemberListViewModel()
     @State private var sessionList = SessionListViewModel()
+    @State private var didStartServices = false
 
     private static let teamId = "teamclaw"
 
@@ -22,6 +21,10 @@ public struct MainWindowView: View {
         self.pairing = pairing
         self.teamclaw = teamclaw
     }
+
+    private var mqtt: MQTTService? { shared.mqtt }
+    private var monitor: ConnectionMonitor? { shared.monitor }
+    private var peerId: String { shared.peerId }
 
     private var sidebarSelection: SidebarItem? {
         Self.parseSidebar(sidebarStorage)
@@ -148,33 +151,20 @@ public struct MainWindowView: View {
     }
 
     private func connectIfNeeded() async {
-        guard mqtt == nil, pairing.isPaired else { return }
-        let service = MQTTService()
-        do {
-            try await service.connect(
-                host: pairing.brokerHost,
-                port: pairing.brokerPort,
-                username: pairing.username,
-                password: pairing.password,
-                clientId: "amux-mac-\(UUID().uuidString.prefix(6))",
-                useTLS: pairing.useTLS
-            )
-        } catch {
-            return
-        }
+        // Bring up the shared MQTT session (idempotent — multiple windows may
+        // race to call this, but SharedConnection coalesces the attempts).
+        await shared.connectIfNeeded(pairing: pairing)
+        guard let service = shared.mqtt, !didStartServices else { return }
+        didStartServices = true
+
         // Announce this client so the daemon (and other peers) know a macOS
         // client is online. Mirrors iOS ContentView.connect(). We do this
         // before starting TeamclawService so the daemon has the peer entry
         // before any collab commands are issued.
         await sendPeerAnnounce(mqtt: service)
 
-        let mon = ConnectionMonitor()
-        mon.start(mqtt: service, deviceId: pairing.deviceId)
-        self.mqtt = service
-        self.monitor = mon
-
-        // Start data sync (peerId persisted on the view's state so the
-        // NewSessionSheet can publish commands with the same peer identity).
+        // Start data sync (peerId persisted on SharedConnection so every
+        // window uses the same peer identity when publishing commands).
         teamclaw.start(
             mqtt: service,
             teamId: Self.teamId,
@@ -182,12 +172,10 @@ public struct MainWindowView: View {
             peerId: peerId,
             modelContext: modelContext
         )
-        await MainActor.run {
-            members.start(mqtt: service, deviceId: pairing.deviceId, modelContext: modelContext)
-            // Subscribe to amux/{deviceId}/agents and amux/{deviceId}/workspaces,
-            // persisting Agent/Workspace rows to SwiftData. Matches iOS ContentView behavior.
-            sessionList.start(mqtt: service, deviceId: pairing.deviceId, modelContext: modelContext)
-        }
+        members.start(mqtt: service, deviceId: pairing.deviceId, modelContext: modelContext)
+        // Subscribe to amux/{deviceId}/agents and amux/{deviceId}/workspaces,
+        // persisting Agent/Workspace rows to SwiftData. Matches iOS ContentView behavior.
+        sessionList.start(mqtt: service, deviceId: pairing.deviceId, modelContext: modelContext)
     }
 
     private func sendPeerAnnounce(mqtt: MQTTService) async {
