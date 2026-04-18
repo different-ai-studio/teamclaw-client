@@ -333,9 +333,24 @@ impl DaemonServer {
                         // Route to local agents
                         if let Some(tc) = &self.teamclaw {
                             let activated = tc.agents_to_activate(&session_id, msg);
+                            let desired_model = msg.model.clone();
                             for agent_actor_id in activated {
                                 if msg.sender_actor_id == agent_actor_id { continue; }
                                 if self.agents.get_handle(&agent_actor_id).is_some() {
+                                    // If the message carries a model preference, switch
+                                    // the agent to that model before sending the prompt.
+                                    if !desired_model.is_empty() {
+                                        let current = self.agents.current_model(&agent_actor_id).cloned().unwrap_or_default();
+                                        if desired_model != current {
+                                            if let Err(e) = self.agents.send_set_model(&agent_actor_id, &desired_model).await {
+                                                warn!(?e, "send_set_model from collab message failed");
+                                            } else {
+                                                self.agents.set_current_model(&agent_actor_id, &desired_model);
+                                                let publisher = Publisher::new(&self.mqtt);
+                                                let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
+                                            }
+                                        }
+                                    }
                                     let prompt = format!(
                                         "[Collab session: {}] {} says:\n{}",
                                         session_id, msg.sender_actor_id, msg.content
