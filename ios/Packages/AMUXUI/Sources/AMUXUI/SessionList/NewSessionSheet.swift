@@ -359,6 +359,7 @@ public struct NewSessionSheet: View {
                                 summary: info.summary,
                                 participantCount: info.participants.count
                             )
+                            session.primaryAgentId = info.primaryAgentID.isEmpty ? nil : info.primaryAgentID
                             modelContext.insert(session)
                             try? modelContext.save()
                             // Also refresh the viewModel

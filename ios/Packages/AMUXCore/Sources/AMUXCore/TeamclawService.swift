@@ -218,6 +218,7 @@ public final class TeamclawService {
             replyToMessageId: message.replyToMessageID,
             mentions: message.mentions.joined(separator: ",")
         )
+        sessionMessage.model = message.model.isEmpty ? nil : message.model
         modelContext.insert(sessionMessage)
         try? modelContext.save()
     }

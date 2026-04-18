@@ -17,6 +17,8 @@ public final class Agent {
     public var lastOutputSummary: String
     public var toolUseCount: Int
     public var hasUnread: Bool
+    public var availableModelsJSON: String = ""
+    public var currentModel: String?
 
     public init(agentId: String, agentType: Int = 1, worktree: String = "", branch: String = "",
                 status: Int = 1, startedAt: Date = .now, currentPrompt: String = "",
@@ -56,5 +58,15 @@ public final class Agent {
         case 3: "Codex"
         default: "Unknown"
         }
+    }
+}
+
+public extension Agent {
+    var availableModels: [AvailableModel] {
+        guard !availableModelsJSON.isEmpty,
+              let data = availableModelsJSON.data(using: .utf8),
+              let models = try? JSONDecoder().decode([AvailableModel].self, from: data)
+        else { return [] }
+        return models
     }
 }

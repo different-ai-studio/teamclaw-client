@@ -120,6 +120,13 @@ public final class SessionListViewModel {
                 if !proto.sessionTitle.isEmpty { existing.sessionTitle = proto.sessionTitle }
                 existing.lastOutputSummary = proto.lastOutputSummary
                 existing.toolUseCount = Int(proto.toolUseCount)
+                // Sync available models (JSON-serialize the proto's repeated field for SwiftData storage).
+                let models = proto.availableModels.map { AvailableModel(id: $0.id, displayName: $0.displayName) }
+                if let json = try? JSONEncoder().encode(models),
+                   let str = String(data: json, encoding: .utf8) {
+                    existing.availableModelsJSON = str
+                }
+                existing.currentModel = proto.currentModel.isEmpty ? nil : proto.currentModel
             } else {
                 let newAgent = Agent(
                     agentId: proto.agentID,
@@ -133,6 +140,13 @@ public final class SessionListViewModel {
                 )
                 newAgent.lastEventTime = .now
                 newAgent.hasUnread = true
+                // Sync available models (JSON-serialize the proto's repeated field for SwiftData storage).
+                let models = proto.availableModels.map { AvailableModel(id: $0.id, displayName: $0.displayName) }
+                if let json = try? JSONEncoder().encode(models),
+                   let str = String(data: json, encoding: .utf8) {
+                    newAgent.availableModelsJSON = str
+                }
+                newAgent.currentModel = proto.currentModel.isEmpty ? nil : proto.currentModel
                 modelContext.insert(newAgent)
             }
         }
