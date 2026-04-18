@@ -4,6 +4,7 @@ import AMUXCore
 struct MessageRowAgent: View {
     let message: SessionMessage
     let senderName: String
+    let modelLabel: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -17,6 +18,14 @@ struct MessageRowAgent: View {
                     Text(timeLabel)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                    if let modelLabel {
+                        Text("·")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Text(modelLabel)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 BlockMarkdownView(source: message.content)
