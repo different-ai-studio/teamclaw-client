@@ -103,8 +103,8 @@ public struct AgentDetailView: View {
                                     onGrant: { id in Task { try? await viewModel.grantPermission(requestId: id) } },
                                     onDeny: { id in Task { try? await viewModel.denyPermission(requestId: id) } }
                                 ).id(event.id)
-                            case .mergedTools(let id, let toolName, let events):
-                                MergedToolCallView(toolName: toolName, events: events)
+                            case .toolRun(let id, let events):
+                                ToolRunSummaryBar(events: events)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 2)
                                     .id(id)

@@ -113,20 +113,20 @@ public struct EventBubbleView: View {
     // MARK: - Tool Use
 
     private var toolUseBlock: some View {
-        let status: String = {
+        Group {
             if event.isComplete == true {
-                return (event.success == true) ? "completed" : "failed"
+                CompactToolLine(event: event)
+            } else {
+                ToolCallView(
+                    toolName: event.toolName ?? "Unknown",
+                    toolId: event.toolId ?? "",
+                    description: event.text ?? "",
+                    status: "running"
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 2)
             }
-            return "running"
-        }()
-        return ToolCallView(
-            toolName: event.toolName ?? "Unknown",
-            toolId: event.toolId ?? "",
-            description: event.text ?? "",
-            status: status
-        )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 2)
+        }
         .contextMenu {
             MessageContextMenu(text: event.text ?? "")
         }
