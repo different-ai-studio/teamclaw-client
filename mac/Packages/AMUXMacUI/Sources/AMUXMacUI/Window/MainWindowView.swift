@@ -128,7 +128,6 @@ public struct MainWindowView: View {
             }
         }
         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
-        .ignoresSafeArea(.container, edges: .top)
     }
 
     private func handleNewSession() {
