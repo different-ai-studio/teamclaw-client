@@ -338,6 +338,7 @@ public final class TeamclawService {
             existing.itemDescription = workItem.description_p
             existing.status = statusStr
             existing.parentId = workItem.parentID
+            existing.archived = workItem.archived
         } else {
             let item = WorkItem(
                 workItemId: workItem.workItemID,
@@ -349,7 +350,8 @@ public final class TeamclawService {
                 createdBy: workItem.createdBy,
                 createdAt: workItem.createdAt > 0
                     ? Date(timeIntervalSince1970: TimeInterval(workItem.createdAt))
-                    : .now
+                    : .now,
+                archived: workItem.archived
             )
             modelContext.insert(item)
         }
@@ -434,6 +436,31 @@ public final class TeamclawService {
             }
         }
         return false
+    }
+
+    /// Toggles the archived flag on a work item. Sends an `UpdateWorkItem` RPC
+    /// with only `archived` set (other fields left empty / sentinel).
+    /// Does not wait for the RPC response — the authoritative state arrives
+    /// via the `WorkItemEvent.updated` broadcast and flows through
+    /// `syncWorkItemEvent`. The call site typically flips `archived` on the
+    /// SwiftData model first for optimistic UI; if the RPC fails, the next
+    /// broadcast will reinstate the prior value.
+    public func archiveWorkItem(workItemId: String, sessionId: String, archived: Bool) async {
+        guard let mqtt else { return }
+
+        var update = Teamclaw_UpdateWorkItemRequest()
+        update.sessionID = sessionId
+        update.workItemID = workItemId
+        update.archived = archived   // SwiftProtobuf: setting also flips hasArchived=true
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .updateWorkItem(update)
+
+        let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
+        guard let data = try? rpcReq.serializedData() else { return }
+        try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
 
     public func subscribeToSession(_ sessionId: String) {
