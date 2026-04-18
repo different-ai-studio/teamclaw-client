@@ -17,7 +17,16 @@ public final class MQTTService: NSObject, @unchecked Sendable {
     public private(set) var connectionState: ConnectionState = .disconnected
     private var mqtt: CocoaMQTT?
 
-    private let lock = NSLock()
+    /// Serialises access to `continuations` and `connectContinuation`.
+    /// Previously an `NSLock`, which deadlocked the main thread on back-button
+    /// dismiss: `disconnect()` held the lock while finishing each continuation,
+    /// `finish()` synchronously invoked the per-continuation `onTermination`
+    /// closure, which then tried to re-acquire the non-reentrant `NSLock` on
+    /// the same thread → hang (see Sentry TEAMCLAW-IOS-2). A serial dispatch
+    /// queue sidesteps the reentrance problem entirely: even if the closure
+    /// is invoked on a thread currently waiting on the queue, the cleanup is
+    /// dispatched (`async`) and runs after the current work item completes.
+    private let stateQueue = DispatchQueue(label: "com.amux.mqtt-service.state")
     private var continuations: [UUID: AsyncStream<MQTTIncoming>.Continuation] = [:]
     private var connectContinuation: CheckedContinuation<Void, Error>?
 
@@ -40,11 +49,16 @@ public final class MQTTService: NSObject, @unchecked Sendable {
         self.mqtt = mqtt
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            self.connectContinuation = continuation
+            // Publish the continuation to state BEFORE calling connect() so
+            // a fast CONNACK on the delegate thread finds it installed.
+            stateQueue.sync {
+                self.connectContinuation = continuation
+            }
             let ok = mqtt.connect()
             if !ok {
-                self.connectContinuation = nil
-                continuation.resume(throwing: MQTTConnectionError.connectFailed)
+                if let pending = takeConnectContinuation() {
+                    pending.resume(throwing: MQTTConnectionError.connectFailed)
+                }
             }
         }
     }
@@ -53,10 +67,15 @@ public final class MQTTService: NSObject, @unchecked Sendable {
         mqtt?.disconnect()
         mqtt = nil
         connectionState = .disconnected
-        lock.lock()
-        for (_, c) in continuations { c.finish() }
-        continuations.removeAll()
-        lock.unlock()
+        // Snapshot + drain OUTSIDE the critical section; each `finish()`
+        // triggers `onTermination`, which itself dispatches back to the
+        // queue — we must not be in the queue when that happens.
+        let conts: [AsyncStream<MQTTIncoming>.Continuation] = stateQueue.sync {
+            let snapshot = Array(continuations.values)
+            continuations.removeAll()
+            return snapshot
+        }
+        for c in conts { c.finish() }
     }
 
     public func subscribe(_ topic: String) async throws {
@@ -71,23 +90,38 @@ public final class MQTTService: NSObject, @unchecked Sendable {
     public func messages() -> AsyncStream<MQTTIncoming> {
         let id = UUID()
         let (stream, continuation) = AsyncStream<MQTTIncoming>.makeStream()
-        lock.lock()
-        continuations[id] = continuation
-        lock.unlock()
-        continuation.onTermination = { _ in
-            self.lock.lock()
-            self.continuations.removeValue(forKey: id)
-            self.lock.unlock()
+        stateQueue.async {
+            self.continuations[id] = continuation
+        }
+        continuation.onTermination = { [weak self] _ in
+            // Dispatch async so the cancelling thread (often the main actor
+            // during a view-dismiss Task cancellation) never blocks waiting
+            // on the queue.
+            self?.stateQueue.async {
+                self?.continuations.removeValue(forKey: id)
+            }
         }
         return stream
     }
 
     private func broadcast(_ msg: MQTTIncoming) {
-        lock.lock()
-        let conts = Array(continuations.values)
-        lock.unlock()
+        let conts: [AsyncStream<MQTTIncoming>.Continuation] = stateQueue.sync {
+            Array(continuations.values)
+        }
         for c in conts {
             c.yield(msg)
+        }
+    }
+
+    /// Atomically consumes `connectContinuation` — ensures only the first
+    /// caller (whether the CONNACK delegate, the immediate-false return in
+    /// `connect()`, or an unexpected mid-handshake `mqttDidDisconnect`) gets
+    /// to resume the stored continuation.
+    fileprivate func takeConnectContinuation() -> CheckedContinuation<Void, Error>? {
+        stateQueue.sync {
+            let c = connectContinuation
+            connectContinuation = nil
+            return c
         }
     }
 
@@ -107,14 +141,14 @@ public final class MQTTService: NSObject, @unchecked Sendable {
 
 extension MQTTService: CocoaMQTTDelegate {
     public func mqtt(_ mqtt: CocoaMQTT, didConnectAck ack: CocoaMQTTConnAck) {
+        let pending = takeConnectContinuation()
         if ack == .accept {
             connectionState = .connected
-            connectContinuation?.resume()
+            pending?.resume()
         } else {
             connectionState = .disconnected
-            connectContinuation?.resume(throwing: MQTTConnectionError.connectFailed)
+            pending?.resume(throwing: MQTTConnectionError.connectFailed)
         }
-        connectContinuation = nil
     }
 
     public func mqtt(_ mqtt: CocoaMQTT, didPublishMessage message: CocoaMQTTMessage, id: UInt16) {}
@@ -136,11 +170,9 @@ extension MQTTService: CocoaMQTTDelegate {
     public func mqttDidReceivePong(_ mqtt: CocoaMQTT) {}
 
     public func mqttDidDisconnect(_ mqtt: CocoaMQTT, withError err: (any Error)?) {
-        let wasConnecting = connectContinuation != nil
         connectionState = .disconnected
-        if wasConnecting, let continuation = connectContinuation {
-            connectContinuation = nil
-            continuation.resume(throwing: err ?? MQTTConnectionError.connectFailed)
+        if let pending = takeConnectContinuation() {
+            pending.resume(throwing: err ?? MQTTConnectionError.connectFailed)
         }
     }
 
