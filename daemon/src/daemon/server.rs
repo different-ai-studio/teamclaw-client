@@ -500,6 +500,18 @@ impl DaemonServer {
                             agent_id, &acp_sid, at, &worktree, &ws_id, &prompt.text,
                         ).await {
                             Ok(new_acp_sid) => {
+                                // Forward model_id if the client requested one
+                                let desired_model = prompt.model_id.clone();
+                                if !desired_model.is_empty() {
+                                    match self.agents.send_set_model(agent_id, &desired_model).await {
+                                        Ok(()) => {
+                                            self.agents.set_current_model(agent_id, &desired_model);
+                                        }
+                                        Err(e) => {
+                                            warn!(agent_id, model_id = %desired_model, "set_model after resume failed: {}", e);
+                                        }
+                                    }
+                                }
                                 // Update stored session with potentially new acp_session_id
                                 if let Some(s) = self.sessions.find_by_id_mut(agent_id) {
                                     s.acp_session_id = new_acp_sid;
@@ -517,6 +529,12 @@ impl DaemonServer {
                             }
                             Err(e) => {
                                 warn!(agent_id, "lazy resume failed: {}", e);
+                                self.publish_collab_event(agent_id, amux::CollabEvent {
+                                    event: Some(amux::collab_event::Event::PromptRejected(amux::PromptRejected {
+                                        command_id,
+                                        reason: format!("session resume failed: {}", e),
+                                    })),
+                                }).await;
                             }
                         }
                         return;

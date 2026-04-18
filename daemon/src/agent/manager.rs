@@ -118,6 +118,7 @@ impl AgentManager {
         )?;
         handle.cmd_tx = Some(cmd_tx);
         handle.status = amux::AgentStatus::Active;
+        handle.current_prompt = prompt.to_string();
 
         info!(agent_id, worktree, "agent resumed via ACP");
         self.agents.insert(agent_id.to_string(), handle);
