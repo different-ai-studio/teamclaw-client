@@ -362,15 +362,16 @@ fn extract_text(content: &acp::ContentBlock) -> String {
 /// `crate::agent::models::available_models_for` and apply it via
 /// `session/set_model` immediately after Initialize.
 ///
-/// `initial_model_tx` receives the model id that was applied (empty if
-/// no models are configured for `agent_type`).
+/// `initial_model_tx` receives `Some(model_id)` if the model was applied
+/// successfully, or `None` if no models are configured for `agent_type` or
+/// the ACP `set_session_model` call failed.
 pub fn spawn_acp_agent(
     binary: String,
     worktree: String,
     initial_prompt: String,
     agent_type: amux::AgentType,
     event_tx: mpsc::Sender<amux::AcpEvent>,
-    initial_model_tx: oneshot::Sender<String>,
+    initial_model_tx: oneshot::Sender<Option<String>>,
 ) -> crate::error::Result<mpsc::Sender<AcpCommand>> {
     let (cmd_tx, cmd_rx) = mpsc::channel::<AcpCommand>(64);
 
@@ -414,7 +415,7 @@ async fn run_acp_session(
     agent_type: amux::AgentType,
     event_tx: mpsc::Sender<amux::AcpEvent>,
     mut cmd_rx: mpsc::Receiver<AcpCommand>,
-    initial_model_tx: oneshot::Sender<String>,
+    initial_model_tx: oneshot::Sender<Option<String>>,
 ) -> anyhow::Result<()> {
     // Spawn the ACP agent process
     // Use claude-agent-acp wrapper (Node.js) which speaks ACP JSON-RPC over stdio
@@ -494,7 +495,7 @@ async fn run_acp_session(
 
     // Apply the default model from the hardcoded list before any prompt runs.
     // This ensures the very first turn is on the chosen model.
-    let initial_model_id: String = {
+    let initial_model: Option<String> = {
         let models = crate::agent::models::available_models_for(agent_type);
         if let Some(first) = models.first() {
             let req = acp::SetSessionModelRequest::new(
@@ -504,21 +505,21 @@ async fn run_acp_session(
             match conn.set_session_model(req).await {
                 Ok(_) => {
                     info!(model_id = %first.id, "ACP initial set_session_model applied");
-                    first.id.clone()
+                    Some(first.id.clone())
                 }
                 Err(e) => {
                     warn!(error = %e, "initial set_session_model failed");
-                    String::new()
+                    None
                 }
             }
         } else {
-            String::new()
+            None
         }
     };
-    // Notify the caller (manager) of the chosen model. Empty string means
-    // no model could be applied (no models known for this agent type, or the
-    // ACP call failed); the manager decides what to record.
-    let _ = initial_model_tx.send(initial_model_id);
+    // Notify the caller (manager) of the chosen model. None means no model
+    // could be applied (no models known for this agent type, or the ACP call
+    // failed); the manager decides what to record.
+    let _ = initial_model_tx.send(initial_model);
 
     // Use Rc to share conn across spawn_local tasks
     let conn = Rc::new(conn);

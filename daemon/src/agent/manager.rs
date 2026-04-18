@@ -14,7 +14,7 @@ pub struct AgentManager {
     /// and updated whenever set_current_model is called. The adapter is
     /// responsible for actually calling ACP `session/set_model`; this map
     /// is the daemon-side mirror used to populate AgentInfo.current_model.
-    pub current_model_per_agent: HashMap<String, String>,
+    current_model_per_agent: HashMap<String, String>,
 }
 
 impl AgentManager {
@@ -50,7 +50,7 @@ impl AgentManager {
         let mut handle = AgentHandle::new(agent_id.clone(), agent_type, worktree.into(), workspace_id.into());
         handle.current_prompt = prompt.into();
 
-        let (initial_model_tx, initial_model_rx) = tokio::sync::oneshot::channel::<String>();
+        let (initial_model_tx, initial_model_rx) = tokio::sync::oneshot::channel::<Option<String>>();
 
         let cmd_tx = adapter::spawn_acp_agent(
             self.claude_binary.clone(),
@@ -67,14 +67,11 @@ impl AgentManager {
         info!(agent_id, worktree, "agent spawned via ACP");
         self.agents.insert(agent_id.clone(), handle);
 
-        // Wait for the adapter to report the model it applied. An empty
-        // string means no model was applied (no models known for this
-        // agent type, or the ACP call failed); skip recording in that case.
-        if let Ok(model_id) = initial_model_rx.await {
-            if !model_id.is_empty() {
-                self.current_model_per_agent
-                    .insert(agent_id.clone(), model_id);
-            }
+        // Wait for the adapter to report the model it applied. None means no
+        // model was applied (no models known for this agent type, or the ACP
+        // call failed); skip recording in that case.
+        if let Ok(Some(model_id)) = initial_model_rx.await {
+            self.set_current_model(&agent_id, &model_id);
         }
 
         Ok(agent_id)
