@@ -14,6 +14,7 @@ public struct MainWindowView: View {
     @State private var showNewSession = false
     let teamclaw: TeamclawService
     @State private var members = MemberListViewModel()
+    @State private var sessionList = SessionListViewModel()
 
     private static let teamId = "teamclaw"
 
@@ -136,7 +137,10 @@ public struct MainWindowView: View {
             teamclawService: teamclaw,
             actorId: pairing.deviceId,
             selectedSessionId: selectedSessionId,
-            selectedTaskId: selectedTaskId
+            selectedTaskId: selectedTaskId,
+            mqtt: mqtt,
+            deviceId: pairing.deviceId,
+            peerId: peerId
         )
         .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 360)
@@ -174,6 +178,9 @@ public struct MainWindowView: View {
         )
         await MainActor.run {
             members.start(mqtt: service, deviceId: pairing.deviceId, modelContext: modelContext)
+            // Subscribe to amux/{deviceId}/agents and amux/{deviceId}/workspaces,
+            // persisting Agent/Workspace rows to SwiftData. Matches iOS ContentView behavior.
+            sessionList.start(mqtt: service, deviceId: pairing.deviceId, modelContext: modelContext)
         }
     }
 }

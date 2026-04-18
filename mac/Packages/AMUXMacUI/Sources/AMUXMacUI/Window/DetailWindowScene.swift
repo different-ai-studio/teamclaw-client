@@ -32,10 +32,17 @@ private struct DetachedSessionRoot: View {
 
     var body: some View {
         if let sessionId, let session = sessions.first(where: { $0.sessionId == sessionId }) {
+            // Detached windows currently don't own an MQTT connection, so
+            // AgentDetailViewModel won't be wired here and only the collab
+            // message fallback is shown. TODO: share MQTT from MainWindow or
+            // spin up a second connection for this window.
             SessionDetailView(
                 session: session,
                 teamclawService: teamclawService,
-                actorId: pairing.deviceId
+                actorId: pairing.deviceId,
+                mqtt: nil,
+                deviceId: pairing.deviceId,
+                peerId: "mac-detached-\(UUID().uuidString.prefix(6))"
             )
         } else {
             ContentUnavailableView(

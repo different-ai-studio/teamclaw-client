@@ -1,7 +1,6 @@
 import Foundation
 import Observation
 import SwiftData
-import AMUXCore
 
 // MARK: - AgentGroup
 

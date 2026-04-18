@@ -7,6 +7,9 @@ struct DetailPlaceholderView: View {
     let actorId: String
     let selectedSessionId: String?
     let selectedTaskId: String?
+    let mqtt: MQTTService?
+    let deviceId: String
+    let peerId: String
 
     @Query private var sessions: [CollabSession]
     @Query private var tasks: [WorkItem]
@@ -15,7 +18,14 @@ struct DetailPlaceholderView: View {
         VStack(spacing: 0) {
             Group {
                 if let session = selectedSession {
-                    SessionDetailView(session: session, teamclawService: teamclawService, actorId: actorId)
+                    SessionDetailView(
+                        session: session,
+                        teamclawService: teamclawService,
+                        actorId: actorId,
+                        mqtt: mqtt,
+                        deviceId: deviceId,
+                        peerId: peerId
+                    )
                 } else if let task = selectedTask {
                     taskPreview(task)
                 } else {

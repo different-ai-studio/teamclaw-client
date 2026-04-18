@@ -6,6 +6,9 @@ struct SessionDetailView: View {
     let session: CollabSession
     let teamclawService: TeamclawService
     let actorId: String
+    let mqtt: MQTTService?
+    let deviceId: String
+    let peerId: String
 
     @Environment(\.modelContext) private var modelContext
 
@@ -15,6 +18,7 @@ struct SessionDetailView: View {
 
     @State private var searchText: String = ""
     @State private var isPinned: Bool = false
+    @State private var agentVM: AgentDetailViewModel?
 
     private var primaryAgent: Agent? {
         guard let id = session.primaryAgentId else { return nil }
@@ -43,11 +47,6 @@ struct SessionDetailView: View {
     }
 
     var body: some View {
-        let messages = allMessages
-            .filter { $0.sessionId == session.sessionId }
-            .filter { searchText.isEmpty || $0.content.localizedCaseInsensitiveContains(searchText) }
-            .sorted { $0.createdAt < $1.createdAt }
-
         VStack(spacing: 0) {
             toolbarRow
             Divider()
@@ -55,16 +54,11 @@ struct SessionDetailView: View {
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    if messages.isEmpty {
-                        Text(searchText.isEmpty ? "No messages yet." : "No messages match \u{201C}\(searchText)\u{201D}.")
-                            .foregroundStyle(.tertiary)
-                            .padding(22)
+                VStack(alignment: .leading, spacing: 12) {
+                    if let vm = agentVM, primaryAgent != nil {
+                        agentEventFeed(vm: vm)
                     } else {
-                        ForEach(messages, id: \.messageId) { message in
-                            rowView(for: message)
-                        }
-                        .padding(.bottom, 22)
+                        collabMessageFeed
                     }
                 }
                 .padding(.top, 12)
@@ -79,6 +73,89 @@ struct SessionDetailView: View {
         }
         .task(id: session.sessionId) {
             teamclawService.subscribeToSession(session.sessionId)
+        }
+        .task(id: agentTaskId) {
+            startAgentVMIfNeeded()
+        }
+        .onDisappear { agentVM?.stop(); agentVM = nil }
+    }
+
+    /// Identity string used to re-trigger the agent-VM task when the session's
+    /// primary agent changes, or when MQTT becomes available.
+    private var agentTaskId: String {
+        "\(session.primaryAgentId ?? "none")#\(mqtt == nil ? "no-mqtt" : "mqtt")"
+    }
+
+    @MainActor
+    private func startAgentVMIfNeeded() {
+        agentVM?.stop()
+        guard let agent = primaryAgent, let mqtt else {
+            agentVM = nil
+            return
+        }
+        let vm = AgentDetailViewModel(
+            agent: agent,
+            mqtt: mqtt,
+            deviceId: deviceId,
+            peerId: peerId,
+            collabSession: session,
+            teamclawService: teamclawService
+        )
+        vm.start(modelContext: modelContext)
+        agentVM = vm
+    }
+
+    @ViewBuilder
+    private func agentEventFeed(vm: AgentDetailViewModel) -> some View {
+        let filtered: [AgentEvent] = {
+            if searchText.isEmpty { return vm.events }
+            let q = searchText
+            return vm.events.filter { ($0.text ?? "").localizedCaseInsensitiveContains(q) }
+        }()
+
+        if filtered.isEmpty && !vm.isStreaming {
+            Text(searchText.isEmpty ? "No activity yet." : "No events match \u{201C}\(searchText)\u{201D}.")
+                .foregroundStyle(.tertiary)
+                .padding(22)
+        } else {
+            ForEach(filtered, id: \.persistentModelID) { event in
+                AgentEventRow(
+                    event: event,
+                    agent: primaryAgent,
+                    onGrant: { id in Task { try? await vm.grantPermission(requestId: id) } },
+                    onDeny:  { id in Task { try? await vm.denyPermission(requestId: id) } }
+                )
+            }
+            if vm.isStreaming && !vm.streamingText.isEmpty {
+                Text(vm.streamingText)
+                    .font(.subheadline)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.secondary.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var collabMessageFeed: some View {
+        let messages = allMessages
+            .filter { $0.sessionId == session.sessionId }
+            .filter { searchText.isEmpty || $0.content.localizedCaseInsensitiveContains(searchText) }
+            .sorted { $0.createdAt < $1.createdAt }
+
+        if messages.isEmpty {
+            Text(searchText.isEmpty ? "No messages yet." : "No messages match \u{201C}\(searchText)\u{201D}.")
+                .foregroundStyle(.tertiary)
+                .padding(22)
+        } else {
+            ForEach(messages, id: \.messageId) { message in
+                rowView(for: message)
+            }
+            .padding(.bottom, 22)
         }
     }
 

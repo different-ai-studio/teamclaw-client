@@ -18,6 +18,8 @@ struct AMUXMacApp: App {
         .windowResizability(.contentMinSize)
         .windowStyle(.hiddenTitleBar)
         .modelContainer(for: [
+            Agent.self,
+            AgentEvent.self,
             Member.self,
             CollabSession.self,
             SessionMessage.self,
