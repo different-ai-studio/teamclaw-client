@@ -139,6 +139,21 @@ private struct AttachedImage: Identifiable {
     let fileName: String
 }
 
+/// Downscales a picked image to a preview size suitable for the chip strip.
+/// The original bytes are discarded when the sheet dismisses; storing only
+/// a thumbnail keeps peak memory ≪ 1 MB per chip instead of tens of MB.
+private func downscaleForChip(_ image: UIImage) -> UIImage {
+    let maxDim: CGFloat = 256
+    let size = image.size
+    let scale = min(maxDim / size.width, maxDim / size.height, 1)
+    if scale >= 1 { return image }
+    let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+    let renderer = UIGraphicsImageRenderer(size: newSize)
+    return renderer.image { _ in
+        image.draw(in: CGRect(origin: .zero, size: newSize))
+    }
+}
+
 struct CreateWorkItemSheet: View {
     @Environment(\.dismiss) private var dismiss
     let teamclawService: TeamclawService?
@@ -259,15 +274,21 @@ struct CreateWorkItemSheet: View {
             .onAppear { isFocused = true }
             .onChange(of: photoPickerItems) { _, newItems in
                 Task {
+                    // Load all selections into a local buffer, then append
+                    // atomically on the main actor. Prevents out-of-order
+                    // interleaving if the picker is reopened rapidly.
+                    var loaded: [AttachedImage] = []
                     for item in newItems {
                         guard let data = try? await item.loadTransferable(type: Data.self),
                               let img = UIImage(data: data) else { continue }
+                        let thumb = downscaleForChip(img)
                         let name = "img-\(UUID().uuidString.prefix(6).lowercased()).png"
-                        await MainActor.run {
-                            attachedImages.append(AttachedImage(image: img, fileName: name))
-                        }
+                        loaded.append(AttachedImage(image: thumb, fileName: name))
                     }
-                    await MainActor.run { photoPickerItems.removeAll() }
+                    await MainActor.run {
+                        attachedImages.append(contentsOf: loaded)
+                        photoPickerItems.removeAll()
+                    }
                 }
             }
         }
