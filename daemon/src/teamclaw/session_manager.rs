@@ -836,6 +836,7 @@ impl SessionManager {
                 .unwrap_or_else(Utc::now),
             reply_to_message_id: message.reply_to_message_id.clone(),
             mentions: message.mentions.clone(),
+            model: message.model.clone(),
         };
 
         let mut store = MessageStore::load(&self.config_dir, session_id)?;

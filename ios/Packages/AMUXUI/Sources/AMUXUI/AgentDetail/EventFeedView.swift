@@ -5,15 +5,25 @@ import AMUXCore
 
 public struct EventBubbleView: View {
     let event: AgentEvent
+    let agent: Agent?
     let onGrant: ((String) -> Void)?
     let onDeny: ((String) -> Void)?
 
     @Environment(\.horizontalSizeClass) private var sizeClass
 
-    public init(event: AgentEvent, onGrant: ((String) -> Void)? = nil, onDeny: ((String) -> Void)? = nil) {
+    public init(event: AgentEvent, agent: Agent? = nil, onGrant: ((String) -> Void)? = nil, onDeny: ((String) -> Void)? = nil) {
         self.event = event
+        self.agent = agent
         self.onGrant = onGrant
         self.onDeny = onDeny
+    }
+
+    /// Display name for the model that produced this event (assistant reply
+    /// types only). Returns nil for non-stamped events or when no agent is
+    /// available to resolve the display name.
+    private var modelDisplayName: String? {
+        guard let agent else { return nil }
+        return event.modelDisplayName(via: agent)
     }
 
     public var body: some View {
@@ -83,18 +93,26 @@ public struct EventBubbleView: View {
     // MARK: - Assistant Bubble (gray, left-aligned, markdown)
 
     private var assistantBubble: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                MarkdownRenderer(content: event.text ?? "")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    MarkdownRenderer(content: event.text ?? "")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .contextMenu {
+                    MessageContextMenu(text: event.text ?? "")
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 18))
-            .contextMenu {
-                MessageContextMenu(text: event.text ?? "")
+            if event.isComplete, let modelName = modelDisplayName {
+                Text(modelName)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 18)
             }
         }
         .padding(.horizontal, 16)

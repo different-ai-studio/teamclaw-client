@@ -347,6 +347,12 @@ public struct Amux_AcpEvent: Sendable {
     set {event = .raw(newValue)}
   }
 
+  /// Model id that produced this event. Set by the daemon for agent-reply
+  /// events (Output, Thinking) so iOS bubbles can show which model spoke.
+  /// Empty for non-reply events (status changes, tool calls, user prompts,
+  /// permission requests, etc).
+  public var model: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Event: Equatable, Sendable {
@@ -1614,7 +1620,7 @@ extension Amux_DeviceCommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._Mess
 
 extension Amux_AcpEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AcpEvent"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}thinking\0\u{1}output\0\u{3}tool_use\0\u{3}tool_result\0\u{1}error\0\u{3}permission_request\0\u{3}status_change\0\u{3}todo_update\0\u{2}\u{7}raw\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}thinking\0\u{1}output\0\u{3}tool_use\0\u{3}tool_result\0\u{1}error\0\u{3}permission_request\0\u{3}status_change\0\u{3}todo_update\0\u{2}\u{7}raw\0\u{1}model\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1739,6 +1745,7 @@ extension Amux_AcpEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
           self.event = .raw(v)
         }
       }()
+      case 16: try { try decoder.decodeSingularStringField(value: &self.model) }()
       default: break
       }
     }
@@ -1788,11 +1795,15 @@ extension Amux_AcpEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
     }()
     case nil: break
     }
+    if !self.model.isEmpty {
+      try visitor.visitSingularStringField(value: self.model, fieldNumber: 16)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Amux_AcpEvent, rhs: Amux_AcpEvent) -> Bool {
     if lhs.event != rhs.event {return false}
+    if lhs.model != rhs.model {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

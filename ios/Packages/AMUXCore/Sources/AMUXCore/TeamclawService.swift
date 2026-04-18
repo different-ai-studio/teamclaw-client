@@ -134,6 +134,17 @@ public final class TeamclawService {
             }
             return
         }
+
+        if topic.contains("/session/") && topic.hasSuffix("/meta") {
+            guard let envelope = try? Teamclaw_SessionMetaEnvelope(serializedBytes: incoming.payload) else {
+                print("[TeamclawService] failed to decode SessionMetaEnvelope from topic: \(topic)")
+                return
+            }
+            if envelope.hasSession {
+                syncSessionMeta(envelope.session, modelContext: modelContext)
+            }
+            return
+        }
     }
 
     // MARK: - Sync Handlers
@@ -186,6 +197,27 @@ public final class TeamclawService {
         sessions = (try? modelContext.fetch(FetchDescriptor<CollabSession>(
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         ))) ?? []
+    }
+
+    private func syncSessionMeta(_ proto: Teamclaw_SessionInfo, modelContext: ModelContext) {
+        let sessionId = proto.sessionID
+        guard !sessionId.isEmpty else { return }
+
+        let descriptor = FetchDescriptor<CollabSession>(
+            predicate: #Predicate { $0.sessionId == sessionId }
+        )
+        guard let existing = (try? modelContext.fetch(descriptor))?.first else {
+            // No local CollabSession yet — the SessionIndex sync path will create one
+            // when the retained /sessions message arrives. Avoid speculative inserts
+            // to prevent duplicates; syncSessionMeta will be re-triggered on the
+            // next retained delivery or can be applied once the session exists.
+            return
+        }
+
+        existing.primaryAgentId = proto.primaryAgentID.isEmpty ? nil : proto.primaryAgentID
+        if !proto.title.isEmpty { existing.title = proto.title }
+        if !proto.summary.isEmpty { existing.summary = proto.summary }
+        try? modelContext.save()
     }
 
     private func syncMessage(_ message: Teamclaw_Message, modelContext: ModelContext) {
@@ -329,18 +361,11 @@ public final class TeamclawService {
     /// Send a text message to a collab session.
     ///
     /// - Parameter modelId: Optional model identifier the user picked in the composer.
-    ///   v1 limitation: this parameter is accepted for API completeness but is not yet
-    ///   forwarded to the daemon's agent prompt path. Collab→agent dispatch is not a
-    ///   single direct path today; the model on the resulting `Message` proto is stamped
-    ///   by the daemon when it forwards a prompt to its agent. See plan
-    ///   `docs/plans/end-to-end-model-selection.md` Task 6 for context.
+    ///   Forwarded via ``Teamclaw_Message/model`` and proxied to the agent's session by
+    ///   the daemon's collab→agent dispatch path, which calls `send_set_model` before
+    ///   `send_prompt` when the model differs from the agent's current model.
     public func sendMessage(sessionId: String, content: String, actorId: String, modelId: String? = nil) {
         guard let mqtt else { return }
-        // TODO(plan-6-v2): forward modelId to daemon's agent prompt path
-        // (collab→agent dispatch is daemon-mediated; daemon doesn't yet promote
-        // a Teamclaw_Message into an AcpSendPrompt.modelId. Until then this
-        // parameter is accepted but ignored.)
-        _ = modelId
         var message = Teamclaw_Message()
         message.messageID = UUID().uuidString
         message.sessionID = sessionId
@@ -348,6 +373,9 @@ public final class TeamclawService {
         message.kind = .text
         message.content = content
         message.createdAt = Int64(Date().timeIntervalSince1970)
+        if let modelId, !modelId.isEmpty {
+            message.model = modelId
+        }
 
         var envelope = Teamclaw_SessionMessageEnvelope()
         envelope.message = message

@@ -100,6 +100,7 @@ public struct AgentDetailView: View {
                             case .single(let event):
                                 EventBubbleView(
                                     event: event,
+                                    agent: viewModel.agent,
                                     onGrant: { id in Task { try? await viewModel.grantPermission(requestId: id) } },
                                     onDeny: { id in Task { try? await viewModel.denyPermission(requestId: id) } }
                                 ).id(event.id)

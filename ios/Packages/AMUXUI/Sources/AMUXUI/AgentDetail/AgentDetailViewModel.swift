@@ -8,6 +8,9 @@ public final class AgentDetailViewModel {
     public var events: [AgentEvent] = []
     public var isStreaming = false
     public var streamingText = ""
+    /// Mirrors the model id stamped by the daemon on streaming output deltas
+    /// so the synthesized event in stop()/idle flush carries the model too.
+    private var streamingModel: String?
     public var isDaemonOnline = true
     public let agent: Agent?
     public let collabSession: CollabSession?
@@ -110,11 +113,13 @@ public final class AgentDetailViewModel {
             let event = AgentEvent(agentId: agent.agentId, sequence: seq, eventType: "output")
             event.text = streamingText
             event.isComplete = false
+            event.model = streamingModel
             ctx.insert(event)
             events.append(event)
             try? ctx.save()
             isStreaming = false
             streamingText = ""
+            streamingModel = nil
         }
         startModelContext = nil
     }
@@ -128,6 +133,10 @@ public final class AgentDetailViewModel {
     }
 
     private func handleAcpEvent(_ acp: Amux_AcpEvent, sequence: Int, modelContext: ModelContext) {
+        // Daemon stamps `acp.model` on agent-reply events (output + thinking).
+        // Mirror it onto the SwiftData event so the bubble can show the model
+        // that produced it. Empty string from proto means "not stamped".
+        let modelStamp: String? = acp.model.isEmpty ? nil : acp.model
         switch acp.event {
         case .output(let o):
             if o.isComplete {
@@ -136,12 +145,15 @@ public final class AgentDetailViewModel {
                 if let idx = events.lastIndex(where: { $0.eventType == "output" && $0.isComplete == false }) {
                     events[idx].text = o.text
                     events[idx].isComplete = true
+                    if let modelStamp { events[idx].model = modelStamp }
                 } else {
                     let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "output")
                     event.text = o.text; event.isComplete = true
+                    event.model = modelStamp
                     modelContext.insert(event); events.append(event)
                 }
                 streamingText = ""
+                streamingModel = nil
             } else {
                 // Streaming delta — remove persisted incomplete event on first delta
                 // (it will be re-saved in stop() if user leaves again)
@@ -153,14 +165,18 @@ public final class AgentDetailViewModel {
                     }
                 }
                 isStreaming = true; streamingText += o.text
+                if let modelStamp { streamingModel = modelStamp }
             }
         case .thinking(let t):
             // Append to last thinking event if it's the most recent, otherwise create new
             if let last = events.last, last.eventType == "thinking" {
                 last.text = (last.text ?? "") + t.text
+                if let modelStamp { last.model = modelStamp }
             } else {
                 let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "thinking")
-                event.text = t.text; modelContext.insert(event); events.append(event)
+                event.text = t.text
+                event.model = modelStamp
+                modelContext.insert(event); events.append(event)
             }
         case .toolUse(let tu):
             let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "tool_use")
@@ -200,9 +216,10 @@ public final class AgentDetailViewModel {
                 if isStreaming && !streamingText.isEmpty {
                     let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "output")
                     event.text = streamingText; event.isComplete = true
+                    event.model = streamingModel
                     modelContext.insert(event); events.append(event)
                 }
-                isStreaming = false; streamingText = ""
+                isStreaming = false; streamingText = ""; streamingModel = nil
                 // Mark all tool_use events as completed
                 for event in events where event.eventType == "tool_use" && event.isComplete != true {
                     event.isComplete = true
