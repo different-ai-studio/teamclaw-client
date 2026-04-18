@@ -243,6 +243,10 @@ impl DaemonServer {
                 // Publish completed output to collab sessions this agent participates in
                 if let Some(tc) = &self.teamclaw {
                     let collab_sessions = tc.sessions_for_agent(agent_id);
+                    // Safe to read current_model here: the daemon event loop is single-threaded and
+                    // check_agent_busy prevents prompt overlap, so no SetModel can interleave between
+                    // the agent's reply and this lookup. If those invariants change, capture the model
+                    // at prompt arrival on the AcpEvent instead.
                     let model = self.agents.current_model(agent_id).cloned().unwrap_or_default();
                     for sid in &collab_sessions {
                         tc.publish_agent_message(sid, agent_id, &output.text, &model).await;

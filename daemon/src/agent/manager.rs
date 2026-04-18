@@ -116,16 +116,18 @@ impl AgentManager {
         .map_err(|_| crate::error::AmuxError::Agent("ACP command channel closed".into()))
     }
 
-    /// Returns the first agent_id whose status counts as "running"
-    /// (Starting / Active / Idle), or None if no such agent exists.
-    /// Used to populate the `primary_agent_id` of newly created collab
-    /// sessions in v1 (multi-agent sessions are out of scope).
+    /// Returns an agent_id whose adapter has finished initializing and is ready
+    /// for prompts. Excludes Starting (transient) and dead statuses -- an agent
+    /// in Starting may crash before becoming Active, and baking that into a
+    /// session's `primary_agent_id` would point to a dead slot.
+    /// Used to populate the `primary_agent_id` of newly created collab sessions
+    /// in v1 (multi-agent sessions are out of scope).
     pub fn first_running_agent_id(&self) -> Option<String> {
         self.agents
             .iter()
             .find(|(_, h)| matches!(
                 h.status,
-                amux::AgentStatus::Starting | amux::AgentStatus::Active | amux::AgentStatus::Idle
+                amux::AgentStatus::Active | amux::AgentStatus::Idle
             ))
             .map(|(id, _)| id.clone())
     }
