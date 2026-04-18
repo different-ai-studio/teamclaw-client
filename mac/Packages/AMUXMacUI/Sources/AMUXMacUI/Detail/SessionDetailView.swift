@@ -254,6 +254,10 @@ struct SessionDetailView: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
 
+            if let agent = primaryAgent {
+                AgentStatusPill(agent: agent)
+            }
+
             Spacer(minLength: 12)
 
             HStack(spacing: 8) {
