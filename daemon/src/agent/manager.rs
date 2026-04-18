@@ -51,6 +51,7 @@ impl AgentManager {
         handle.current_prompt = prompt.into();
 
         let (initial_model_tx, initial_model_rx) = tokio::sync::oneshot::channel::<Option<String>>();
+        let (acp_session_id_tx, acp_session_id_rx) = tokio::sync::oneshot::channel::<String>();
 
         let cmd_tx = adapter::spawn_acp_agent(
             self.claude_binary.clone(),
@@ -59,6 +60,8 @@ impl AgentManager {
             agent_type,
             handle.event_tx.clone(),
             initial_model_tx,
+            None,
+            acp_session_id_tx,
         )?;
 
         handle.cmd_tx = Some(cmd_tx);
@@ -72,6 +75,13 @@ impl AgentManager {
         // call failed); skip recording in that case.
         if let Ok(Some(model_id)) = initial_model_rx.await {
             self.set_current_model(&agent_id, &model_id);
+        }
+
+        // Capture ACP session_id
+        if let Ok(acp_sid) = acp_session_id_rx.await {
+            if let Some(h) = self.agents.get_mut(&agent_id) {
+                h.acp_session_id = acp_sid;
+            }
         }
 
         Ok(agent_id)

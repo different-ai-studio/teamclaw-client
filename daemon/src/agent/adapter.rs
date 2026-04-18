@@ -379,6 +379,8 @@ pub fn spawn_acp_agent(
     agent_type: amux::AgentType,
     event_tx: mpsc::Sender<amux::AcpEvent>,
     initial_model_tx: oneshot::Sender<Option<String>>,
+    resume_acp_session_id: Option<String>,
+    acp_session_id_tx: oneshot::Sender<String>,
 ) -> crate::error::Result<mpsc::Sender<AcpCommand>> {
     let (cmd_tx, cmd_rx) = mpsc::channel::<AcpCommand>(64);
 
@@ -402,6 +404,8 @@ pub fn spawn_acp_agent(
                     event_tx,
                     cmd_rx,
                     initial_model_tx,
+                    resume_acp_session_id,
+                    acp_session_id_tx,
                 )
                 .await
                 {
@@ -423,6 +427,8 @@ async fn run_acp_session(
     event_tx: mpsc::Sender<amux::AcpEvent>,
     mut cmd_rx: mpsc::Receiver<AcpCommand>,
     initial_model_tx: oneshot::Sender<Option<String>>,
+    resume_acp_session_id: Option<String>,
+    acp_session_id_tx: oneshot::Sender<String>,
 ) -> anyhow::Result<()> {
     // Spawn the ACP agent process
     // Use claude-agent-acp wrapper (Node.js) which speaks ACP JSON-RPC over stdio
@@ -490,15 +496,42 @@ async fn run_acp_session(
 
     info!("ACP connection initialized");
 
-    // Create a new session
+    // Create or resume session
     let worktree_path = std::path::PathBuf::from(&worktree);
-    let session_resp = conn
-        .new_session(acp::NewSessionRequest::new(worktree_path))
-        .await
-        .map_err(|e| anyhow::anyhow!("ACP new_session failed: {}", e))?;
+    let session_id = if let Some(ref resume_id) = resume_acp_session_id {
+        let resume_req = acp::ResumeSessionRequest::new(
+            acp::SessionId::new(resume_id.clone()),
+            worktree_path.clone(),
+        );
+        match conn.resume_session(resume_req).await {
+            Ok(_resp) => {
+                let sid = acp::SessionId::new(resume_id.clone());
+                info!(session_id = %sid, "ACP session resumed");
+                sid
+            }
+            Err(e) => {
+                warn!(resume_id, "ACP resume_session failed ({}), falling back to new_session", e);
+                let resp = conn
+                    .new_session(acp::NewSessionRequest::new(worktree_path))
+                    .await
+                    .map_err(|e| anyhow::anyhow!("ACP new_session failed: {}", e))?;
+                let sid = resp.session_id.clone();
+                info!(session_id = %sid, "ACP session created (fallback)");
+                sid
+            }
+        }
+    } else {
+        let resp = conn
+            .new_session(acp::NewSessionRequest::new(worktree_path))
+            .await
+            .map_err(|e| anyhow::anyhow!("ACP new_session failed: {}", e))?;
+        let sid = resp.session_id.clone();
+        info!(session_id = %sid, "ACP session created");
+        sid
+    };
 
-    let session_id = session_resp.session_id.clone();
-    info!(session_id = %session_id, "ACP session created");
+    // Report the ACP session_id back to the caller
+    let _ = acp_session_id_tx.send(session_id.to_string());
 
     // Apply the default model from the hardcoded list before any prompt runs.
     // This ensures the very first turn is on the chosen model.
