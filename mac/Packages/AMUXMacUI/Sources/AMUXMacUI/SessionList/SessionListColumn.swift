@@ -132,36 +132,38 @@ struct SessionListColumn: View {
 
             Spacer()
 
-            HStack(spacing: 4) {
-                pillButton(systemImage: "plus") {
+            HStack(spacing: 0) {
+                iconButton(systemImage: "plus") {
                     onNewSession()
                 }
-                pillButton(
-                    systemImage: isEditing ? "checkmark.circle.fill" : "checkmark.circle"
-                ) {
+                iconButton(systemImage: isEditing ? "checkmark.circle.fill" : "checkmark.circle",
+                           highlighted: isEditing) {
                     isEditing.toggle()
                 }
-                pillButton(systemImage: "magnifyingglass") {
+                iconButton(systemImage: "magnifyingglass",
+                           highlighted: isSearchActive) {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isSearchActive.toggle()
                         if !isSearchActive { searchText = "" }
                     }
                 }
             }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(Color.secondary.opacity(0.12), in: Capsule())
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
         .padding(.bottom, 10)
     }
 
-    private func pillButton(systemImage: String, action: @escaping () -> Void) -> some View {
+    private func iconButton(systemImage: String, highlighted: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: 28, height: 28)
-                .background(Color.secondary.opacity(0.12), in: Circle())
-                .contentShape(Circle())
+                .foregroundStyle(highlighted ? Color.accentColor : .primary)
+                .frame(width: 26, height: 26)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

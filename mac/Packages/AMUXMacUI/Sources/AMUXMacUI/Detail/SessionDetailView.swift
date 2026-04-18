@@ -86,24 +86,26 @@ struct SessionDetailView: View {
 
     private var toolbarRow: some View {
         HStack {
-            HStack(spacing: 4) {
-                pillButton(systemImage: isPinned ? "pin.fill" : "pin.fill", help: "Pin") {
+            HStack(spacing: 0) {
+                iconButton(systemImage: isPinned ? "pin.fill" : "pin", highlighted: isPinned, help: "Pin") {
                     isPinned.toggle()
                 }
-                .foregroundStyle(isPinned ? Color.accentColor : .primary)
 
-                pillButton(systemImage: "archivebox.fill", help: "Archive") {
+                iconButton(systemImage: "archivebox", help: "Archive") {
                     print("TODO(v1.1): archive for session \(session.sessionId)")
                 }
 
-                pillButton(systemImage: "person.badge.plus", help: "Add member") {
+                iconButton(systemImage: "person.badge.plus", help: "Add member") {
                     print("TODO(v1.1): add-member for session \(session.sessionId)")
                 }
 
-                pillButton(systemImage: "square.and.arrow.up", help: "Share") {
+                iconButton(systemImage: "square.and.arrow.up", help: "Share") {
                     print("TODO(v1.1): share for session \(session.sessionId)")
                 }
             }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(Color.secondary.opacity(0.12), in: Capsule())
 
             Spacer()
 
@@ -114,14 +116,13 @@ struct SessionDetailView: View {
         .padding(.vertical, 8)
     }
 
-    private func pillButton(systemImage: String, help: String, action: @escaping () -> Void) -> some View {
+    private func iconButton(systemImage: String, highlighted: Bool = false, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: 28, height: 28)
-                .background(Color.secondary.opacity(0.12), in: Circle())
-                .contentShape(Circle())
+                .foregroundStyle(highlighted ? Color.accentColor : .primary)
+                .frame(width: 26, height: 26)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(help)

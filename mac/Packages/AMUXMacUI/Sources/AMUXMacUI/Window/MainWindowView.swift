@@ -52,6 +52,9 @@ public struct MainWindowView: View {
             detail
         }
         .navigationSplitViewStyle(.balanced)
+        .navigationTitle("")
+        .toolbar(removing: .title)
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .sheet(isPresented: $showNewSession) {
             if let mqtt {
                 NewSessionSheet(
@@ -78,8 +81,12 @@ public struct MainWindowView: View {
     }
 
     private var sidebar: some View {
-        SidebarView(selection: sidebarSelectionBinding, members: members.members)
-            .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 320)
+        VStack(spacing: 0) {
+            SidebarView(selection: sidebarSelectionBinding, members: members.members)
+            Divider()
+            DaemonStatusFooter(pairing: pairing, monitor: monitor)
+        }
+        .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 320)
     }
 
     private var sidebarSelectionBinding: Binding<SidebarItem?> {
@@ -119,8 +126,6 @@ public struct MainWindowView: View {
 
     private var detail: some View {
         DetailPlaceholderView(
-            pairing: pairing,
-            monitor: monitor,
             teamclawService: teamclaw,
             actorId: pairing.deviceId,
             selectedSessionId: selectedSessionId,
