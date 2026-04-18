@@ -5,6 +5,11 @@ import SwiftData
 @Observable @MainActor
 public final class AgentDetailViewModel {
     public var events: [AgentEvent] = []
+    /// Memoised tool-run grouping over `events`. Views should iterate this
+    /// instead of calling `groupEvents(vm.events)` in body, which previously
+    /// made grouping O(n) on every streaming delta frame. Recomputed by
+    /// `recomputeGroups()` at each mutation site.
+    public private(set) var groupedEvents: [GroupedEvent] = []
     public var isStreaming = false
     public var streamingText = ""
     /// Mirrors the model id stamped by the daemon on streaming output deltas
@@ -48,6 +53,122 @@ public final class AgentDetailViewModel {
         self.collabSession = collabSession; self.teamclawService = teamclawService
     }
 
+    /// Rebuilds `groupedEvents` from `events`. Call after any mutation that
+    /// adds, removes, or reorders events, or changes the grouping-relevant
+    /// fields on an existing event (eventType, isComplete, toolId).
+    private func recomputeGroups() {
+        groupedEvents = groupEvents(events)
+    }
+
+    // MARK: - Index caches (for O(1) event lookup during streaming)
+    //
+    // Long sessions accumulate thousands of events. Each tool_result /
+    // permission_resolved / tool_title_update previously did a
+    // `lastIndex(where:)` scan, making the event-handling hot path O(n)
+    // and the full session O(n²). These maps + optionals give O(1) lookup;
+    // they're maintained incrementally by `appendEvent`/`removeEvent` and
+    // rebuilt after bulk operations (fetch, sort, insert-at-zero).
+    private var toolUseIndexByToolId: [String: Int] = [:]
+    private var permissionIndexByRequestId: [String: Int] = [:]
+    private var todoUpdateIndex: Int?
+    private var lastIncompleteOutputIndex: Int?
+
+    private func rebuildIndexes() {
+        toolUseIndexByToolId.removeAll(keepingCapacity: true)
+        permissionIndexByRequestId.removeAll(keepingCapacity: true)
+        todoUpdateIndex = nil
+        lastIncompleteOutputIndex = nil
+        for (i, e) in events.enumerated() { registerIndex(event: e, at: i) }
+    }
+
+    private func registerIndex(event: AgentEvent, at idx: Int) {
+        switch event.eventType {
+        case "tool_use":
+            if let id = event.toolId { toolUseIndexByToolId[id] = idx }
+        case "permission_request":
+            if let id = event.toolId { permissionIndexByRequestId[id] = idx }
+        case "todo_update":
+            todoUpdateIndex = idx
+        case "output":
+            if !event.isComplete { lastIncompleteOutputIndex = idx }
+        default:
+            break
+        }
+    }
+
+    private func appendEvent(_ event: AgentEvent) {
+        let idx = events.count
+        events.append(event)
+        registerIndex(event: event, at: idx)
+    }
+
+    private func removeEvent(at idx: Int) {
+        let removed = events.remove(at: idx)
+        switch removed.eventType {
+        case "tool_use":
+            if let id = removed.toolId, toolUseIndexByToolId[id] == idx {
+                toolUseIndexByToolId.removeValue(forKey: id)
+            }
+        case "permission_request":
+            if let id = removed.toolId, permissionIndexByRequestId[id] == idx {
+                permissionIndexByRequestId.removeValue(forKey: id)
+            }
+        case "todo_update":
+            if todoUpdateIndex == idx { todoUpdateIndex = nil }
+        case "output":
+            if lastIncompleteOutputIndex == idx { lastIncompleteOutputIndex = nil }
+        default: break
+        }
+        // Shift indexes that pointed past the removed position. k is tiny
+        // in practice (one output, one todo, a handful of permissions,
+        // tool count per session), so this stays well below the old
+        // lastIndex(where:) cost over the whole event stream.
+        for (k, v) in toolUseIndexByToolId where v > idx {
+            toolUseIndexByToolId[k] = v - 1
+        }
+        for (k, v) in permissionIndexByRequestId where v > idx {
+            permissionIndexByRequestId[k] = v - 1
+        }
+        if let t = todoUpdateIndex, t > idx { todoUpdateIndex = t - 1 }
+        if let l = lastIncompleteOutputIndex, l > idx { lastIncompleteOutputIndex = l - 1 }
+    }
+
+    /// Validated O(1) lookup. Returns nil (and clears the stale cache
+    /// entry) if the cached index no longer matches the predicate, so
+    /// callers fall through to their "create new" branch as before.
+    private func toolUseIndex(forToolId id: String) -> Int? {
+        if let idx = toolUseIndexByToolId[id],
+           idx < events.count,
+           events[idx].eventType == "tool_use",
+           events[idx].toolId == id {
+            return idx
+        }
+        toolUseIndexByToolId.removeValue(forKey: id)
+        return nil
+    }
+
+    private func permissionIndex(forRequestId id: String) -> Int? {
+        if let idx = permissionIndexByRequestId[id],
+           idx < events.count,
+           events[idx].eventType == "permission_request",
+           events[idx].toolId == id {
+            return idx
+        }
+        permissionIndexByRequestId.removeValue(forKey: id)
+        return nil
+    }
+
+    private func incompleteOutputIndex() -> Int? {
+        if let idx = lastIncompleteOutputIndex,
+           idx < events.count,
+           events[idx].eventType == "output",
+           events[idx].isComplete == false {
+            return idx
+        }
+        lastIncompleteOutputIndex = nil
+        return nil
+    }
+
     public func start(modelContext: ModelContext) {
         task?.cancel()
         startModelContext = modelContext
@@ -68,6 +189,7 @@ public final class AgentDetailViewModel {
             sortBy: [SortDescriptor(\.sequence)]
         )
         events = (try? modelContext.fetch(descriptor)) ?? []
+        rebuildIndexes()
 
         // Insert initial prompt as first user bubble if not already present
         if !agent.currentPrompt.isEmpty && !events.contains(where: { $0.eventType == "user_prompt" }) {
@@ -75,13 +197,26 @@ public final class AgentDetailViewModel {
             promptEvent.text = agent.currentPrompt
             modelContext.insert(promptEvent)
             events.insert(promptEvent, at: 0)
+            // insert-at-zero shifts every cached index; cheaper to rebuild
+            rebuildIndexes()
         }
 
-        // Resume streaming state if there's an incomplete output event (saved by stop())
-        if let lastOutput = events.last(where: { $0.eventType == "output" && $0.isComplete == false }) {
+        // Resume streaming state if there's an incomplete output event (saved by stop()).
+        // Hydrate streamingText for an instant preview, then drop the synthetic
+        // event — keeping it would render the same bytes as both a bubble and
+        // the streaming text, and live deltas appended to streamingText would
+        // visibly duplicate the bubble content. The incremental sync below
+        // rebuilds streamingText from the daemon's raw deltas.
+        if let idx = incompleteOutputIndex() {
+            let lastOutput = events[idx]
             streamingText = lastOutput.text ?? ""
+            streamingModel = lastOutput.model
             isStreaming = agent.isActive
+            modelContext.delete(lastOutput)
+            removeEvent(at: idx)
         }
+
+        recomputeGroups()
 
         let eventsTopic = "amux/\(deviceId)/agent/\(agentId)/events"
         task = Task {
@@ -128,60 +263,75 @@ public final class AgentDetailViewModel {
             event.isComplete = false
             event.model = streamingModel
             ctx.insert(event)
-            events.append(event)
+            appendEvent(event)
             try? ctx.save()
             isStreaming = false
             streamingText = ""
             streamingModel = nil
+            recomputeGroups()
         }
         startModelContext = nil
     }
 
     private func handleEnvelope(_ env: Amux_Envelope, modelContext: ModelContext) {
         switch env.payload {
-        case .acpEvent(let acp): handleAcpEvent(acp, sequence: Int(env.sequence), modelContext: modelContext)
+        case .acpEvent(let acp):
+            if handleAcpEvent(acp, sequence: Int(env.sequence), modelContext: modelContext) {
+                try? modelContext.save()
+                recomputeGroups()
+            }
         case .collabEvent(let collab): handleCollabEvent(collab, sequence: Int(env.sequence))
         case .none: break
         }
     }
 
-    private func handleAcpEvent(_ acp: Amux_AcpEvent, sequence: Int, modelContext: ModelContext) {
+    /// Applies one ACP event to in-memory + SwiftData state. Returns `true`
+    /// iff the event caused a SwiftData mutation or a change to grouping-
+    /// relevant fields; callers save + recompute groups only when `true`.
+    /// Streaming deltas (the hot path, dozens per second) return `false`
+    /// after the first delta of a stream, skipping the SQLite commit and
+    /// the O(n) regroup that would otherwise fire on every token.
+    @discardableResult
+    private func handleAcpEvent(_ acp: Amux_AcpEvent, sequence: Int, modelContext: ModelContext) -> Bool {
         // Daemon stamps `acp.model` on agent-reply events (output + thinking).
         // Mirror it onto the SwiftData event so the bubble can show the model
         // that produced it. Empty string from proto means "not stamped".
         let modelStamp: String? = acp.model.isEmpty ? nil : acp.model
+        var dirty = false
         switch acp.event {
         case .output(let o):
             if o.isComplete {
-                // Complete output — replace any incomplete output event or create new
                 isStreaming = false
-                if let idx = events.lastIndex(where: { $0.eventType == "output" && $0.isComplete == false }) {
+                if let idx = incompleteOutputIndex() {
                     events[idx].text = o.text
                     events[idx].isComplete = true
                     if let modelStamp { events[idx].model = modelStamp }
+                    lastIncompleteOutputIndex = nil
                 } else {
                     let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "output")
                     event.text = o.text; event.isComplete = true
                     event.model = modelStamp
-                    modelContext.insert(event); events.append(event)
+                    modelContext.insert(event); appendEvent(event)
                 }
                 streamingText = ""
                 streamingModel = nil
+                dirty = true
             } else {
-                // Streaming delta — remove persisted incomplete event on first delta
-                // (it will be re-saved in stop() if user leaves again)
+                // Streaming delta — only the first delta of a stream mutates
+                // SwiftData (to drop the stop()-saved synthetic event).
+                // Subsequent deltas update streamingText only; no save needed.
                 if !isStreaming {
-                    if let idx = events.lastIndex(where: { $0.eventType == "output" && $0.isComplete == false }) {
+                    if let idx = incompleteOutputIndex() {
                         streamingText = events[idx].text ?? ""
                         modelContext.delete(events[idx])
-                        events.remove(at: idx)
+                        removeEvent(at: idx)
+                        dirty = true
                     }
                 }
                 isStreaming = true; streamingText += o.text
                 if let modelStamp { streamingModel = modelStamp }
             }
         case .thinking(let t):
-            // Append to last thinking event if it's the most recent, otherwise create new
             if let last = events.last, last.eventType == "thinking" {
                 last.text = (last.text ?? "") + t.text
                 if let modelStamp { last.model = modelStamp }
@@ -189,51 +339,62 @@ public final class AgentDetailViewModel {
                 let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "thinking")
                 event.text = t.text
                 event.model = modelStamp
-                modelContext.insert(event); events.append(event)
+                modelContext.insert(event); appendEvent(event)
             }
+            dirty = true
         case .toolUse(let tu):
             let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "tool_use")
             event.toolName = tu.toolName; event.toolId = tu.toolID; event.text = tu.description_p
-            modelContext.insert(event); events.append(event)
+            modelContext.insert(event); appendEvent(event)
+            dirty = true
         case .toolResult(let tr):
-            // Update matching tool_use event instead of creating separate entry
-            if let idx = events.lastIndex(where: { $0.eventType == "tool_use" && $0.toolId == tr.toolID }) {
+            if let idx = toolUseIndex(forToolId: tr.toolID) {
                 events[idx].success = tr.success
                 events[idx].isComplete = true
             } else {
                 let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "tool_result")
                 event.toolId = tr.toolID; event.success = tr.success; event.text = tr.summary
-                modelContext.insert(event); events.append(event)
+                modelContext.insert(event); appendEvent(event)
             }
+            dirty = true
         case .error(let e):
             let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "error")
-            event.text = e.message; modelContext.insert(event); events.append(event)
+            event.text = e.message; modelContext.insert(event); appendEvent(event)
+            dirty = true
         case .permissionRequest(let pr):
             let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "permission_request")
             event.toolName = pr.toolName; event.toolId = pr.requestID; event.text = pr.description_p
-            modelContext.insert(event); events.append(event)
+            modelContext.insert(event); appendEvent(event)
+            dirty = true
         case .todoUpdate(let tu):
-            // Replace existing todo event with fresh snapshot
-            events.removeAll { $0.eventType == "todo_update" }
-            let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "todo_update")
+            // Daemon sends a full snapshot of todos each time. Update the
+            // single existing todo_update event in-place instead of removing+
+            // re-inserting — that used to leak SwiftData rows on every tick
+            // (events.removeAll didn't delete from the store).
             let lines = tu.items.map { item -> String in
                 let icon = item.status == .completed ? "done" : item.status == .inProgress ? "wip" : "todo"
                 return "[\(icon)] \(item.content)"
             }
-            event.text = lines.joined(separator: "\n")
-            modelContext.insert(event); events.append(event)
+            let text = lines.joined(separator: "\n")
+            if let idx = todoUpdateIndex, idx < events.count, events[idx].eventType == "todo_update" {
+                events[idx].text = text
+            } else {
+                let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "todo_update")
+                event.text = text
+                modelContext.insert(event); appendEvent(event)
+            }
+            dirty = true
         case .statusChange(let sc):
             agent?.status = Int(sc.newStatus.rawValue)
+            dirty = true
             if sc.newStatus == .idle {
-                // Agent finished — flush any accumulated streaming text as a complete output event
                 if isStreaming && !streamingText.isEmpty {
                     let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "output")
                     event.text = streamingText; event.isComplete = true
                     event.model = streamingModel
-                    modelContext.insert(event); events.append(event)
+                    modelContext.insert(event); appendEvent(event)
                 }
                 isStreaming = false; streamingText = ""; streamingModel = nil
-                // Mark all tool_use events as completed
                 for event in events where event.eventType == "tool_use" && event.isComplete != true {
                     event.isComplete = true
                     if event.success == nil { event.success = true }
@@ -245,14 +406,15 @@ public final class AgentDetailViewModel {
                 if let pipeIdx = payload.firstIndex(of: "|") {
                     let toolId = String(payload[payload.startIndex..<pipeIdx])
                     let newTitle = String(payload[payload.index(after: pipeIdx)...])
-                    if let idx = events.lastIndex(where: { $0.eventType == "tool_use" && $0.toolId == toolId }) {
+                    if let idx = toolUseIndex(forToolId: toolId) {
                         events[idx].toolName = newTitle
+                        dirty = true
                     }
                 }
             }
         default: break
         }
-        try? modelContext.save()
+        return dirty
     }
 
     private func handleCollabEvent(_ collab: Amux_CollabEvent, sequence: Int) {
@@ -263,13 +425,13 @@ public final class AgentDetailViewModel {
         case .promptRejected(let pr):
             let event = AgentEvent(agentId: agent?.agentId ?? "", sequence: sequence, eventType: "error")
             event.text = "Rejected: \(pr.reason)"
-            events.append(event)
+            appendEvent(event)
+            recomputeGroups()
         case .permissionResolved(let resolved):
-            if let idx = events.lastIndex(where: {
-                $0.eventType == "permission_request" && $0.toolId == resolved.requestID
-            }) {
+            if let idx = permissionIndex(forRequestId: resolved.requestID) {
                 events[idx].isComplete = true
                 events[idx].success = resolved.granted
+                recomputeGroups()
             }
         case .historyBatch(let batch):
             handleHistoryBatch(batch)
@@ -286,24 +448,36 @@ public final class AgentDetailViewModel {
         guard let modelContext = syncModelContext else { return }
         let existingSeqs = Set(events.compactMap { $0.sequence != 0 ? $0.sequence : nil })
 
+        // Aggregate dirty across the batch so we save + regroup once per page
+        // instead of per-event. Sort+regroup is deferred to the last page in
+        // the common case where the client keeps paginating (batch.hasMore_p).
+        var anyDirty = false
         for envelope in batch.events {
             let seq = Int(envelope.sequence)
             guard !existingSeqs.contains(seq) else { continue }
 
             if case .acpEvent(let acp) = envelope.payload {
-                handleAcpEvent(acp, sequence: seq, modelContext: modelContext)
+                if handleAcpEvent(acp, sequence: seq, modelContext: modelContext) {
+                    anyDirty = true
+                }
             }
         }
 
-        // Sort events by sequence to maintain order
-        events.sort { ($0.sequence ) < ($1.sequence ) }
+        if anyDirty {
+            try? modelContext.save()
+        }
 
         if batch.hasMore_p {
-            // Request next page
+            // Mid-sync: rebuild groups so the user sees progress, but defer
+            // the O(n log n) sort to the final page.
+            if anyDirty { recomputeGroups() }
             Task {
                 try? await requestHistoryPage(afterSequence: batch.nextAfterSequence)
             }
         } else {
+            events.sort { $0.sequence < $1.sequence }
+            rebuildIndexes()
+            recomputeGroups()
             isSyncing = false
         }
     }
@@ -356,7 +530,8 @@ public final class AgentDetailViewModel {
             let userEvent = AgentEvent(agentId: agent.agentId, sequence: seq, eventType: "user_prompt")
             userEvent.text = text
             if let ctx = modelContext ?? syncModelContext { ctx.insert(userEvent); try? ctx.save() }
-            events.append(userEvent)
+            appendEvent(userEvent)
+            recomputeGroups()
 
             var p = Amux_AcpSendPrompt(); p.text = text
             if let modelId, !modelId.isEmpty {
@@ -369,7 +544,8 @@ public final class AgentDetailViewModel {
             let userEvent = AgentEvent(agentId: collabSession.sessionId, sequence: seq, eventType: "user_prompt")
             userEvent.text = text
             if let ctx = modelContext ?? startModelContext { ctx.insert(userEvent); try? ctx.save() }
-            events.append(userEvent)
+            appendEvent(userEvent)
+            recomputeGroups()
 
             teamclawService.sendMessage(
                 sessionId: collabSession.sessionId,

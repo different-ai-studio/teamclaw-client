@@ -644,8 +644,26 @@ impl DaemonServer {
             }
 
             amux::acp_command::Command::RequestHistory(req) => {
+                use prost::Message;
                 let page_size = if req.page_size == 0 { 50 } else { req.page_size };
-                let (events, has_more) = self.history.read_page(agent_id, req.after_sequence, page_size);
+                let (mut events, mut has_more) = self.history.read_page(agent_id, req.after_sequence, page_size);
+
+                // HiveMQ Cloud free tier caps packet size at 10240 bytes.
+                // Trim the batch by estimated encoded length so we never
+                // produce a publish the broker will reject (which otherwise
+                // forces the daemon's MQTT client to reconnect and knocks
+                // every iOS peer offline in a loop).
+                const HISTORY_BATCH_BUDGET: usize = 9500;
+                while events.len() > 1 {
+                    let estimate: usize = events.iter().map(|e| {
+                        let n = e.encoded_len();
+                        1 + prost::encoding::encoded_len_varint(n as u64) + n
+                    }).sum::<usize>() + req.request_id.len() + 32;
+                    if estimate < HISTORY_BATCH_BUDGET { break; }
+                    events.pop();
+                    has_more = true;
+                }
+
                 let next_seq = events.last().map(|e| e.sequence).unwrap_or(req.after_sequence);
                 info!(agent_id, peer_id, after_seq = req.after_sequence, count = events.len(), has_more, "history requested");
                 let batch = amux::HistoryBatch {

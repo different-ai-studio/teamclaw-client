@@ -99,7 +99,7 @@ public struct AgentDetailView: View {
                             .padding(.vertical, 60)
                         }
 
-                        ForEach(groupEvents(viewModel.events)) { item in
+                        ForEach(viewModel.groupedEvents) { item in
                             switch item {
                             case .single(let event):
                                 EventBubbleView(

@@ -255,67 +255,7 @@ public struct ToolRunSummaryBar: View {
 
 // MARK: - Event Grouping
 
-public enum GroupedEvent: Identifiable {
-    case single(AgentEvent)
-    case toolRun(id: String, events: [AgentEvent])
-
-    public var id: String {
-        switch self {
-        case .single(let e): e.id
-        case .toolRun(let id, _): id
-        }
-    }
-}
-
-/// Groups completed tool_use events into tool runs, skipping over
-/// thinking and tool_result events that naturally occur between tools.
-/// A tool run breaks at user_prompt, output, error, permission_request, or todo_update.
-/// Running/incomplete tools also break the run.
-public func groupEvents(_ events: [AgentEvent]) -> [GroupedEvent] {
-    // Events that can appear between tool calls without breaking the run
-    let skippableTypes: Set<String> = ["thinking", "tool_result"]
-
-    var result: [GroupedEvent] = []
-    var i = 0
-    while i < events.count {
-        let event = events[i]
-
-        if event.eventType == "tool_use", event.isComplete {
-            // Start collecting a tool run
-            var toolEvents: [AgentEvent] = [event]
-            var skippedEvents: [AgentEvent] = []
-            var j = i + 1
-
-            while j < events.count {
-                let next = events[j]
-                if next.eventType == "tool_use", next.isComplete {
-                    // Another completed tool — absorb any skipped events and continue
-                    skippedEvents.removeAll()
-                    toolEvents.append(next)
-                    j += 1
-                } else if skippableTypes.contains(next.eventType) {
-                    // Thinking/tool_result between tools — tentatively skip
-                    skippedEvents.append(next)
-                    j += 1
-                } else {
-                    // Content event — stop the run
-                    break
-                }
-            }
-
-            if toolEvents.count >= 3 {
-                let groupId = "toolrun-\(toolEvents.first!.id)"
-                result.append(.toolRun(id: groupId, events: toolEvents))
-            } else {
-                for e in toolEvents { result.append(.single(e)) }
-            }
-            // Put back any trailing skipped events that weren't followed by a tool
-            for e in skippedEvents { result.append(.single(e)) }
-            i = j
-        } else {
-            result.append(.single(event))
-            i += 1
-        }
-    }
-    return result
-}
+// GroupedEvent and groupEvents live in AMUXCore so AgentDetailViewModel
+// can maintain a cached grouping that updates only when events change,
+// avoiding an O(n) regroup on every body recompute (streaming deltas
+// previously forced a regroup on every frame).
