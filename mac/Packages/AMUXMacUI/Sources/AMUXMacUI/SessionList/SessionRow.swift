@@ -91,8 +91,7 @@ struct SessionRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(displayTitle)
-                    .font(.body)
-                    .fontWeight(.semibold)
+                    .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                     .foregroundStyle(.primary)
 

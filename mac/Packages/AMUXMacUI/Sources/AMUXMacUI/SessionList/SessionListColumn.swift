@@ -119,18 +119,15 @@ struct SessionListColumn: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(headerTitle)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.primary)
-                Text("\(unreadCount) unread")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+        HStack(alignment: .center, spacing: 6) {
+            Text(headerTitle)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+            Text("\(unreadCount) unread")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
 
-            Spacer()
+            Spacer(minLength: 8)
 
             HStack(spacing: 0) {
                 iconButton(systemImage: "plus") {
@@ -153,8 +150,7 @@ struct SessionListColumn: View {
             .glassEffect(in: Capsule())
         }
         .padding(.horizontal, 16)
-        .padding(.top, 14)
-        .padding(.bottom, 10)
+        .padding(.vertical, 8)
     }
 
     private func iconButton(systemImage: String, highlighted: Bool = false, action: @escaping () -> Void) -> some View {
