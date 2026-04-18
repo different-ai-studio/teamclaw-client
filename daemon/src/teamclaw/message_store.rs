@@ -22,6 +22,10 @@ pub struct StoredMessage {
     pub reply_to_message_id: String,
     #[serde(default)]
     pub mentions: Vec<String>,
+    /// Model id stamped at publish time. Absent in pre-Plan-6 TOML files;
+    /// `#[serde(default)]` deserializes those as empty string.
+    #[serde(default)]
+    pub model: String,
 }
 
 impl MessageStore {
@@ -78,12 +82,7 @@ impl MessageStore {
             created_at: msg.created_at.timestamp(),
             reply_to_message_id: msg.reply_to_message_id.clone(),
             mentions: msg.mentions.clone(),
-            // The live agent-reply path stamps `model` at construction in
-            // `SessionManager::publish_agent_message`. Stored messages
-            // (TOML-on-disk replay) do not currently persist the model, so
-            // historical replays surface as empty. Pre-Plan-6 messages and
-            // human/system messages also have no model.
-            model: String::new(),
+            model: msg.model.clone(),
         }
     }
 }
@@ -113,6 +112,7 @@ mod tests {
             created_at: Utc::now(),
             reply_to_message_id: String::new(),
             mentions: vec![],
+            model: String::new(),
         }
     }
 
