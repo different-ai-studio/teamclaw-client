@@ -72,16 +72,24 @@ public struct MainWindowView: View {
             case .function(.sessions), .none:
                 SessionListColumn(
                     memberFilter: nil,
-                    selectedSessionId: $selectedSessionId
+                    memberName: nil,
+                    selectedSessionId: $selectedSessionId,
+                    onNewSession: handleNewSession
                 )
             case .member(let id):
                 SessionListColumn(
                     memberFilter: id,
-                    selectedSessionId: $selectedSessionId
+                    memberName: members.members.first(where: { $0.memberId == id })?.displayName,
+                    selectedSessionId: $selectedSessionId,
+                    onNewSession: handleNewSession
                 )
             }
         }
         .navigationSplitViewColumnWidth(min: 280, ideal: 360, max: 480)
+    }
+
+    private func handleNewSession() {
+        // Task 4 will wire up the NewSessionSheet. For now this is a no-op.
     }
 
     private var detail: some View {
