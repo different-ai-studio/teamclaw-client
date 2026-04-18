@@ -8,9 +8,9 @@ import AMUXCore
 // instead of a SessionListViewModel — macOS doesn't have one yet, and reading
 // SwiftData here is the lighter-weight choice.
 //
-// v1 skips the collaborator picker (the iOS MemberListView hasn't been ported
-// to macOS). Single-host sessions only — collab dispatch via CreateSessionRequest
-// will land in v1.1.
+// Behavior mirrors iOS: when `collaborators` is empty we start a solo agent
+// via Amux_AcpStartAgent; when non-empty we issue a Teamclaw_CreateSessionRequest
+// RPC to the daemon, which returns a SessionInfo we insert into SwiftData.
 
 struct NewSessionSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -25,15 +25,23 @@ struct NewSessionSheet: View {
 
     @State private var selectedWorkspaceId: String?
     @State private var selectedAgentType: Amux_AgentType = .claudeCode
+    @State private var collaborators: [Member] = []
+    @State private var showMemberPicker = false
     @State private var messageText: String = ""
     @State private var isSending = false
     @State private var errorMessage: String?
     @FocusState private var isInputFocused: Bool
 
+    /// Matches daemon.toml `team_id`. Must be kept in sync with the daemon config.
+    private static let teamId = "teamclaw"
+
     private var canSend: Bool {
-        selectedWorkspaceId != nil &&
-        !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !isSending
+        // Collab sessions don't require a workspace — the daemon binds the
+        // primary agent later from the host's workspace.
+        let workspaceOK = selectedWorkspaceId != nil || !collaborators.isEmpty
+        return workspaceOK &&
+            !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !isSending
     }
 
     var body: some View {
@@ -65,6 +73,15 @@ struct NewSessionSheet: View {
         .frame(minWidth: 520, idealWidth: 560, minHeight: 360, idealHeight: 420)
         .background(Color(NSColor.windowBackgroundColor))
         .allowsHitTesting(!isSending)
+        .sheet(isPresented: $showMemberPicker) {
+            MemberPickerSheet(
+                mqtt: mqtt,
+                deviceId: deviceId,
+                selected: Set(collaborators.map(\.memberId))
+            ) { picked in
+                collaborators = picked
+            }
+        }
         .onAppear {
             isInputFocused = true
             if workspaces.count == 1 {
@@ -163,28 +180,42 @@ struct NewSessionSheet: View {
         return "Select\u{2026}"
     }
 
-    // MARK: - Collaborators (deferred to v1.1)
+    // MARK: - Collaborators
 
     private var collaboratorsRow: some View {
         HStack(alignment: .center, spacing: 8) {
             Text("Collaborators")
                 .foregroundStyle(.secondary)
 
-            Text("Solo session")
-                .font(.subheadline)
-                .foregroundStyle(.tertiary)
+            if collaborators.isEmpty {
+                Text("Solo session")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(collaborators, id: \.memberId) { member in
+                            CollaboratorChip(name: member.displayName) {
+                                collaborators.removeAll { $0.memberId == member.memberId }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 1)
+                }
+            }
 
             Spacer(minLength: 0)
 
-            // TODO(v1.1): port iOS MemberListView and enable collaborator picking.
-            Button {} label: {
+            Button {
+                isInputFocused = false
+                showMemberPicker = true
+            } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.title3)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.accentColor)
             }
             .buttonStyle(.plain)
-            .disabled(true)
-            .help("Collaborator picker coming in v1.1")
+            .help("Add collaborators")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -224,10 +255,18 @@ struct NewSessionSheet: View {
 
     private func sendAndCreate() {
         let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let workspaceId = selectedWorkspaceId else { return }
+        guard !text.isEmpty else { return }
 
         isInputFocused = false
         errorMessage = nil
+
+        if !collaborators.isEmpty {
+            createCollabSession(text: text)
+            return
+        }
+
+        guard let workspaceId = selectedWorkspaceId else { return }
+
         isSending = true
 
         Task {
@@ -294,5 +333,111 @@ struct NewSessionSheet: View {
                 errorMessage = "Session creation timed out. Check daemon logs."
             }
         }
+    }
+
+    // MARK: - Collab session (Teamclaw CreateSessionRequest RPC)
+    //
+    // Mirrors iOS NewSessionSheet.createCollabSession. The daemon listens on
+    // teamclaw/{teamId}/rpc/{deviceId}/{requestId}/req and replies on the
+    // matching /res topic with a Teamclaw_RpcResponse.
+
+    private func createCollabSession(text: String) {
+        isSending = true
+
+        var createReq = Teamclaw_CreateSessionRequest()
+        createReq.sessionType = .collab
+        createReq.teamID = Self.teamId
+        createReq.title = String(text.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
+        createReq.summary = text
+        createReq.inviteActorIds = collaborators.map(\.memberId)
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .createSession(createReq)
+
+        let requestId = rpcReq.requestID
+        let topic = "teamclaw/\(Self.teamId)/rpc/\(deviceId)/\(requestId)/req"
+        let responseTopic = "teamclaw/\(Self.teamId)/rpc/\(deviceId)/+/res"
+
+        Task {
+            try? await mqtt.subscribe(responseTopic)
+            let stream = mqtt.messages()
+
+            guard let data = try? rpcReq.serializedData() else {
+                await MainActor.run {
+                    isSending = false
+                    errorMessage = "Failed to encode request"
+                }
+                return
+            }
+            try? await mqtt.publish(topic: topic, payload: data, retain: false)
+
+            let deadline = Date().addingTimeInterval(10)
+            for await msg in stream {
+                if Date() > deadline { break }
+                guard msg.topic.contains("/rpc/"), msg.topic.hasSuffix("/res") else { continue }
+                guard let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload) else { continue }
+
+                if response.success, case .sessionInfo(let info) = response.result {
+                    await MainActor.run {
+                        let session = CollabSession(
+                            sessionId: info.sessionID,
+                            sessionType: "collab",
+                            teamId: info.teamID,
+                            title: info.title,
+                            hostDeviceId: info.hostDeviceID,
+                            createdBy: info.createdBy,
+                            createdAt: Date(timeIntervalSince1970: TimeInterval(info.createdAt)),
+                            summary: info.summary,
+                            participantCount: info.participants.count
+                        )
+                        session.primaryAgentId = info.primaryAgentID.isEmpty ? nil : info.primaryAgentID
+                        modelContext.insert(session)
+                        try? modelContext.save()
+
+                        isSending = false
+                        onSessionCreated?("collab:\(info.sessionID)")
+                        dismiss()
+                    }
+                    return
+                } else if !response.error.isEmpty {
+                    await MainActor.run {
+                        isSending = false
+                        errorMessage = response.error
+                    }
+                    return
+                }
+            }
+
+            await MainActor.run {
+                isSending = false
+                errorMessage = "Session creation timed out"
+            }
+        }
+    }
+}
+
+// MARK: - CollaboratorChip
+
+private struct CollaboratorChip: View {
+    let name: String
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(name)
+                .font(.subheadline)
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.caption2.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 6)
+        .padding(.vertical, 5)
+        .foregroundStyle(.primary)
+        .background(Color.secondary.opacity(0.15), in: Capsule())
     }
 }
