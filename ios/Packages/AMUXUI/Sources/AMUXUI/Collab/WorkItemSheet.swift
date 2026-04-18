@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
+import PhotosUI
 
 public struct WorkItemSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -132,6 +133,12 @@ public struct WorkItemSheet: View {
 
 // MARK: - CreateWorkItemSheet
 
+private struct AttachedImage: Identifiable {
+    let id = UUID()
+    let image: UIImage
+    let fileName: String
+}
+
 struct CreateWorkItemSheet: View {
     @Environment(\.dismiss) private var dismiss
     let teamclawService: TeamclawService?
@@ -145,8 +152,12 @@ struct CreateWorkItemSheet: View {
         "AMUX", "agent", "workitem", "claude", "tool", "MQTT", "daemon"
     ])
 
+    @State private var attachedImages: [AttachedImage] = []
+    @State private var photoPickerItems: [PhotosPickerItem] = []
+
     private var canSend: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
+        let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return (hasText || !attachedImages.isEmpty) && !isSending
     }
 
     private var isRecording: Bool { voiceRecorder.state == .recording }
@@ -177,6 +188,18 @@ struct CreateWorkItemSheet: View {
                     }
                 }
 
+                if !attachedImages.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(attachedImages) { chip in
+                                imageChip(chip)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                    .frame(height: 76)
+                }
+
                 HStack(spacing: 12) {
                     Button {
                         toggleRecording()
@@ -184,6 +207,16 @@ struct CreateWorkItemSheet: View {
                         Image(systemName: isRecording ? "mic.fill" : "mic")
                             .font(.body)
                             .foregroundStyle(isRecording ? .red : .primary)
+                            .frame(width: 40, height: 40)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .liquidGlass(in: Circle())
+
+                    PhotosPicker(selection: $photoPickerItems, maxSelectionCount: 5, matching: .images) {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.body)
+                            .foregroundStyle(.primary)
                             .frame(width: 40, height: 40)
                             .contentShape(Circle())
                     }
@@ -224,7 +257,39 @@ struct CreateWorkItemSheet: View {
                 }
             }
             .onAppear { isFocused = true }
+            .onChange(of: photoPickerItems) { _, newItems in
+                Task {
+                    for item in newItems {
+                        guard let data = try? await item.loadTransferable(type: Data.self),
+                              let img = UIImage(data: data) else { continue }
+                        let name = "img-\(UUID().uuidString.prefix(6).lowercased()).png"
+                        await MainActor.run {
+                            attachedImages.append(AttachedImage(image: img, fileName: name))
+                        }
+                    }
+                    await MainActor.run { photoPickerItems.removeAll() }
+                }
+            }
         }
+    }
+
+    private func imageChip(_ chip: AttachedImage) -> some View {
+        Image(uiImage: chip.image)
+            .resizable()
+            .scaledToFill()
+            .frame(width: 60, height: 60)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(alignment: .topTrailing) {
+                Button {
+                    attachedImages.removeAll { $0.id == chip.id }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.white, .black.opacity(0.7))
+                        .padding(4)
+                }
+                .buttonStyle(.plain)
+            }
     }
 
     private var voiceBanner: some View {
@@ -270,10 +335,15 @@ struct CreateWorkItemSheet: View {
     }
 
     private func send() {
-        let desc = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var finalDesc = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !attachedImages.isEmpty {
+            let refs = attachedImages.map { "![\($0.fileName)](placeholder://\($0.fileName))" }
+            if !finalDesc.isEmpty { finalDesc += "\n\n" }
+            finalDesc += refs.joined(separator: "\n")
+        }
         isSending = true
         Task {
-            let ok = await teamclawService?.createWorkItem(description: desc) ?? false
+            let ok = await teamclawService?.createWorkItem(description: finalDesc) ?? false
             isSending = false
             if ok {
                 onCreated()
