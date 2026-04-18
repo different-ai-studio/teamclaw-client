@@ -48,6 +48,31 @@ public final class MQTTService: NSObject, @unchecked Sendable {
         mqtt.delegate = self
         self.mqtt = mqtt
 
+        // Race the CONNACK against a 15 s timeout — without this, a dead
+        // socket that never yields a delegate callback would leave the
+        // continuation unresumed forever, and the caller-side isConnecting
+        // flag with it. Reported symptom: "Not Connected" sticks, tap
+        // reconnect does nothing, only kill+relaunch recovers.
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await self.waitForConnectAck(mqtt: mqtt)
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(15))
+                // Timeout fires: drain the pending continuation so the
+                // CONNACK arm (if it ever returns) doesn't try to resume
+                // a stale one.
+                if let pending = self.takeConnectContinuation() {
+                    pending.resume(throwing: MQTTConnectionError.timeout)
+                }
+                throw MQTTConnectionError.timeout
+            }
+            try await group.next()
+            group.cancelAll()
+        }
+    }
+
+    private func waitForConnectAck(mqtt: CocoaMQTT) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             // Publish the continuation to state BEFORE calling connect() so
             // a fast CONNACK on the delegate thread finds it installed.

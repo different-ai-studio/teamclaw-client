@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var connectionMonitor = ConnectionMonitor()
     @State private var teamclawService = TeamclawService()
     @State private var isConnecting = false
+    @State private var connectTask: Task<Void, Never>?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var modelContext
 
@@ -19,10 +20,7 @@ struct ContentView: View {
         Group {
             if pairing.isPaired {
                 SessionListView(mqtt: mqtt, pairing: pairing, connectionMonitor: connectionMonitor, teamclawService: teamclawService, onReconnect: {
-                        Task {
-                            await mqtt.disconnect()
-                            await connectMQTT()
-                        }
+                        forceReconnect()
                     })
                     .task { await connectMQTT() }
             } else {
@@ -41,10 +39,7 @@ struct ContentView: View {
             // incremental history sync once MQTT is back up.
             if phase == .active && pairing.isPaired {
                 logger.info("App became active, forcing MQTT reconnect…")
-                Task {
-                    await mqtt.disconnect()
-                    await connectMQTT()
-                }
+                forceReconnect()
             }
         }
         .onOpenURL { url in
@@ -55,6 +50,18 @@ struct ContentView: View {
             } catch {
                 logger.error("Pairing failed: \(error)")
             }
+        }
+    }
+
+    /// User-initiated reconnect: cancels any in-flight connect Task (so a
+    /// hung MQTTService.connect can't leave `isConnecting` stuck `true`),
+    /// clears the flag, then disconnects and reconnects.
+    private func forceReconnect() {
+        connectTask?.cancel()
+        isConnecting = false
+        connectTask = Task {
+            await mqtt.disconnect()
+            await connectMQTT()
         }
     }
 
