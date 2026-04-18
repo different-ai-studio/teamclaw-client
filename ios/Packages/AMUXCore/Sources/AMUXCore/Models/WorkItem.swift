@@ -11,6 +11,7 @@ public final class WorkItem {
     public var parentId: String
     public var createdBy: String
     public var createdAt: Date
+    public var archived: Bool
 
     public init(
         workItemId: String,
@@ -20,7 +21,8 @@ public final class WorkItem {
         status: String = "open",
         parentId: String = "",
         createdBy: String = "",
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        archived: Bool = false
     ) {
         self.workItemId = workItemId
         self.sessionId = sessionId
@@ -30,6 +32,7 @@ public final class WorkItem {
         self.parentId = parentId
         self.createdBy = createdBy
         self.createdAt = createdAt
+        self.archived = archived
     }
 
     public var displayTitle: String {
