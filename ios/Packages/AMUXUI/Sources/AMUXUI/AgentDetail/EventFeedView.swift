@@ -108,34 +108,15 @@ public struct EventBubbleView: View {
                     MessageContextMenu(text: event.text ?? "")
                 }
             }
-            // Footer: timestamp · model (when daemon stamped it). Hidden when
-            // we have neither a model nor a meaningful timestamp source.
-            if event.isComplete, modelDisplayName != nil || !timestampString.isEmpty {
-                HStack(spacing: 4) {
-                    if !timestampString.isEmpty {
-                        Text(timestampString)
-                    }
-                    if let modelName = modelDisplayName {
-                        if !timestampString.isEmpty {
-                            Text("·")
-                        }
-                        Text(modelName)
-                    }
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .padding(.leading, 18)
+            if event.isComplete, let modelName = modelDisplayName {
+                Text(modelName)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 18)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
-    }
-
-    private var timestampString: String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
-        return formatter.string(from: event.timestamp)
     }
 
     // MARK: - Thinking Block
