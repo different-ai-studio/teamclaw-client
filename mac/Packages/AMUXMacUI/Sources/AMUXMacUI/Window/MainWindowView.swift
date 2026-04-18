@@ -10,6 +10,8 @@ public struct MainWindowView: View {
     @SceneStorage("amux.mainWindow.selectedTask") private var selectedTaskId: String?
     @State private var mqtt: MQTTService?
     @State private var monitor: ConnectionMonitor?
+    @State private var peerId: String = "mac-\(UUID().uuidString.prefix(6))"
+    @State private var showNewSession = false
     let teamclaw: TeamclawService
     @State private var members = MemberListViewModel()
 
@@ -50,6 +52,29 @@ public struct MainWindowView: View {
             detail
         }
         .navigationSplitViewStyle(.balanced)
+        .sheet(isPresented: $showNewSession) {
+            if let mqtt {
+                NewSessionSheet(
+                    mqtt: mqtt,
+                    deviceId: pairing.deviceId,
+                    peerId: peerId,
+                    onSessionCreated: { agentId in
+                        selectedSessionId = agentId
+                    }
+                )
+            } else {
+                VStack(spacing: 12) {
+                    Text("Not connected")
+                        .font(.headline)
+                    Text("Connect to the daemon before creating a session.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Button("Close") { showNewSession = false }
+                }
+                .padding(32)
+                .frame(minWidth: 320)
+            }
+        }
     }
 
     private var sidebar: some View {
@@ -89,7 +114,7 @@ public struct MainWindowView: View {
     }
 
     private func handleNewSession() {
-        // Task 4 will wire up the NewSessionSheet. For now this is a no-op.
+        showNewSession = true
     }
 
     private var detail: some View {
@@ -125,8 +150,8 @@ public struct MainWindowView: View {
         self.mqtt = service
         self.monitor = mon
 
-        // Start data sync
-        let peerId = "mac-\(UUID().uuidString.prefix(6))"
+        // Start data sync (peerId persisted on the view's state so the
+        // NewSessionSheet can publish commands with the same peer identity).
         teamclaw.start(
             mqtt: service,
             teamId: Self.teamId,
