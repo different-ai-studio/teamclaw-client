@@ -80,10 +80,13 @@ struct SessionDetailView: View {
         }
     }
 
+    private var modelLookup: [String: String] {
+        guard let agent = primaryAgent else { return [:] }
+        return Dictionary(uniqueKeysWithValues: agent.availableModels.map { ($0.id, $0.displayName) })
+    }
+
     private func modelLabel(for message: SessionMessage) -> String? {
-        guard let modelId = message.model, !modelId.isEmpty,
-              let agent = primaryAgent
-        else { return nil }
-        return agent.availableModels.first(where: { $0.id == modelId })?.displayName ?? modelId
+        guard let modelId = message.model, !modelId.isEmpty else { return nil }
+        return modelLookup[modelId] ?? modelId
     }
 }

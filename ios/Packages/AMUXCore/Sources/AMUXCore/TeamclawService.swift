@@ -336,7 +336,11 @@ public final class TeamclawService {
     ///   `docs/plans/end-to-end-model-selection.md` Task 6 for context.
     public func sendMessage(sessionId: String, content: String, actorId: String, modelId: String? = nil) {
         guard let mqtt else { return }
-        _ = modelId  // Reserved for future forwarding to agent prompt path.
+        // TODO(plan-6-v2): forward modelId to daemon's agent prompt path
+        // (collab→agent dispatch is daemon-mediated; daemon doesn't yet promote
+        // a Teamclaw_Message into an AcpSendPrompt.modelId. Until then this
+        // parameter is accepted but ignored.)
+        _ = modelId
         var message = Teamclaw_Message()
         message.messageID = UUID().uuidString
         message.sessionID = sessionId
