@@ -141,42 +141,58 @@ struct CreateWorkItemSheet: View {
     @State private var isSending = false
     @FocusState private var isFocused: Bool
 
+    @State private var voiceRecorder = VoiceRecorder(contextualStrings: [
+        "AMUX", "agent", "workitem", "claude", "tool", "MQTT", "daemon"
+    ])
+
     private var canSend: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
     }
 
+    private var isRecording: Bool { voiceRecorder.state == .recording }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                TextEditor(text: $text)
-                    .focused($isFocused)
-                    .font(.body)
-                    .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .overlay(alignment: .topLeading) {
-                        if text.isEmpty {
-                            Text("Describe the work item…")
-                                .foregroundStyle(.tertiary)
-                                .padding(.horizontal, 21)
-                                .padding(.top, 20)
-                                .allowsHitTesting(false)
-                        }
-                    }
-
-                HStack {
-                    Spacer()
-                    Button {
-                        let desc = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        isSending = true
-                        Task {
-                            let ok = await teamclawService?.createWorkItem(description: desc) ?? false
-                            isSending = false
-                            if ok {
-                                onCreated()
-                                dismiss()
+                ZStack(alignment: .topLeading) {
+                    TextEditor(text: $text)
+                        .focused($isFocused)
+                        .font(.body)
+                        .scrollContentBackground(.hidden)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .overlay(alignment: .topLeading) {
+                            if text.isEmpty && !isRecording {
+                                Text("Describe the work item…")
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.horizontal, 21)
+                                    .padding(.top, 20)
+                                    .allowsHitTesting(false)
                             }
                         }
+
+                    if isRecording {
+                        voiceBanner
+                    }
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        toggleRecording()
+                    } label: {
+                        Image(systemName: isRecording ? "mic.fill" : "mic")
+                            .font(.body)
+                            .foregroundStyle(isRecording ? .red : .primary)
+                            .frame(width: 40, height: 40)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .liquidGlass(in: Circle())
+
+                    Spacer()
+
+                    Button {
+                        send()
                     } label: {
                         if isSending {
                             ProgressView().controlSize(.small)
@@ -207,6 +223,61 @@ struct CreateWorkItemSheet: View {
                 }
             }
             .onAppear { isFocused = true }
+        }
+    }
+
+    private var voiceBanner: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "mic.fill")
+                    .foregroundStyle(.red)
+                Text("Listening…")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            Text(voiceRecorder.transcript.isEmpty ? "Speak now" : voiceRecorder.transcript)
+                .font(.body)
+                .foregroundStyle(voiceRecorder.transcript.isEmpty ? .tertiary : .primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+    }
+
+    private func toggleRecording() {
+        switch voiceRecorder.state {
+        case .recording:
+            voiceRecorder.toggle()   // stops; leaves transcript in place
+            let t = voiceRecorder.transcript
+            if !t.isEmpty {
+                if !text.isEmpty && !text.hasSuffix(" ") && !text.hasSuffix("\n") {
+                    text += " "
+                }
+                text += t
+            }
+            voiceRecorder.cancel()   // clears transcript, returns to .idle
+            isFocused = true
+        case .idle, .done, .denied, .error:
+            isFocused = false
+            voiceRecorder.toggle()
+        }
+    }
+
+    private func send() {
+        let desc = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        isSending = true
+        Task {
+            let ok = await teamclawService?.createWorkItem(description: desc) ?? false
+            isSending = false
+            if ok {
+                onCreated()
+                dismiss()
+            }
         }
     }
 }
