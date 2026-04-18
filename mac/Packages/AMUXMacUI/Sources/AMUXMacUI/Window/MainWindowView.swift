@@ -124,6 +124,9 @@ public struct MainWindowView: View {
             }
         }
         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
+        .toolbar(removing: .sidebarToggle)
+        .toolbar(.hidden, for: .windowToolbar)
+        .ignoresSafeArea(.container, edges: .top)
     }
 
     private func handleNewSession() {
@@ -137,6 +140,7 @@ public struct MainWindowView: View {
             selectedSessionId: selectedSessionId,
             selectedTaskId: selectedTaskId
         )
+        .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 360)
         .task { await connectIfNeeded() }
     }
