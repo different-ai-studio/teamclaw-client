@@ -10,6 +10,11 @@ public struct ToolCallView: View {
     let status: String
     @State private var isExpanded = false
 
+    private var hasDetails: Bool {
+        let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed != "{}" && trimmed != "null"
+    }
+
     public init(toolName: String, toolId: String, description: String, status: String) {
         self.toolName = toolName
         self.toolId = toolId
@@ -20,13 +25,15 @@ public struct ToolCallView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                if hasDetails { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } }
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .foregroundStyle(.secondary)
+                    if hasDetails {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                            .foregroundStyle(.secondary)
+                    }
 
                     Image(systemName: toolIcon)
                         .font(.caption)
@@ -38,7 +45,7 @@ public struct ToolCallView: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
-                    if !description.isEmpty && !isExpanded {
+                    if hasDetails && !isExpanded {
                         Text(description)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -55,7 +62,7 @@ public struct ToolCallView: View {
             }
             .buttonStyle(.plain)
 
-            if isExpanded && !description.isEmpty {
+            if isExpanded && hasDetails {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Details")
                         .font(.system(size: 9, weight: .semibold))
@@ -124,6 +131,62 @@ public struct ToolCallView: View {
             return String(name[range.upperBound...].prefix(30))
         }
         return String(name.prefix(30))
+    }
+}
+
+// MARK: - CompactToolLine
+
+public struct CompactToolLine: View {
+    let event: AgentEvent
+    @State private var showDetail = false
+
+    private var toolName: String { event.toolName ?? "" }
+    private var description: String { event.text ?? "" }
+    private var succeeded: Bool { event.success != false }
+
+    private var hasDetails: Bool {
+        let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed != "{}" && trimmed != "null"
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: succeeded ? "checkmark" : "xmark")
+                    .font(.system(size: 9))
+                    .foregroundStyle(succeeded ? .green : .red)
+
+                Image(systemName: ToolCallView.icon(for: toolName))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+
+                Text(ToolCallView.shortName(for: toolName.isEmpty ? (event.toolId ?? "") : toolName))
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 1)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if hasDetails {
+                    withAnimation(.easeInOut(duration: 0.15)) { showDetail.toggle() }
+                }
+            }
+
+            if showDetail && hasDetails {
+                Text(description)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 4)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
     }
 }
 
