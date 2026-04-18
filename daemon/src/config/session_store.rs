@@ -78,6 +78,8 @@ impl SessionStore {
                 session_title: String::new(),
                 last_output_summary: s.last_output_summary.clone(),
                 tool_use_count: s.tool_use_count,
+                available_models: vec![],
+                current_model: String::new(),
             })
             .collect()
     }

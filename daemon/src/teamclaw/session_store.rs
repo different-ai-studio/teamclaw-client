@@ -120,6 +120,7 @@ impl TeamclawSessionStore {
                 created_at: s.created_at.timestamp(),
                 participants,
                 summary: s.summary.clone(),
+                primary_agent_id: String::new(),
             }
         })
     }

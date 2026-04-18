@@ -78,6 +78,7 @@ impl MessageStore {
             created_at: msg.created_at.timestamp(),
             reply_to_message_id: msg.reply_to_message_id.clone(),
             mentions: msg.mentions.clone(),
+            model: String::new(),
         }
     }
 }

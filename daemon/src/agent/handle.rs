@@ -63,6 +63,8 @@ impl AgentHandle {
             session_title: self.session_title.clone(),
             last_output_summary: self.last_output_summary.clone(),
             tool_use_count: self.tool_use_count,
+            available_models: vec![],
+            current_model: String::new(),
         }
     }
 
