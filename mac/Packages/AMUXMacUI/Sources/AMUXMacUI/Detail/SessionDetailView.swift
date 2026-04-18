@@ -119,18 +119,25 @@ struct SessionDetailView: View {
                 .foregroundStyle(.tertiary)
                 .padding(22)
         } else {
-            ForEach(filtered, id: \.persistentModelID) { event in
-                AgentEventRow(
-                    event: event,
-                    agent: primaryAgent,
-                    onGrant: { id in Task { try? await vm.grantPermission(requestId: id) } },
-                    onDeny:  { id in Task { try? await vm.denyPermission(requestId: id) } }
-                )
+            // Collapse long runs of consecutive completed tools into a single
+            // expandable summary bar, same as iOS AMUXUI.
+            ForEach(groupEvents(filtered)) { group in
+                switch group {
+                case .single(let event):
+                    AgentEventRow(
+                        event: event,
+                        agent: primaryAgent,
+                        onGrant: { id in Task { try? await vm.grantPermission(requestId: id) } },
+                        onDeny:  { id in Task { try? await vm.denyPermission(requestId: id) } }
+                    )
+                case .toolRun(_, let events):
+                    ToolRunSummaryBar(events: events)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 2)
+                }
             }
             if vm.isStreaming && !vm.streamingText.isEmpty {
-                Text(vm.streamingText)
-                    .font(.subheadline)
-                    .textSelection(.enabled)
+                MarkdownRenderer(content: vm.streamingText)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .frame(maxWidth: .infinity, alignment: .leading)

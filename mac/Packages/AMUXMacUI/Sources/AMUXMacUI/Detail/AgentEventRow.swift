@@ -65,16 +65,14 @@ struct AgentEventRow: View {
         .padding(.vertical, 4)
     }
 
-    // MARK: - Assistant bubble (left-aligned, gray)
+    // MARK: - Assistant bubble (left-aligned, gray, markdown)
 
     private var assistantBubble: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(event.text ?? "")
-                .font(.subheadline)
-                .textSelection(.enabled)
+            MarkdownRenderer(content: event.text ?? "")
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.secondary.opacity(0.12))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
             if event.isComplete, let modelName = modelDisplayName {
@@ -96,31 +94,22 @@ struct AgentEventRow: View {
             .padding(.vertical, 4)
     }
 
-    // MARK: - Tool use
+    // MARK: - Tool use (completed → compact line; running → expandable card)
 
+    @ViewBuilder
     private var toolUseBlock: some View {
-        HStack(spacing: 8) {
-            Image(systemName: event.isComplete == true
-                  ? (event.success == false ? "xmark.circle" : "checkmark.circle")
-                  : "hammer")
-                .foregroundStyle(event.isComplete == true
-                                 ? (event.success == false ? Color.red : Color.green)
-                                 : Color.secondary)
-                .font(.caption)
-            Text(event.toolName ?? "Tool")
-                .font(.caption)
-                .fontWeight(.medium)
-            if let desc = event.text, !desc.isEmpty {
-                Text(desc)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            Spacer()
+        if event.isComplete == true {
+            CompactToolLine(event: event)
+        } else {
+            ToolCallView(
+                toolName: event.toolName ?? "Unknown",
+                toolId: event.toolId ?? "",
+                description: event.text ?? "",
+                status: "running"
+            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 2)
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 3)
     }
 
     // MARK: - Error
@@ -181,23 +170,12 @@ struct AgentEventRow: View {
         .padding(.vertical, 4)
     }
 
-    // MARK: - Todo list
+    // MARK: - Todo list (parsed checklist)
 
     private var todoBlock: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Label("Todos", systemImage: "checklist")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(event.text ?? "")
-                .font(.caption)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
+        TodoListView(text: event.text ?? "")
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
     }
 }
 
