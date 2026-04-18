@@ -87,6 +87,59 @@ impl AgentManager {
         Ok(agent_id)
     }
 
+    pub async fn resume_agent(
+        &mut self,
+        agent_id: &str,
+        acp_session_id: &str,
+        agent_type: amux::AgentType,
+        worktree: &str,
+        workspace_id: &str,
+        prompt: &str,
+    ) -> crate::error::Result<String> {
+        let mut handle = AgentHandle::new(
+            agent_id.to_string(),
+            agent_type,
+            worktree.into(),
+            workspace_id.into(),
+        );
+
+        let (initial_model_tx, initial_model_rx) = tokio::sync::oneshot::channel::<Option<String>>();
+        let (acp_session_id_tx, acp_session_id_rx) = tokio::sync::oneshot::channel::<String>();
+
+        let cmd_tx = adapter::spawn_acp_agent(
+            self.claude_binary.clone(),
+            worktree.to_string(),
+            prompt.to_string(),
+            agent_type,
+            handle.event_tx.clone(),
+            initial_model_tx,
+            Some(acp_session_id.to_string()),
+            acp_session_id_tx,
+        )?;
+        handle.cmd_tx = Some(cmd_tx);
+        handle.status = amux::AgentStatus::Active;
+
+        info!(agent_id, worktree, "agent resumed via ACP");
+        self.agents.insert(agent_id.to_string(), handle);
+
+        // Capture initial model
+        if let Ok(Some(model_id)) = initial_model_rx.await {
+            self.set_current_model(agent_id, &model_id);
+        }
+
+        // Capture ACP session_id (may differ from input if resume failed)
+        let new_acp_sid = if let Ok(sid) = acp_session_id_rx.await {
+            if let Some(h) = self.agents.get_mut(agent_id) {
+                h.acp_session_id = sid.clone();
+            }
+            sid
+        } else {
+            acp_session_id.to_string()
+        };
+
+        Ok(new_acp_sid)
+    }
+
     pub async fn stop_agent(&mut self, agent_id: &str) -> Option<AgentHandle> {
         if let Some(mut handle) = self.agents.remove(agent_id) {
             handle.status = amux::AgentStatus::Stopped;

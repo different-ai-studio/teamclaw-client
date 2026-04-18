@@ -446,9 +446,12 @@ impl DaemonServer {
                     Ok(new_id) => {
                         info!(agent_id = %new_id, peer_id, "agent started");
                         // Persist session
+                        let acp_sid = self.agents.get_handle(&new_id)
+                            .map(|h| h.acp_session_id.clone())
+                            .unwrap_or_default();
                         let stored = StoredSession {
                             session_id: new_id.clone(),
-                            acp_session_id: String::new(),
+                            acp_session_id: acp_sid,
                             agent_type: at as i32,
                             workspace_id: ws_id.clone(),
                             worktree: worktree.clone(),
@@ -483,6 +486,43 @@ impl DaemonServer {
             }
 
             amux::acp_command::Command::SendPrompt(prompt) => {
+                // Lazy resume: if agent is not live but exists in session store,
+                // spawn a new ACP process and resume the session.
+                if self.agents.get_handle(agent_id).is_none() {
+                    if let Some(stored) = self.sessions.find_by_id(agent_id) {
+                        let at = amux::AgentType::try_from(stored.agent_type)
+                            .unwrap_or(amux::AgentType::ClaudeCode);
+                        let worktree = stored.worktree.clone();
+                        let ws_id = stored.workspace_id.clone();
+                        let acp_sid = stored.acp_session_id.clone();
+                        info!(agent_id, "lazy-resuming historical session");
+                        match self.agents.resume_agent(
+                            agent_id, &acp_sid, at, &worktree, &ws_id, &prompt.text,
+                        ).await {
+                            Ok(new_acp_sid) => {
+                                // Update stored session with potentially new acp_session_id
+                                if let Some(s) = self.sessions.find_by_id_mut(agent_id) {
+                                    s.acp_session_id = new_acp_sid;
+                                    s.status = amux::AgentStatus::Active as i32;
+                                    s.last_prompt = prompt.text.clone();
+                                }
+                                let _ = self.sessions.save(&self.sessions_path);
+                                info!(agent_id, peer_id, "session resumed, prompt sent");
+                                self.publish_collab_event(agent_id, amux::CollabEvent {
+                                    event: Some(amux::collab_event::Event::PromptAccepted(amux::PromptAccepted {
+                                        command_id,
+                                    })),
+                                }).await;
+                                let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
+                            }
+                            Err(e) => {
+                                warn!(agent_id, "lazy resume failed: {}", e);
+                            }
+                        }
+                        return;
+                    }
+                }
+
                 // Check busy
                 if let Some(handle) = self.agents.get_handle(agent_id) {
                     if let Err(reason) = self.permissions.check_agent_busy(handle.status) {
