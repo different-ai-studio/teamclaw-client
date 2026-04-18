@@ -78,7 +78,11 @@ impl MessageStore {
             created_at: msg.created_at.timestamp(),
             reply_to_message_id: msg.reply_to_message_id.clone(),
             mentions: msg.mentions.clone(),
-            // TODO(plan6-task4): stamp with AgentManager.current_model when message is from an agent
+            // The live agent-reply path stamps `model` at construction in
+            // `SessionManager::publish_agent_message`. Stored messages
+            // (TOML-on-disk replay) do not currently persist the model, so
+            // historical replays surface as empty. Pre-Plan-6 messages and
+            // human/system messages also have no model.
             model: String::new(),
         }
     }

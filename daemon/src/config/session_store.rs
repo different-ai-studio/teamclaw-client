@@ -78,7 +78,10 @@ impl SessionStore {
                 session_title: String::new(),
                 last_output_summary: s.last_output_summary.clone(),
                 tool_use_count: s.tool_use_count,
-                // TODO(plan6-task3/4): populate from AgentManager when reconstructing the live agent
+                // Historical (non-active) sessions have no live model state.
+                // Live agents are merged in by `DaemonServer::merged_agent_list`
+                // from `AgentManager::to_proto_agent_list`, which populates
+                // these fields from the running adapter.
                 available_models: vec![],
                 current_model: String::new(),
             })

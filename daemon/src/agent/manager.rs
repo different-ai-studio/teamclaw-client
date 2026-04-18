@@ -97,6 +97,39 @@ impl AgentManager {
         handle.send_prompt(text).await
     }
 
+    /// Forward a `SetModel` command onto the agent's ACP command channel.
+    /// The adapter is responsible for performing `session/set_model`; the
+    /// caller is responsible for updating `current_model_per_agent` once the
+    /// command has been queued (we cannot wait for the adapter to confirm
+    /// without changing the channel contract).
+    pub async fn send_set_model(&mut self, agent_id: &str, model_id: &str) -> crate::error::Result<()> {
+        let handle = self.agents.get(agent_id).ok_or_else(|| {
+            crate::error::AmuxError::Agent(format!("agent {} not found", agent_id))
+        })?;
+        let tx = handle.cmd_tx.as_ref().ok_or_else(|| {
+            crate::error::AmuxError::Agent("no ACP command channel".into())
+        })?;
+        tx.send(adapter::AcpCommand::SetModel {
+            model_id: model_id.to_string(),
+        })
+        .await
+        .map_err(|_| crate::error::AmuxError::Agent("ACP command channel closed".into()))
+    }
+
+    /// Returns the first agent_id whose status counts as "running"
+    /// (Starting / Active / Idle), or None if no such agent exists.
+    /// Used to populate the `primary_agent_id` of newly created collab
+    /// sessions in v1 (multi-agent sessions are out of scope).
+    pub fn first_running_agent_id(&self) -> Option<String> {
+        self.agents
+            .iter()
+            .find(|(_, h)| matches!(
+                h.status,
+                amux::AgentStatus::Starting | amux::AgentStatus::Active | amux::AgentStatus::Idle
+            ))
+            .map(|(id, _)| id.clone())
+    }
+
     /// Cancel the current turn for an agent.
     pub async fn cancel_agent(&mut self, agent_id: &str) -> crate::error::Result<()> {
         let handle = self.agents.get(agent_id).ok_or_else(|| {
@@ -141,8 +174,33 @@ impl AgentManager {
 
     pub fn to_proto_agent_list(&self) -> amux::AgentList {
         amux::AgentList {
-            agents: self.agents.values().map(|h| h.to_proto_info()).collect(),
+            agents: self
+                .agents
+                .iter()
+                .map(|(id, h)| {
+                    let available = crate::agent::models::available_models_for(h.agent_type);
+                    let current = self
+                        .current_model_per_agent
+                        .get(id)
+                        .cloned()
+                        .unwrap_or_default();
+                    h.to_proto_info(available, current)
+                })
+                .collect(),
         }
+    }
+
+    /// Build an `AgentInfo` for a single agent, populating the model fields
+    /// from the manager's tracking state. Returns None if the agent is unknown.
+    pub fn to_proto_info(&self, agent_id: &str) -> Option<amux::AgentInfo> {
+        let handle = self.agents.get(agent_id)?;
+        let available = crate::agent::models::available_models_for(handle.agent_type);
+        let current = self
+            .current_model_per_agent
+            .get(agent_id)
+            .cloned()
+            .unwrap_or_default();
+        Some(handle.to_proto_info(available, current))
     }
 
     pub fn agent_ids(&self) -> Vec<String> {
