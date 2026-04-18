@@ -241,7 +241,7 @@ public struct AgentDetailView: View {
                     HStack(spacing: 14) {
                         if viewModel.hasAgent {
                             Button { showSettings = true } label: {
-                                Image(agentLogoName)
+                                Image(agentLogoName, bundle: .module)
                                     .resizable()
                                     .scaledToFit()
                                     .frame(width: 22, height: 22)

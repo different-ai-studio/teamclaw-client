@@ -267,31 +267,50 @@ public enum GroupedEvent: Identifiable {
     }
 }
 
-/// Groups consecutive completed tool_use events into tool runs.
-/// Running/incomplete tools and all non-tool events remain as singles.
+/// Groups completed tool_use events into tool runs, skipping over
+/// thinking and tool_result events that naturally occur between tools.
+/// A tool run breaks at user_prompt, output, error, permission_request, or todo_update.
+/// Running/incomplete tools also break the run.
 public func groupEvents(_ events: [AgentEvent]) -> [GroupedEvent] {
+    // Events that can appear between tool calls without breaking the run
+    let skippableTypes: Set<String> = ["thinking", "tool_result"]
+
     var result: [GroupedEvent] = []
     var i = 0
     while i < events.count {
         let event = events[i]
 
-        // Only group completed tool_use events
         if event.eventType == "tool_use", event.isComplete {
-            var group = [event]
+            // Start collecting a tool run
+            var toolEvents: [AgentEvent] = [event]
+            var skippedEvents: [AgentEvent] = []
             var j = i + 1
-            while j < events.count,
-                  events[j].eventType == "tool_use",
-                  events[j].isComplete {
-                group.append(events[j])
-                j += 1
+
+            while j < events.count {
+                let next = events[j]
+                if next.eventType == "tool_use", next.isComplete {
+                    // Another completed tool — absorb any skipped events and continue
+                    skippedEvents.removeAll()
+                    toolEvents.append(next)
+                    j += 1
+                } else if skippableTypes.contains(next.eventType) {
+                    // Thinking/tool_result between tools — tentatively skip
+                    skippedEvents.append(next)
+                    j += 1
+                } else {
+                    // Content event — stop the run
+                    break
+                }
             }
 
-            if group.count >= 3 {
-                let groupId = "toolrun-\(group.first!.id)"
-                result.append(.toolRun(id: groupId, events: group))
+            if toolEvents.count >= 3 {
+                let groupId = "toolrun-\(toolEvents.first!.id)"
+                result.append(.toolRun(id: groupId, events: toolEvents))
             } else {
-                for e in group { result.append(.single(e)) }
+                for e in toolEvents { result.append(.single(e)) }
             }
+            // Put back any trailing skipped events that weren't followed by a tool
+            for e in skippedEvents { result.append(.single(e)) }
             i = j
         } else {
             result.append(.single(event))
