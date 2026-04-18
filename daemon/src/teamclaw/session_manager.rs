@@ -478,6 +478,7 @@ impl SessionManager {
             parent_id: r.parent_id.clone(),
             created_by: req.sender_device_id.clone(),
             created_at: Utc::now(),
+            archived: false,
         };
 
         let store_key = if r.session_id.is_empty() { "global" } else { &r.session_id };

@@ -25,6 +25,8 @@ pub struct StoredWorkItem {
     pub parent_id: String,
     pub created_by: String,
     pub created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub archived: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,7 +151,7 @@ impl WorkItemStore {
             created_at: item.created_at.timestamp(),
             claims,
             submissions,
-            archived: false,
+            archived: item.archived,
         }
     }
 }
@@ -179,6 +181,7 @@ mod tests {
             parent_id: String::new(),
             created_by: "user1".to_string(),
             created_at: Utc::now(),
+            archived: false,
         }
     }
 
@@ -294,5 +297,52 @@ mod tests {
         assert_eq!(proto.status, teamclaw::WorkItemStatus::InProgress as i32);
         assert_eq!(proto.claims.len(), 1);
         assert_eq!(proto.submissions.len(), 1);
+    }
+
+    #[test]
+    fn test_archived_defaults_false_and_persists() {
+        let tmp = TempDir::new().unwrap();
+
+        // New items default to archived=false
+        let mut store = WorkItemStore::default();
+        let item = make_work_item("w1", "s1");
+        assert_eq!(item.archived, false);
+        store.add_item(item);
+
+        // Flip and save
+        store.find_item_mut("w1").unwrap().archived = true;
+        store.save(tmp.path(), "s1").unwrap();
+
+        // Reload and confirm persisted
+        let loaded = WorkItemStore::load(tmp.path(), "s1").unwrap();
+        assert_eq!(loaded.find_item("w1").unwrap().archived, true);
+
+        // to_proto_work_item mirrors the field
+        let proto = loaded.to_proto_work_item(loaded.find_item("w1").unwrap());
+        assert_eq!(proto.archived, true);
+    }
+
+    #[test]
+    fn test_archived_absent_from_legacy_toml_loads_false() {
+        let tmp = TempDir::new().unwrap();
+        // Simulate a pre-archive TOML written by an older daemon: no `archived`
+        // key at all. serde(default) should apply.
+        let dir = tmp.path().join("teamclaw").join("sessions").join("legacy");
+        std::fs::create_dir_all(&dir).unwrap();
+        let toml_body = r#"
+[[items]]
+work_item_id = "w1"
+session_id = "legacy"
+title = "Legacy"
+description = ""
+status = "open"
+created_by = "user1"
+created_at = "2026-04-18T00:00:00Z"
+"#;
+        std::fs::write(dir.join("workitems.toml"), toml_body).unwrap();
+
+        let store = WorkItemStore::load(tmp.path(), "legacy").unwrap();
+        assert_eq!(store.items.len(), 1);
+        assert_eq!(store.items[0].archived, false);
     }
 }
