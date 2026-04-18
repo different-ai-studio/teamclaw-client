@@ -679,7 +679,9 @@ impl SessionManager {
         req: &RpcRequest,
         r: teamclaw::UpdateWorkItemRequest,
     ) -> RpcResponse {
-        let mut store = match WorkItemStore::load(&self.config_dir, &r.session_id) {
+        let store_key = if r.session_id.is_empty() { "global" } else { &r.session_id };
+
+        let mut store = match WorkItemStore::load(&self.config_dir, store_key) {
             Ok(s) => s,
             Err(e) => {
                 return RpcResponse {
@@ -703,6 +705,9 @@ impl SessionManager {
                 if r.status != 0 {
                     item.status = work_item_status_to_string(r.status);
                 }
+                if let Some(v) = r.archived {
+                    item.archived = v;
+                }
             }
             None => {
                 return RpcResponse {
@@ -714,7 +719,7 @@ impl SessionManager {
             }
         }
 
-        if let Err(e) = store.save(&self.config_dir, &r.session_id) {
+        if let Err(e) = store.save(&self.config_dir, store_key) {
             warn!("handle_update_work_item: failed to save work item store: {}", e);
         }
 
@@ -727,7 +732,11 @@ impl SessionManager {
             let event = teamclaw::WorkItemEvent {
                 event: Some(teamclaw::work_item_event::Event::Updated(item.clone())),
             };
-            let topic = self.topics.session_workitems(&r.session_id);
+            let topic = if r.session_id.is_empty() {
+                self.topics.workitems()
+            } else {
+                self.topics.session_workitems(&r.session_id)
+            };
             let payload = event.encode_to_vec();
             if let Err(e) = self
                 .client
@@ -741,6 +750,7 @@ impl SessionManager {
         info!(
             work_item_id = %r.work_item_id,
             session_id = %r.session_id,
+            archived = ?r.archived,
             "work item updated"
         );
 
