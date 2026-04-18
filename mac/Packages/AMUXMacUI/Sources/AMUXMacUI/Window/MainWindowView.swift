@@ -162,6 +162,12 @@ public struct MainWindowView: View {
         } catch {
             return
         }
+        // Announce this client so the daemon (and other peers) know a macOS
+        // client is online. Mirrors iOS ContentView.connect(). We do this
+        // before starting TeamclawService so the daemon has the peer entry
+        // before any collab commands are issued.
+        await sendPeerAnnounce(mqtt: service)
+
         let mon = ConnectionMonitor()
         mon.start(mqtt: service, deviceId: pairing.deviceId)
         self.mqtt = service
@@ -181,6 +187,35 @@ public struct MainWindowView: View {
             // Subscribe to amux/{deviceId}/agents and amux/{deviceId}/workspaces,
             // persisting Agent/Workspace rows to SwiftData. Matches iOS ContentView behavior.
             sessionList.start(mqtt: service, deviceId: pairing.deviceId, modelContext: modelContext)
+        }
+    }
+
+    private func sendPeerAnnounce(mqtt: MQTTService) async {
+        var cmd = Amux_DeviceCommandEnvelope()
+        cmd.deviceID = pairing.deviceId
+        cmd.peerID = peerId
+        cmd.commandID = UUID().uuidString
+        cmd.timestamp = Int64(Date().timeIntervalSince1970)
+
+        var announce = Amux_PeerAnnounce()
+        announce.authToken = pairing.authToken
+        var peerInfo = Amux_PeerInfo()
+        peerInfo.peerID = cmd.peerID
+        peerInfo.displayName = Host.current().localizedName ?? "Mac"
+        peerInfo.deviceType = "mac"
+        peerInfo.connectedAt = cmd.timestamp
+        announce.peer = peerInfo
+
+        var collabCmd = Amux_DeviceCollabCommand()
+        collabCmd.command = .peerAnnounce(announce)
+        cmd.command = collabCmd
+
+        do {
+            let data = try ProtoMQTTCoder.encode(cmd)
+            try await mqtt.publish(topic: "amux/\(pairing.deviceId)/collab", payload: data)
+            try await mqtt.subscribe("amux/\(pairing.deviceId)/collab")
+        } catch {
+            print("[MainWindow] peer announce failed: \(error)")
         }
     }
 }
