@@ -149,6 +149,7 @@ impl WorkItemStore {
             created_at: item.created_at.timestamp(),
             claims,
             submissions,
+            archived: false,
         }
     }
 }
