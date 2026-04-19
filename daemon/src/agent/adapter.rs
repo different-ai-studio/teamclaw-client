@@ -322,6 +322,29 @@ fn translate_session_update(update: acp::SessionUpdate) -> Vec<amux::AcpEvent> {
                 vec![]
             }
         }
+        acp::SessionUpdate::AvailableCommandsUpdate(upd) => {
+            let commands = upd
+                .available_commands
+                .into_iter()
+                .map(|c| {
+                    let input_hint = match c.input {
+                        Some(acp::AvailableCommandInput::Unstructured(u)) => u.hint,
+                        _ => String::new(),
+                    };
+                    amux::AcpAvailableCommand {
+                        name: c.name,
+                        description: c.description,
+                        input_hint,
+                    }
+                })
+                .collect();
+            vec![amux::AcpEvent {
+                event: Some(amux::acp_event::Event::AvailableCommands(
+                    amux::AcpAvailableCommands { commands },
+                )),
+                model: String::new(),
+            }]
+        }
         _ => {
             debug!("unhandled SessionUpdate variant");
             vec![]
@@ -698,4 +721,46 @@ async fn run_acp_session(
     drop(child);
     info!("ACP agent thread exiting");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn translates_available_commands_update_without_input() {
+        let upd = acp::AvailableCommandsUpdate::new(vec![
+            acp::AvailableCommand::new("clear", "Clear history"),
+        ]);
+        let events = translate_session_update(acp::SessionUpdate::AvailableCommandsUpdate(upd));
+
+        assert_eq!(events.len(), 1);
+        match events[0].event.as_ref().expect("event") {
+            amux::acp_event::Event::AvailableCommands(ac) => {
+                assert_eq!(ac.commands.len(), 1);
+                assert_eq!(ac.commands[0].name, "clear");
+                assert_eq!(ac.commands[0].description, "Clear history");
+                assert_eq!(ac.commands[0].input_hint, "");
+            }
+            other => panic!("unexpected variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn translates_available_commands_update_with_unstructured_input() {
+        let cmd = acp::AvailableCommand::new("rename", "Rename the session")
+            .input(Some(acp::AvailableCommandInput::Unstructured(
+                acp::UnstructuredCommandInput::new("new session name"),
+            )));
+        let upd = acp::AvailableCommandsUpdate::new(vec![cmd]);
+        let events = translate_session_update(acp::SessionUpdate::AvailableCommandsUpdate(upd));
+
+        assert_eq!(events.len(), 1);
+        match events[0].event.as_ref().expect("event") {
+            amux::acp_event::Event::AvailableCommands(ac) => {
+                assert_eq!(ac.commands[0].input_hint, "new session name");
+            }
+            other => panic!("unexpected variant: {:?}", other),
+        }
+    }
 }
