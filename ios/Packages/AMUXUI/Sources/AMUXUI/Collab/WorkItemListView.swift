@@ -38,7 +38,7 @@ public struct WorkItemListView: View {
         VStack(spacing: 0) {
             if workItems.isEmpty {
                 ContentUnavailableView("No Tasks", systemImage: "checklist",
-                    description: Text("Tap + to create a work item"))
+                    description: Text("Tap + to create a task"))
             } else {
                 List {
                     ForEach(workItems, id: \.workItemId) { item in
@@ -58,7 +58,7 @@ public struct WorkItemListView: View {
                 .listStyle(.plain)
             }
         }
-        .navigationTitle("Work Items")
+        .navigationTitle("Tasks")
         .navigationBarTitleDisplayMode(.large)
         .safeAreaInset(edge: .bottom) {
             if !archivedItems.isEmpty {

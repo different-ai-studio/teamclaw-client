@@ -171,7 +171,7 @@ struct CreateWorkItemSheet: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
             }
-            .navigationTitle("New Work Item")
+            .navigationTitle("New Task")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
