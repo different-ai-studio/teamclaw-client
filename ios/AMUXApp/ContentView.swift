@@ -19,7 +19,7 @@ struct ContentView: View {
     var body: some View {
         Group {
             if pairing.isPaired {
-                SessionListView(mqtt: mqtt, pairing: pairing, connectionMonitor: connectionMonitor, teamclawService: teamclawService, onReconnect: {
+                RootTabView(mqtt: mqtt, pairing: pairing, connectionMonitor: connectionMonitor, teamclawService: teamclawService, onReconnect: {
                         forceReconnect()
                     })
                     .task { await connectMQTT() }
