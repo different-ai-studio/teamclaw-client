@@ -9,6 +9,7 @@ struct AMUXMacApp: App {
     @State private var detailTeamclaw = TeamclawService()
     @State private var shared = SharedConnection()
     @AppStorage(AppAppearance.storageKey) private var appearanceRaw: String = AppAppearance.system.rawValue
+    @State private var notificationsReady = false
 
     var body: some Scene {
         WindowGroup {
@@ -16,6 +17,15 @@ struct AMUXMacApp: App {
                 .frame(minWidth: 1100, minHeight: 700)
                 .preferredColorScheme(currentAppearance.colorScheme)
                 .environment(shared)
+                .task {
+                    guard !notificationsReady else { return }
+                    await PermissionNotificationCenter.shared.bootstrap()
+                    PermissionNotificationCenter.shared.onFocusSession = { sid in
+                        NSApp.activate(ignoringOtherApps: true)
+                        _ = sid
+                    }
+                    notificationsReady = true
+                }
         }
         .windowResizability(.contentMinSize)
         .windowStyle(.hiddenTitleBar)

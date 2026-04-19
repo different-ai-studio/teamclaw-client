@@ -134,39 +134,15 @@ struct AgentEventRow: View {
     // MARK: - Permission banner (grant/deny)
 
     private var permissionBlock: some View {
-        let resolved = event.isComplete == true
-        let granted = event.success
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Image(systemName: "lock.shield")
-                    .foregroundStyle(.orange)
-                Text("Permission requested: \(event.toolName ?? "")")
-                    .font(.caption)
-                    .fontWeight(.medium)
-            }
-            if let desc = event.text, !desc.isEmpty {
-                Text(desc)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if resolved {
-                Text(granted == true ? "Granted" : "Denied")
-                    .font(.caption)
-                    .foregroundStyle(granted == true ? .green : .red)
-            } else {
-                HStack(spacing: 8) {
-                    Button("Deny")   { onDeny?(event.toolId ?? "") }
-                        .controlSize(.small)
-                    Button("Allow")  { onGrant?(event.toolId ?? "") }
-                        .controlSize(.small)
-                        .buttonStyle(.borderedProminent)
-                    Spacer()
-                }
-            }
-        }
-        .padding(12)
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        PermissionBannerView(
+            toolName: event.toolName ?? "",
+            description: event.text ?? "",
+            requestId: event.toolId ?? "",
+            isResolved: event.isComplete == true,
+            wasGranted: event.success,
+            onGrant: event.isComplete == true ? nil : onGrant,
+            onDeny: event.isComplete == true ? nil : onDeny
+        )
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
     }

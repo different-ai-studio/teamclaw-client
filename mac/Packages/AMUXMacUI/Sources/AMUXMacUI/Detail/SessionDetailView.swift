@@ -56,6 +56,7 @@ struct SessionDetailView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     if let vm = agentVM, primaryAgent != nil {
                         agentEventFeed(vm: vm)
+                            .observesPermissionNotifications(agentVM: vm, sessionId: session.sessionId)
                     } else {
                         collabMessageFeed
                     }
