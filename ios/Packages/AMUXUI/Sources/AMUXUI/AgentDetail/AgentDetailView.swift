@@ -155,6 +155,7 @@ public struct AgentDetailView: View {
             }
         }
         .toolbar(.hidden, for: .bottomBar)
+        .toolbar(.hidden, for: .tabBar)
         // Bottom: voice result bubble + toolbar
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
