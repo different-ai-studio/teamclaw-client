@@ -50,8 +50,6 @@ struct SessionDetailView: View {
         VStack(spacing: 0) {
             toolbarRow
             Divider()
-            sessionHeaderRow
-            Divider()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -167,10 +165,36 @@ struct SessionDetailView: View {
         }
     }
 
-    // MARK: - Row 1: Toolbar
+    // MARK: - Header: status + metadata + toolbar + search (single row, matches column 2 height)
 
     private var toolbarRow: some View {
-        HStack {
+        HStack(alignment: .center, spacing: 6) {
+            if let agent = primaryAgent {
+                AgentStatusPill(agent: agent)
+            }
+
+            Spacer(minLength: 8)
+
+            if let logo = agentLogoName {
+                Image(logo, bundle: .module)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 14, height: 14)
+            }
+
+            if let workspaceName {
+                Text(workspaceName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Text(SessionDetailView.formatTime(lastUpdated))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+
             HStack(spacing: 0) {
                 iconButton(systemImage: isPinned ? "pin.fill" : "pin", highlighted: isPinned, help: "Pin") {
                     isPinned.toggle()
@@ -208,14 +232,12 @@ struct SessionDetailView: View {
             .padding(.vertical, 2)
             .glassEffect(in: Capsule())
 
-            Spacer()
-
             searchField
-                .frame(width: 200)
+                .frame(width: 160)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 36)
-        .padding(.bottom, 8)
+        .padding(.top, 28)
+        .padding(.bottom, 4)
     }
 
     private func iconButton(systemImage: String, highlighted: Bool = false, help: String, action: @escaping () -> Void) -> some View {
@@ -251,46 +273,6 @@ struct SessionDetailView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .glassEffect(in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    // MARK: - Row 2: Compact Session Header
-
-    private var sessionHeaderRow: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Text(session.title.isEmpty ? "(untitled)" : session.title)
-                .font(.system(size: 20, weight: .semibold))
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            if let agent = primaryAgent {
-                AgentStatusPill(agent: agent)
-            }
-
-            Spacer(minLength: 12)
-
-            HStack(spacing: 8) {
-                if let logo = agentLogoName {
-                    Image(logo, bundle: .module)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 16, height: 16)
-                }
-
-                if let workspaceName {
-                    Text(workspaceName)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                Text(SessionDetailView.formatTime(lastUpdated))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-        }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 10)
     }
 
     // Mirrors SessionRow.formatTime — duplicated here to keep the header

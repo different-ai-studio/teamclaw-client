@@ -152,8 +152,8 @@ struct SessionListColumn: View {
             .glassEffect(in: Capsule())
         }
         .padding(.horizontal, 16)
-        .padding(.top, 36)
-        .padding(.bottom, 8)
+        .padding(.top, 28)
+        .padding(.bottom, 4)
     }
 
     private func iconButton(systemImage: String, highlighted: Bool = false, action: @escaping () -> Void) -> some View {

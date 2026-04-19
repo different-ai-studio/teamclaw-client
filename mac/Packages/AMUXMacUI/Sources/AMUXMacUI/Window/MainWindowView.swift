@@ -127,6 +127,7 @@ public struct MainWindowView: View {
                 )
             }
         }
+        .ignoresSafeArea(.container, edges: .top)
         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
     }
 
