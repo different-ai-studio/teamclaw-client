@@ -19,7 +19,7 @@ struct ArchivedWorkItemsView: View {
                     ContentUnavailableView(
                         "Nothing Archived",
                         systemImage: "archivebox",
-                        description: Text("Archived work items will show up here.")
+                        description: Text("Archived tasks will show up here.")
                     )
                 } else {
                     List {

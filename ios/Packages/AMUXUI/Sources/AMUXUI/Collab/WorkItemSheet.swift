@@ -100,7 +100,7 @@ struct CreateWorkItemSheet: View {
                         .padding(.top, 12)
                         .overlay(alignment: .topLeading) {
                             if text.isEmpty && !isRecording {
-                                Text("Describe the work item…")
+                                Text("Describe the task…")
                                     .foregroundStyle(.tertiary)
                                     .padding(.horizontal, 21)
                                     .padding(.top, 20)
