@@ -5,24 +5,12 @@ import PhotosUI
 
 public struct WorkItemSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
 
     let pairing: PairingManager
     let connectionMonitor: ConnectionMonitor
     let teamclawService: TeamclawService?
 
-    // SwiftData-driven list; any mutation from syncWorkItemEvent refreshes
-    // the UI without manual reloads.
-    @Query(filter: #Predicate<WorkItem> { !$0.archived },
-           sort: \WorkItem.createdAt, order: .reverse)
-    private var workItems: [WorkItem]
-
-    // Count of archived items for the "Archived (N)" footer row.
-    @Query(filter: #Predicate<WorkItem> { $0.archived })
-    private var archivedItems: [WorkItem]
-
     @State private var showCreate = false
-    @State private var showArchived = false
 
     public init(pairing: PairingManager, connectionMonitor: ConnectionMonitor, teamclawService: TeamclawService? = nil) {
         self.pairing = pairing
@@ -32,80 +20,24 @@ public struct WorkItemSheet: View {
 
     public var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                if workItems.isEmpty {
-                    ContentUnavailableView("No Work Items", systemImage: "checklist",
-                        description: Text("Tap + to create a work item"))
-                } else {
-                    List {
-                        ForEach(workItems, id: \.workItemId) { item in
-                            WorkItemRow(item: item)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button {
-                                        archiveTapped(item)
-                                    } label: {
-                                        Label("Archive", systemImage: "archivebox.fill")
-                                    }
-                                    .tint(.gray)
-                                }
+            WorkItemListView(pairing: pairing,
+                             connectionMonitor: connectionMonitor,
+                             teamclawService: teamclawService,
+                             showCreate: $showCreate)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button { showCreate = true } label: {
+                            Image(systemName: "plus").font(.title3)
                         }
                     }
-                    .listStyle(.plain)
-                }
-            }
-            .navigationTitle("Work Items")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button { showCreate = true } label: {
-                        Image(systemName: "plus").font(.title3)
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark").font(.title3)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                if !archivedItems.isEmpty {
-                    Button {
-                        showArchived = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "archivebox")
-                            Text("Archived (\(archivedItems.count))")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button { dismiss() } label: {
+                            Image(systemName: "xmark").font(.title3)
                         }
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 16)
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
-            }
-            .sheet(isPresented: $showCreate) {
-                CreateWorkItemSheet(teamclawService: teamclawService) { }
-            }
-            .sheet(isPresented: $showArchived) {
-                ArchivedWorkItemsView(teamclawService: teamclawService)
-            }
         }
-    }
-
-    private func archiveTapped(_ item: WorkItem) {
-        // Optimistic flip — @Query animates the row out immediately.
-        item.archived = true
-        try? modelContext.save()
-        let id = item.workItemId
-        let sessionId = item.sessionId
-        Task { await teamclawService?.archiveWorkItem(workItemId: id, sessionId: sessionId, archived: true) }
     }
 }
 
