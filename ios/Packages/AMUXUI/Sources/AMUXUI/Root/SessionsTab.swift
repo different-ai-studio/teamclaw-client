@@ -13,7 +13,7 @@ public struct SessionsTab: View {
 
     @State private var showSettings = false
     @State private var showNewSession = false
-    @State private var navigationPath: [String] = []
+    @Binding var navigationPath: [String]
 
     @State private var isEditing = false
     @State private var selectedIDs: Set<String> = []
@@ -24,12 +24,14 @@ public struct SessionsTab: View {
                 pairing: PairingManager,
                 connectionMonitor: ConnectionMonitor,
                 teamclawService: TeamclawService?,
-                viewModel: SessionListViewModel) {
+                viewModel: SessionListViewModel,
+                navigationPath: Binding<[String]>) {
         self.mqtt = mqtt
         self.pairing = pairing
         self.connectionMonitor = connectionMonitor
         self.teamclawService = teamclawService
         self.viewModel = viewModel
+        self._navigationPath = navigationPath
     }
 
     public var body: some View {
