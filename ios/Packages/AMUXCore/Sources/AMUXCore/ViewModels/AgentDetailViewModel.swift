@@ -418,11 +418,15 @@ public final class AgentDetailViewModel {
                 }
             }
         case .availableCommands(let upd):
-            availableCommands = upd.commands
-                .filter { !$0.name.isEmpty }
+            var seen = Set<String>()
+            let next = upd.commands
+                .filter { !$0.name.isEmpty && seen.insert($0.name).inserted }
                 .map { SlashCommand(name: $0.name,
                                     description: $0.description_p,
                                     inputHint: $0.inputHint) }
+            if next != availableCommands {
+                availableCommands = next
+            }
             // No SwiftData mutation; `dirty` stays false.
         case .raw(let raw):
             if raw.method == "tool_title_update" {
