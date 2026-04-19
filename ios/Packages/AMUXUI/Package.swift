@@ -10,7 +10,6 @@ let package = Package(
     dependencies: [
         .package(path: "../AMUXCore"),
         .package(path: "../AMUXSharedUI"),
-        .package(url: "https://github.com/apple/swift-markdown.git", from: "0.7.3"),
     ],
     targets: [
         .target(
@@ -18,7 +17,6 @@ let package = Package(
             dependencies: [
                 "AMUXCore",
                 "AMUXSharedUI",
-                .product(name: "Markdown", package: "swift-markdown"),
             ],
             resources: [.process("Resources")]
         ),
