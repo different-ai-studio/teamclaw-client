@@ -168,7 +168,7 @@ public struct SessionListView: View {
 
 // MARK: - SessionListContent
 
-private struct SessionListContent: View {
+struct SessionListContent: View {
     @Bindable var viewModel: SessionListViewModel
     @Binding var navigationPath: [String]
     @Binding var isEditing: Bool
@@ -568,7 +568,7 @@ private struct MailStyleBottomBar: View {
 
 // MARK: - Transition Modifiers
 
-private struct ZoomTransitionModifier: ViewModifier {
+struct ZoomTransitionModifier: ViewModifier {
     let sourceID: String
     let namespace: Namespace.ID
     func body(content: Content) -> some View {
@@ -578,7 +578,7 @@ private struct ZoomTransitionModifier: ViewModifier {
     }
 }
 
-private struct MatchedTransitionSourceModifier: ViewModifier {
+struct MatchedTransitionSourceModifier: ViewModifier {
     let sourceID: String
     let namespace: Namespace.ID
     func body(content: Content) -> some View {
