@@ -287,6 +287,15 @@ impl DaemonServer {
             .map(|h| h.next_sequence())
             .unwrap_or(0);
 
+        // Ambient state variants (replaced wholesale on each push) should not
+        // be persisted into the history buffer — replaying stale lists on
+        // reconnect wastes bandwidth and contradicts the "in-memory only"
+        // contract iOS assumes.
+        let is_ambient = matches!(
+            acp_event.event,
+            Some(amux::acp_event::Event::AvailableCommands(_))
+        );
+
         let envelope = amux::Envelope {
             agent_id: agent_id.into(),
             device_id: self.config.device.id.clone(),
@@ -296,7 +305,9 @@ impl DaemonServer {
             payload: Some(amux::envelope::Payload::AcpEvent(acp_event)),
         };
 
-        self.history.append(agent_id, &envelope);
+        if !is_ambient {
+            self.history.append(agent_id, &envelope);
+        }
         let publisher = Publisher::new(&self.mqtt);
         if let Err(e) = publisher.publish_agent_event(agent_id, &envelope).await {
             warn!(agent_id, "failed to publish agent event: {}", e);
