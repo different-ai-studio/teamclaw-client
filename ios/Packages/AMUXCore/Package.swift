@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "AMUXCore",
-    platforms: [.iOS(.v17), .macOS(.v26)],
+    platforms: [.iOS(.v26), .macOS(.v26)],
     products: [
         .library(name: "AMUXCore", targets: ["AMUXCore"]),
     ],
