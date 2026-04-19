@@ -12,37 +12,41 @@ struct SlashCommandsPopup: View {
     let onTap: (SlashCommand) -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(candidates) { cmd in
-                Button {
-                    onTap(cmd)
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text("/\(cmd.name)")
-                            .font(.system(.body, design: .monospaced).weight(.semibold))
-                            .foregroundStyle(.primary)
-                        Text(cmd.description)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Spacer(minLength: 0)
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(candidates) { cmd in
+                    Button {
+                        onTap(cmd)
+                    } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text("/\(cmd.name)")
+                                .font(.system(.body, design: .monospaced).weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Text(cmd.description)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(Text("slash \(cmd.name). \(cmd.description)"))
-                .accessibilityHint(Text("Inserts this command into the message"))
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(Text("slash \(cmd.name). \(cmd.description)"))
+                    .accessibilityHint(Text("Inserts this command into the message"))
 
-                if cmd.id != candidates.last?.id {
-                    Divider().padding(.leading, 14)
+                    if cmd.id != candidates.last?.id {
+                        Divider().padding(.leading, 14)
+                    }
                 }
             }
         }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(maxHeight: 240)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
