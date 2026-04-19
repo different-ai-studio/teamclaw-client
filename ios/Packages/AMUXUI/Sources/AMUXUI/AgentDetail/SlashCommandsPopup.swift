@@ -29,10 +29,14 @@ struct SlashCommandsPopup: View {
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 12)
+                    .frame(minHeight: 44)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(Text("slash \(cmd.name). \(cmd.description)"))
+                .accessibilityHint(Text("Inserts this command into the message"))
 
                 if cmd.id != candidates.last?.id {
                     Divider().padding(.leading, 14)
