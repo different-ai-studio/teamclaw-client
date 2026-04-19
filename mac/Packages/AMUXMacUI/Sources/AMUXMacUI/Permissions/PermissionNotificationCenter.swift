@@ -3,10 +3,12 @@ import UserNotifications
 import AppKit
 
 /// Registers the AGENT_PERMISSION notification category and handles
-/// user responses. Holds weak handlers keyed by requestId so that when
-/// the user taps Grant/Deny on a notification, we call the right
-/// ViewModel. A singleton because `UNUserNotificationCenter.delegate`
-/// is process-wide.
+/// user responses. Holds handlers keyed by requestId; handler closures
+/// should capture their owning VM weakly so that the singleton cannot
+/// keep stale ViewModels alive after a session switch. Callers must
+/// also unregister when their detail view goes away — see
+/// `PermissionNotificationObserver.onDisappear`.
+/// Singleton because `UNUserNotificationCenter.delegate` is process-wide.
 @MainActor
 public final class PermissionNotificationCenter: NSObject, UNUserNotificationCenterDelegate {
     public static let shared = PermissionNotificationCenter()
@@ -22,7 +24,6 @@ public final class PermissionNotificationCenter: NSObject, UNUserNotificationCen
     public static let denyAction = "DENY"
 
     private var handlers: [String: Handler] = [:]
-    private var pendingFocusSessionId: String?
 
     public override init() {
         super.init()

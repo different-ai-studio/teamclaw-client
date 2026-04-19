@@ -17,6 +17,16 @@ struct PermissionNotificationObserver: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onChange(of: pendingSignature) { _, _ in reconcile() }
+            .onDisappear {
+                // When the detail view goes away (session switch, window
+                // closed), unregister every tracked request so the
+                // singleton center doesn't hang on to the now-stale VM
+                // via the stored Grant/Deny closures.
+                for requestId in tracked {
+                    PermissionNotificationCenter.shared.unregister(requestId: requestId)
+                }
+                tracked = []
+            }
     }
 
     /// A string derived from the current set of pending permission_request
@@ -47,8 +57,14 @@ struct PermissionNotificationObserver: ViewModifier {
             PermissionNotificationCenter.shared.register(
                 requestId: requestId,
                 handler: .init(
-                    grant: { Task { try? await agentVM.grantPermission(requestId: requestId) } },
-                    deny:  { Task { try? await agentVM.denyPermission(requestId: requestId) } },
+                    grant: { [weak agentVM] in
+                        guard let agentVM else { return }
+                        Task { try? await agentVM.grantPermission(requestId: requestId) }
+                    },
+                    deny: { [weak agentVM] in
+                        guard let agentVM else { return }
+                        Task { try? await agentVM.denyPermission(requestId: requestId) }
+                    },
                     sessionId: sessionId
                 )
             )
