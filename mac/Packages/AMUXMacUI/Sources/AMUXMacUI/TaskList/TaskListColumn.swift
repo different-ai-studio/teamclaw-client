@@ -6,6 +6,8 @@ struct TaskListColumn: View {
     @Binding var selectedTaskId: String?
     let teamclawService: TeamclawService?
 
+    @Environment(\.openWindow) private var openWindow
+
     @Query(filter: #Predicate<WorkItem> { !$0.archived })
     private var allTasks: [WorkItem]
     @Query private var allSessions: [CollabSession]
@@ -13,18 +15,29 @@ struct TaskListColumn: View {
     var body: some View {
         let sortedTasks = allTasks.sorted(by: TaskListColumn.compare)
 
-        if sortedTasks.isEmpty {
-            ContentUnavailableView("No tasks yet", systemImage: "checkmark.circle")
-        } else {
-            List(sortedTasks, id: \.workItemId, selection: $selectedTaskId) { task in
-                TaskRow(
-                    workItem: task,
-                    sessionTitle: sessionTitle(for: task.sessionId),
-                    teamclawService: teamclawService
-                )
-                .tag(task.workItemId)
+        Group {
+            if sortedTasks.isEmpty {
+                ContentUnavailableView("No tasks yet", systemImage: "checkmark.circle")
+            } else {
+                List(sortedTasks, id: \.workItemId, selection: $selectedTaskId) { task in
+                    TaskRow(
+                        workItem: task,
+                        sessionTitle: sessionTitle(for: task.sessionId),
+                        teamclawService: teamclawService
+                    )
+                    .tag(task.workItemId)
+                }
+                .listStyle(.inset)
             }
-            .listStyle(.inset)
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    openWindow(id: "amux.taskEditor", value: TaskEditorInput())
+                } label: {
+                    Label("New Task", systemImage: "plus")
+                }
+            }
         }
     }
 

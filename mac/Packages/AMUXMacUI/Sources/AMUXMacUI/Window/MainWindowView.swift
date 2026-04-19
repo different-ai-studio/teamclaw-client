@@ -139,7 +139,7 @@ public struct MainWindowView: View {
         DetailPlaceholderView(
             teamclawService: teamclaw,
             actorId: pairing.deviceId,
-            selectedSessionId: selectedSessionId,
+            selectedSessionId: $selectedSessionId,
             selectedTaskId: selectedTaskId,
             mqtt: mqtt,
             deviceId: pairing.deviceId,

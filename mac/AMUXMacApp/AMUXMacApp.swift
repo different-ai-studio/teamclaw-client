@@ -32,6 +32,8 @@ struct AMUXMacApp: App {
         DetailWindowScene(pairing: pairing, teamclawService: detailTeamclaw)
             .environment(shared)
 
+        TaskEditorWindowScene(teamclawService: detailTeamclaw)
+
         SettingsScene(pairing: pairing)
     }
 

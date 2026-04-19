@@ -5,7 +5,7 @@ import AMUXCore
 struct DetailPlaceholderView: View {
     let teamclawService: TeamclawService
     let actorId: String
-    let selectedSessionId: String?
+    @Binding var selectedSessionId: String?
     let selectedTaskId: String?
     let mqtt: MQTTService?
     let deviceId: String
@@ -27,7 +27,14 @@ struct DetailPlaceholderView: View {
                         peerId: peerId
                     )
                 } else if let task = selectedTask {
-                    taskPreview(task)
+                    TaskDetailView(
+                        item: task,
+                        teamclawService: teamclawService,
+                        mqtt: mqtt,
+                        deviceId: deviceId,
+                        peerId: peerId,
+                        selectedSessionId: $selectedSessionId
+                    )
                 } else {
                     ContentUnavailableView(
                         "Select a session or task",
@@ -50,23 +57,5 @@ struct DetailPlaceholderView: View {
         return tasks.first(where: { $0.workItemId == id })
     }
 
-    @ViewBuilder
-    private func taskPreview(_ task: WorkItem) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(task.title.isEmpty ? "(untitled task)" : task.title, systemImage: "checkmark.circle")
-                .font(.title2.weight(.semibold))
-            Text(task.statusLabel)
-                .foregroundStyle(.secondary)
-            if !task.itemDescription.isEmpty {
-                Text(task.itemDescription)
-                    .padding(.top, 4)
-            }
-            Text("Linked session view coming in Plan 4.")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(24)
-    }
 }
 
