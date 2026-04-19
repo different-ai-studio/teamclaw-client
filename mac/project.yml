@@ -10,6 +10,8 @@ packages:
     path: ../ios/Packages/AMUXCore
   AMUXMacUI:
     path: Packages/AMUXMacUI
+  AMUXSharedUI:
+    path: ../ios/Packages/AMUXSharedUI
 
 targets:
   AMUXMac:
@@ -20,6 +22,7 @@ targets:
     dependencies:
       - package: AMUXCore
       - package: AMUXMacUI
+      - package: AMUXSharedUI
     info:
       path: AMUXMacApp/Info.plist
       properties:

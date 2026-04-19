@@ -9,12 +9,14 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../../../ios/Packages/AMUXCore"),
+        .package(path: "../../../ios/Packages/AMUXSharedUI"),
     ],
     targets: [
         .target(
             name: "AMUXMacUI",
             dependencies: [
                 .product(name: "AMUXCore", package: "AMUXCore"),
+                .product(name: "AMUXSharedUI", package: "AMUXSharedUI"),
             ],
             resources: [.process("Resources")]
         ),

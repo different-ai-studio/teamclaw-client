@@ -10,8 +10,9 @@
 		15AE54E5F6CE826C9D3884B5 /* AMUXCore in Frameworks */ = {isa = PBXBuildFile; productRef = E240150FE27A7C45F36DE38D /* AMUXCore */; };
 		16C83AF390462FDDFA5ABAEE /* AMUXApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 499D508CBB7FB4FD1F584D9D /* AMUXApp.swift */; };
 		2C36DC72B69CF16E00B4ECB5 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F467BD534BE686B6EACBD702 /* ContentView.swift */; };
+		3203553BEAE4D5D79B881582 /* SentrySwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5821CF422126708735E13341 /* SentrySwiftUI */; };
 		48A4F0655EACAE64B0B0232B /* AMUXUI in Frameworks */ = {isa = PBXBuildFile; productRef = 984FDD5CB983CACB65198166 /* AMUXUI */; };
-		989AF52819F1BFC91A3315B1 /* SentrySwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5821CF422126708735E13341 /* SentrySwiftUI */; };
+		989AF52819F1BFC91A3315B1 /* AMUXSharedUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5400E9174EF5F9869349C3EF /* AMUXSharedUI */; };
 		EB09506708CCBE1B923FBFAE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 25D67C6EB2C2948CCFE684D1 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -19,6 +20,7 @@
 		25D67C6EB2C2948CCFE684D1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		278531282E6CC92737596EAF /* AMUXCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AMUXCore; path = Packages/AMUXCore; sourceTree = SOURCE_ROOT; };
 		499D508CBB7FB4FD1F584D9D /* AMUXApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AMUXApp.swift; sourceTree = "<group>"; };
+		5A17336F2708FD5E2A0C62C8 /* AMUXSharedUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AMUXSharedUI; path = Packages/AMUXSharedUI; sourceTree = SOURCE_ROOT; };
 		913DCF0E3CEDD1823F52E8D6 /* AMUXUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AMUXUI; path = Packages/AMUXUI; sourceTree = SOURCE_ROOT; };
 		92EC5FA726FD730FCA929AD0 /* AMUX.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AMUX.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F467BD534BE686B6EACBD702 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -32,7 +34,8 @@
 			files = (
 				15AE54E5F6CE826C9D3884B5 /* AMUXCore in Frameworks */,
 				48A4F0655EACAE64B0B0232B /* AMUXUI in Frameworks */,
-				989AF52819F1BFC91A3315B1 /* SentrySwiftUI in Frameworks */,
+				989AF52819F1BFC91A3315B1 /* AMUXSharedUI in Frameworks */,
+				3203553BEAE4D5D79B881582 /* SentrySwiftUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -71,6 +74,7 @@
 			isa = PBXGroup;
 			children = (
 				278531282E6CC92737596EAF /* AMUXCore */,
+				5A17336F2708FD5E2A0C62C8 /* AMUXSharedUI */,
 				913DCF0E3CEDD1823F52E8D6 /* AMUXUI */,
 			);
 			path = Packages;
@@ -95,6 +99,7 @@
 			packageProductDependencies = (
 				E240150FE27A7C45F36DE38D /* AMUXCore */,
 				984FDD5CB983CACB65198166 /* AMUXUI */,
+				5400E9174EF5F9869349C3EF /* AMUXSharedUI */,
 				5821CF422126708735E13341 /* SentrySwiftUI */,
 			);
 			productName = AMUX;
@@ -127,6 +132,7 @@
 			packageReferences = (
 				50F232FD09A259B871847F9E /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 				48FE25CCBE8D8352AEDA3987 /* XCLocalSwiftPackageReference "Packages/AMUXCore" */,
+				D3DBB7C1775118766EB22E25 /* XCLocalSwiftPackageReference "Packages/AMUXSharedUI" */,
 				B60399363A37FA63521EE916 /* XCLocalSwiftPackageReference "Packages/AMUXUI" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -354,6 +360,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/AMUXUI;
 		};
+		D3DBB7C1775118766EB22E25 /* XCLocalSwiftPackageReference "Packages/AMUXSharedUI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AMUXSharedUI;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -368,6 +378,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		5400E9174EF5F9869349C3EF /* AMUXSharedUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AMUXSharedUI;
+		};
 		5821CF422126708735E13341 /* SentrySwiftUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 50F232FD09A259B871847F9E /* XCRemoteSwiftPackageReference "sentry-cocoa" */;

@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 import AMUXCore
+import AMUXSharedUI
 
 // MARK: - AgentDetailView (NetNewsWire Article-style)
 

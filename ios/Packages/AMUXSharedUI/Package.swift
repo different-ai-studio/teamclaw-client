@@ -2,25 +2,22 @@
 import PackageDescription
 
 let package = Package(
-    name: "AMUXUI",
-    platforms: [.iOS(.v26)],
+    name: "AMUXSharedUI",
+    platforms: [.iOS(.v26), .macOS(.v26)],
     products: [
-        .library(name: "AMUXUI", targets: ["AMUXUI"]),
+        .library(name: "AMUXSharedUI", targets: ["AMUXSharedUI"]),
     ],
     dependencies: [
         .package(path: "../AMUXCore"),
-        .package(path: "../AMUXSharedUI"),
         .package(url: "https://github.com/apple/swift-markdown.git", from: "0.7.3"),
     ],
     targets: [
         .target(
-            name: "AMUXUI",
+            name: "AMUXSharedUI",
             dependencies: [
                 "AMUXCore",
-                "AMUXSharedUI",
                 .product(name: "Markdown", package: "swift-markdown"),
-            ],
-            resources: [.process("Resources")]
+            ]
         ),
     ]
 )

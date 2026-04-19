@@ -1,13 +1,37 @@
 import SwiftUI
 import AMUXCore
 
+// MARK: - ToolIcons
+
+/// Shared icon + short-name mapping reused by ToolCallView and CompactToolLine
+/// to keep the visual language consistent across platforms.
+public enum ToolIcons {
+    public static func icon(for name: String) -> String {
+        let n = name.lowercased()
+        if n.contains("write") || n.contains("edit") { return "doc.text" }
+        if n.contains("read") { return "doc" }
+        if n.contains("bash") || n.contains("shell") || n.contains("terminal") { return "terminal" }
+        if n.contains("search") || n.contains("grep") || n.contains("glob") { return "magnifyingglass" }
+        if n.contains("task") { return "person.2" }
+        if n.contains("web") { return "globe" }
+        return "wrench"
+    }
+
+    public static func shortName(for name: String) -> String {
+        if let range = name.range(of: "__", options: .backwards) {
+            return String(name[range.upperBound...].prefix(30))
+        }
+        return String(name.prefix(30))
+    }
+}
+
 // MARK: - ToolCallView
 
 public struct ToolCallView: View {
-    let toolName: String
-    let toolId: String
-    let description: String
-    let status: String
+    public let toolName: String
+    public let toolId: String
+    public let description: String
+    public let status: String
     @State private var isExpanded = false
 
     private var hasDetails: Bool {
@@ -35,11 +59,11 @@ public struct ToolCallView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Image(systemName: toolIcon)
+                    Image(systemName: ToolIcons.icon(for: toolName))
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Text(displayName)
+                    Text(ToolIcons.shortName(for: toolName.isEmpty ? toolId : toolName))
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -59,6 +83,7 @@ public struct ToolCallView: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -73,24 +98,14 @@ public struct ToolCallView: View {
                         .lineLimit(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(6)
-                        .background(Color(.systemBackground).opacity(0.6))
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                        .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 4))
                 }
                 .padding(.horizontal, 10)
                 .padding(.bottom, 8)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-
-    private var toolIcon: String {
-        Self.icon(for: toolName)
-    }
-
-    private var displayName: String {
-        Self.shortName(for: toolName.isEmpty ? toolId : toolName)
+        .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
     }
 
     @ViewBuilder
@@ -112,32 +127,12 @@ public struct ToolCallView: View {
             EmptyView()
         }
     }
-
-    // MARK: - Shared helpers
-
-    static func icon(for name: String) -> String {
-        let n = name.lowercased()
-        if n.contains("write") || n.contains("edit") { return "doc.text" }
-        if n.contains("read") { return "doc" }
-        if n.contains("bash") || n.contains("shell") || n.contains("terminal") { return "terminal" }
-        if n.contains("search") || n.contains("grep") || n.contains("glob") { return "magnifyingglass" }
-        if n.contains("task") { return "person.2" }
-        if n.contains("web") { return "globe" }
-        return "wrench"
-    }
-
-    static func shortName(for name: String) -> String {
-        if let range = name.range(of: "__", options: .backwards) {
-            return String(name[range.upperBound...].prefix(30))
-        }
-        return String(name.prefix(30))
-    }
 }
 
 // MARK: - CompactToolLine
 
 public struct CompactToolLine: View {
-    let event: AgentEvent
+    public let event: AgentEvent
     @State private var showDetail = false
 
     private var toolName: String { event.toolName ?? "" }
@@ -149,6 +144,10 @@ public struct CompactToolLine: View {
         return !trimmed.isEmpty && trimmed != "{}" && trimmed != "null"
     }
 
+    public init(event: AgentEvent) {
+        self.event = event
+    }
+
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
@@ -156,11 +155,11 @@ public struct CompactToolLine: View {
                     .font(.system(size: 9))
                     .foregroundStyle(succeeded ? .green : .red)
 
-                Image(systemName: ToolCallView.icon(for: toolName))
+                Image(systemName: ToolIcons.icon(for: toolName))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
 
-                Text(ToolCallView.shortName(for: toolName.isEmpty ? (event.toolId ?? "") : toolName))
+                Text(ToolIcons.shortName(for: toolName.isEmpty ? (event.toolId ?? "") : toolName))
                     .font(.caption)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -193,13 +192,17 @@ public struct CompactToolLine: View {
 // MARK: - ToolRunSummaryBar
 
 public struct ToolRunSummaryBar: View {
-    let events: [AgentEvent]
+    public let events: [AgentEvent]
     @State private var isExpanded = false
 
     private var count: Int { events.count }
 
     private var hasFailure: Bool {
         events.contains { $0.success == false }
+    }
+
+    public init(events: [AgentEvent]) {
+        self.events = events
     }
 
     public var body: some View {
@@ -235,6 +238,7 @@ public struct ToolRunSummaryBar: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -248,8 +252,7 @@ public struct ToolRunSummaryBar: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 

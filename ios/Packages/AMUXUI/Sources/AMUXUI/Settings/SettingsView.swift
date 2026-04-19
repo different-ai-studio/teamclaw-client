@@ -1,5 +1,6 @@
 import SwiftUI
 import AMUXCore
+import AMUXSharedUI
 
 public struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss

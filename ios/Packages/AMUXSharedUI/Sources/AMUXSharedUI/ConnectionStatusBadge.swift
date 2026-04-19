@@ -1,8 +1,8 @@
 import SwiftUI
 
 public struct ConnectionStatusBadge: View {
-    let isOnline: Bool
-    let deviceName: String?
+    public let isOnline: Bool
+    public let deviceName: String?
 
     public init(isOnline: Bool, deviceName: String? = nil) {
         self.isOnline = isOnline
@@ -16,7 +16,7 @@ public struct ConnectionStatusBadge: View {
                 .frame(width: 8, height: 8)
             Text(isOnline ? (deviceName ?? "Daemon Online") : "Daemon Offline")
                 .font(.caption2)
-                .foregroundStyle(isOnline ? Color(.secondaryLabel) : Color.red)
+                .foregroundStyle(isOnline ? Color.secondary : Color.red)
         }
     }
 }

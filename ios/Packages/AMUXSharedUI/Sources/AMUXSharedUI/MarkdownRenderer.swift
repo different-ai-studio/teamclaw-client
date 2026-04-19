@@ -1,10 +1,14 @@
 import SwiftUI
 import Foundation
 
-struct MarkdownRenderer: View {
-    let content: String
+public struct MarkdownRenderer: View {
+    public let content: String
 
-    var body: some View {
+    public init(content: String) {
+        self.content = content
+    }
+
+    public var body: some View {
         Text(MarkdownCache.shared.parse(content))
             .font(.subheadline)
             .textSelection(.enabled)

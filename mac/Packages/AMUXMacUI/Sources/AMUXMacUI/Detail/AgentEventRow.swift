@@ -1,5 +1,6 @@
 import SwiftUI
 import AMUXCore
+import AMUXSharedUI
 
 /// macOS renderer for a single AgentEvent. Mirrors iOS EventBubbleView's
 /// dispatch on `eventType` but uses macOS-compatible APIs (NSPasteboard,

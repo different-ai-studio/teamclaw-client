@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Renders a todo_update event payload as a checklist. The daemon emits one
-/// line per todo, prefixed with `[done]`, `[wip]`, or `[todo]`; anything else
-/// falls back to an unchecked circle. Matches the iOS AMUXUI.TodoListView.
-struct TodoListView: View {
-    let text: String
+public struct TodoListView: View {
+    public let text: String
+
+    public init(text: String) {
+        self.text = text
+    }
 
     private var items: [(icon: String, label: String)] {
         text.split(separator: "\n").map { line in
@@ -20,7 +21,7 @@ struct TodoListView: View {
         }
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "checklist").font(.caption).foregroundStyle(.secondary)
@@ -34,7 +35,7 @@ struct TodoListView: View {
                     Text(item.label)
                         .font(.subheadline)
                         .strikethrough(item.icon == "checkmark.circle.fill")
-                        .foregroundStyle(item.icon == "checkmark.circle.fill" ? .secondary : .primary)
+                        .foregroundStyle(item.icon == "checkmark.circle.fill" ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
                 }
             }
         }
@@ -45,9 +46,9 @@ struct TodoListView: View {
 
     private func color(for icon: String) -> Color {
         switch icon {
-        case "checkmark.circle.fill": .green
-        case "arrow.triangle.2.circlepath": .orange
-        default: .secondary
+        case "checkmark.circle.fill": return .green
+        case "arrow.triangle.2.circlepath": return .orange
+        default: return .secondary
         }
     }
 }

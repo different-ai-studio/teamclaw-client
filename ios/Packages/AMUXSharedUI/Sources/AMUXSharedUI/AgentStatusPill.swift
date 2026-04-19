@@ -5,12 +5,16 @@ import AMUXCore
 /// Error / Stopped). Because Agent is a SwiftData @Model, the pill re-renders
 /// automatically when AgentDetailViewModel writes a new status in response to
 /// an Amux_AcpStatusChange event.
-struct AgentStatusPill: View {
-    let agent: Agent
+public struct AgentStatusPill: View {
+    public let agent: Agent
 
     @State private var breathe = false
 
-    var body: some View {
+    public init(agent: Agent) {
+        self.agent = agent
+    }
+
+    public var body: some View {
         HStack(spacing: 4) {
             Circle()
                 .fill(color)
