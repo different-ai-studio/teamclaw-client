@@ -735,6 +735,17 @@ impl DaemonServer {
                 let role = self.peers.get_peer(&peer_id).map(|p| p.role).unwrap_or(amux::MemberRole::Member);
                 if role != amux::MemberRole::Owner {
                     warn!(peer_id, "invite rejected: not owner");
+                    let reject = amux::DeviceCollabEvent {
+                        device_id: self.config.device.id.clone(),
+                        timestamp: chrono::Utc::now().timestamp(),
+                        event: Some(amux::device_collab_event::Event::CommandRejected(
+                            amux::PromptRejected {
+                                command_id,
+                                reason: "Only owners can invite members".to_string(),
+                            },
+                        )),
+                    };
+                    let _ = publisher.publish_device_collab_event(&reject).await;
                     return;
                 }
                 let invite_role = if invite.role == amux::MemberRole::Owner as i32 { "owner" } else { "member" };
@@ -759,7 +770,20 @@ impl DaemonServer {
                         let _ = publisher.publish_device_collab_event(&event).await;
                         info!("invite created for {}", invite.display_name);
                     }
-                    Err(e) => error!("failed to create invite: {}", e),
+                    Err(e) => {
+                        error!("failed to create invite: {}", e);
+                        let reject = amux::DeviceCollabEvent {
+                            device_id: self.config.device.id.clone(),
+                            timestamp: chrono::Utc::now().timestamp(),
+                            event: Some(amux::device_collab_event::Event::CommandRejected(
+                                amux::PromptRejected {
+                                    command_id,
+                                    reason: format!("Failed to create invite: {}", e),
+                                },
+                            )),
+                        };
+                        let _ = publisher.publish_device_collab_event(&reject).await;
+                    }
                 }
             }
             amux::device_collab_command::Command::RemoveMember(remove) => {

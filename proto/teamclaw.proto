@@ -230,6 +230,9 @@ message CreateWorkItemRequest {
   string title = 2;
   string description = 3;
   string parent_id = 4;
+  // Member id of the actor creating this task. Used by the daemon as
+  // `created_by`; if empty, the daemon falls back to sender_device_id.
+  string sender_actor_id = 5;
 }
 
 message ClaimWorkItemRequest {

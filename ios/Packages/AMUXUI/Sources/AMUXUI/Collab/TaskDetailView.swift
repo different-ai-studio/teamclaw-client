@@ -9,17 +9,36 @@ public struct TaskDetailView: View {
     let item: WorkItem
     let sessionViewModel: SessionListViewModel
     let teamclawService: TeamclawService?
+    let mqtt: MQTTService
+    let deviceId: String
+    let peerId: String
     @Binding var navigationPath: [String]
 
     @Environment(\.modelContext) private var modelContext
+    @Query private var members: [Member]
+    @State private var showNewSession = false
+
+    private var creatorLabel: String {
+        guard !item.createdBy.isEmpty else { return "—" }
+        if let m = members.first(where: { $0.memberId == item.createdBy }) {
+            return m.displayName
+        }
+        return "Unknown"
+    }
 
     public init(item: WorkItem,
                 sessionViewModel: SessionListViewModel,
                 teamclawService: TeamclawService?,
+                mqtt: MQTTService,
+                deviceId: String,
+                peerId: String,
                 navigationPath: Binding<[String]>) {
         self.item = item
         self.sessionViewModel = sessionViewModel
         self.teamclawService = teamclawService
+        self.mqtt = mqtt
+        self.deviceId = deviceId
+        self.peerId = peerId
         self._navigationPath = navigationPath
     }
 
@@ -56,14 +75,39 @@ public struct TaskDetailView: View {
             }
 
             Section("Info") {
-                if !item.createdBy.isEmpty {
-                    LabeledContent("Created by", value: item.createdBy)
-                }
+                LabeledContent("Created by", value: creatorLabel)
                 LabeledContent("Created", value: item.createdAt.formatted(date: .abbreviated, time: .shortened))
             }
         }
         .navigationTitle("Task")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showNewSession = true
+                } label: {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.title3)
+                        .foregroundStyle(.primary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Create session")
+            }
+        }
+        .sheet(isPresented: $showNewSession) {
+            NewSessionSheet(
+                mqtt: mqtt,
+                deviceId: deviceId,
+                peerId: peerId,
+                viewModel: sessionViewModel,
+                preselectedWorkItemId: item.workItemId,
+                onSessionCreated: { sessionKey in
+                    showNewSession = false
+                    navigationPath.append(sessionKey)
+                }
+            )
+        }
     }
 
     // MARK: - Status pill

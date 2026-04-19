@@ -39,6 +39,8 @@
         <string>UIInterfaceOrientationLandscapeLeft</string>
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
+    <key>NSCameraUsageDescription</key>
+    <string>AMUX uses the camera to scan the pairing QR code produced by amuxd.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>AMUX needs microphone access for voice input to send prompts to your AI agent.</string>
     <key>NSSpeechRecognitionUsageDescription</key>

@@ -13,26 +13,38 @@ public struct NewSessionSheet: View {
     let peerId: String
 
     let viewModel: SessionListViewModel
+    let preselectedWorkItemId: String?
+    let preselectedCollaborators: [Member]
     @State private var selectedWorkspaceId: String?
     @State private var selectedAgentType: Amux_AgentType = .claudeCode
 
     @State private var collaborators: [Member] = []
+    @State private var selectedWorkItemId: String?
     @State private var messageText: String = ""
     @State private var showMemberPicker = false
     @State private var isSending = false
     @State private var errorMessage: String?
     @FocusState private var isInputFocused: Bool
 
+    @Query(filter: #Predicate<WorkItem> { !$0.archived },
+           sort: \WorkItem.createdAt, order: .reverse)
+    private var workItems: [WorkItem]
+
     private var workspaces: [Workspace] { viewModel.workspaces }
 
     /// Set by parent — called with agentId when session is created
     var onSessionCreated: ((String) -> Void)?
 
-    public init(mqtt: MQTTService, deviceId: String, peerId: String, viewModel: SessionListViewModel, onSessionCreated: ((String) -> Void)? = nil) {
+    public init(mqtt: MQTTService, deviceId: String, peerId: String, viewModel: SessionListViewModel,
+                preselectedWorkItemId: String? = nil,
+                preselectedCollaborators: [Member] = [],
+                onSessionCreated: ((String) -> Void)? = nil) {
         self.mqtt = mqtt
         self.deviceId = deviceId
         self.peerId = peerId
         self.viewModel = viewModel
+        self.preselectedWorkItemId = preselectedWorkItemId
+        self.preselectedCollaborators = preselectedCollaborators
         self.onSessionCreated = onSessionCreated
     }
 
@@ -48,6 +60,8 @@ public struct NewSessionSheet: View {
                     workspaceAndTypeRow
                     Divider()
                     collaboratorsRow
+                    Divider()
+                    taskRow
                     Divider()
                     Spacer()
                     if let errorMessage {
@@ -88,6 +102,12 @@ public struct NewSessionSheet: View {
             isInputFocused = true
             if workspaces.count == 1 {
                 selectedWorkspaceId = workspaces.first?.workspaceId
+            }
+            if selectedWorkItemId == nil, let preselectedWorkItemId {
+                selectedWorkItemId = preselectedWorkItemId
+            }
+            if collaborators.isEmpty, !preselectedCollaborators.isEmpty {
+                collaborators = preselectedCollaborators
             }
         }
     }
@@ -180,6 +200,54 @@ public struct NewSessionSheet: View {
         .padding(.vertical, 14)
     }
 
+    // MARK: - Task row
+
+    private var taskRow: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text("Task")
+                .foregroundStyle(.secondary)
+            Spacer()
+            Menu {
+                Button {
+                    selectedWorkItemId = nil
+                } label: {
+                    Label("None", systemImage: selectedWorkItemId == nil ? "checkmark" : "circle")
+                }
+                if !workItems.isEmpty {
+                    Divider()
+                    ForEach(workItems, id: \.workItemId) { item in
+                        Button {
+                            selectedWorkItemId = item.workItemId
+                        } label: {
+                            Label(item.displayTitle,
+                                  systemImage: selectedWorkItemId == item.workItemId ? "checkmark" : "circle")
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(selectedTaskLabel)
+                        .font(.body)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption)
+                }
+                .foregroundStyle(selectedWorkItemId == nil ? .secondary : .primary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+    }
+
+    private var selectedTaskLabel: String {
+        if let id = selectedWorkItemId,
+           let item = workItems.first(where: { $0.workItemId == id }) {
+            return item.displayTitle
+        }
+        return "None"
+    }
+
     // MARK: - Input bar
 
     private var inputBar: some View {
@@ -224,14 +292,44 @@ public struct NewSessionSheet: View {
 
     // MARK: - Helpers
 
+    /// Builds the text that will be sent as the session's first user message.
+    /// If a task is selected, its title/description prefaces the user's prompt
+    /// so the agent has that context upfront.
+    private func firstMessageText(userText: String) -> String {
+        guard let id = selectedWorkItemId,
+              let item = workItems.first(where: { $0.workItemId == id }) else {
+            return userText
+        }
+        let description = item.itemDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let taskBlock: String
+        if !description.isEmpty && !title.isEmpty && description != title {
+            taskBlock = "Task: \(title)\n\n\(description)"
+        } else if !description.isEmpty {
+            taskBlock = "Task: \(description)"
+        } else if !title.isEmpty {
+            taskBlock = "Task: \(title)"
+        } else {
+            return userText
+        }
+        return "\(taskBlock)\n\n\(userText)"
+    }
+
     private func sendAndCreate() {
-        let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        let userText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !userText.isEmpty else { return }
+
+        // When a task is picked, prepend its context so the session's first
+        // user message carries the task description + the typed prompt.
+        let text = firstMessageText(userText: userText)
 
         isInputFocused = false
         errorMessage = nil
 
-        if !collaborators.isEmpty {
+        // Collab path also handles the case where a task was picked but no
+        // collaborators were added — ACP startAgent has no workItemId field,
+        // so task linking must flow through CreateSessionRequest.
+        if !collaborators.isEmpty || selectedWorkItemId != nil {
             createCollabSession(text: text)
             return
         }
@@ -314,6 +412,9 @@ public struct NewSessionSheet: View {
         createReq.title = String(text.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
         createReq.summary = text
         createReq.inviteActorIds = collaborators.map(\.memberId)
+        if let workItemId = selectedWorkItemId, !workItemId.isEmpty {
+            createReq.workItemID = workItemId
+        }
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()

@@ -13,6 +13,11 @@ public final class TeamclawService {
     private var teamId: String = ""
     private var deviceId: String = ""
     private var peerId: String = ""
+    /// Member id of the local actor, resolved from the retained PeerList on
+    /// `amux/{deviceId}/peers` by matching our own peer_id. Populated once
+    /// PeerList arrives; used as `sender_actor_id` on outgoing RPCs so the
+    /// daemon records the creator as a member rather than a device.
+    public private(set) var localMemberId: String = ""
     private var listenerTask: Task<Void, Never>?
 
     public init() {}
@@ -62,6 +67,8 @@ public final class TeamclawService {
             try? await mqtt.subscribe("teamclaw/\(teamId)/user/\(peerId)/invites")
             try? await mqtt.subscribe("teamclaw/\(teamId)/rpc/\(deviceId)/+/res")
             try? await mqtt.subscribe("teamclaw/\(teamId)/workitems")
+            // amux-side peer list — used to resolve our local member id.
+            try? await mqtt.subscribe("amux/\(deviceId)/peers")
 
             isConnected = true
             print("[TeamclawService] subscribed to teamclaw topics for team: \(teamId)")
@@ -85,6 +92,16 @@ public final class TeamclawService {
 
     private func handleIncoming(_ incoming: MQTTIncoming, modelContext: ModelContext) async {
         let topic = incoming.topic
+
+        if topic == "amux/\(deviceId)/peers" {
+            if let list = try? Amux_PeerList(serializedBytes: incoming.payload) {
+                if let mine = list.peers.first(where: { $0.peerID == peerId }),
+                   !mine.memberID.isEmpty {
+                    localMemberId = mine.memberID
+                }
+            }
+            return
+        }
 
         if topic == "teamclaw/\(teamId)/sessions" {
             guard let index = try? Teamclaw_SessionIndex(serializedBytes: incoming.payload) else {
@@ -412,6 +429,7 @@ public final class TeamclawService {
         createReq.sessionID = ""
         createReq.title = title
         createReq.description_p = description
+        createReq.senderActorID = localMemberId
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()

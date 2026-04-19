@@ -288,6 +288,7 @@ struct CreateWorkItemSheet: View {
 
 struct WorkItemRow: View {
     let item: WorkItem
+    var creatorName: String? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -301,9 +302,17 @@ struct WorkItemRow: View {
                     .fontWeight(.medium)
                     .lineLimit(2)
 
-                Text(item.statusLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text(item.statusLabel)
+                    if let creatorName, !creatorName.isEmpty {
+                        Text("·").foregroundStyle(.tertiary)
+                        Image(systemName: "person.crop.circle")
+                            .font(.caption2)
+                        Text(creatorName).lineLimit(1)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Spacer()

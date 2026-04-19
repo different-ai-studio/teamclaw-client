@@ -65,6 +65,9 @@ public struct TasksTab: View {
                             TaskDetailView(item: item,
                                            sessionViewModel: sessionViewModel,
                                            teamclawService: teamclawService,
+                                           mqtt: mqtt,
+                                           deviceId: pairing.deviceId,
+                                           peerId: "ios-\(pairing.authToken.prefix(6))",
                                            navigationPath: $navigationPath)
                         } else {
                             Text("Task not found")

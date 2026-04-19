@@ -21,6 +21,12 @@ public struct WorkItemListView: View {
     @Query(filter: #Predicate<WorkItem> { $0.archived })
     private var archivedItems: [WorkItem]
 
+    @Query private var members: [Member]
+
+    private var memberNameById: [String: String] {
+        Dictionary(uniqueKeysWithValues: members.map { ($0.memberId, $0.displayName) })
+    }
+
     @Binding var showCreate: Bool
     @State private var showArchived = false
 
@@ -43,7 +49,8 @@ public struct WorkItemListView: View {
                 List {
                     ForEach(workItems, id: \.workItemId) { item in
                         NavigationLink(value: "task:\(item.workItemId)") {
-                            WorkItemRow(item: item)
+                            WorkItemRow(item: item,
+                                        creatorName: creatorLabel(for: item))
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button {
@@ -88,6 +95,12 @@ public struct WorkItemListView: View {
         .sheet(isPresented: $showArchived) {
             ArchivedWorkItemsView(teamclawService: teamclawService)
         }
+    }
+
+    private func creatorLabel(for item: WorkItem) -> String? {
+        guard !item.createdBy.isEmpty else { return nil }
+        // Show the member's display name, or nothing — never the raw id.
+        return memberNameById[item.createdBy]
     }
 
     private func archiveTapped(_ item: WorkItem) {

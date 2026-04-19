@@ -24,7 +24,8 @@ public struct MembersTab: View {
         NavigationStack {
             MemberListContent(mqtt: mqtt,
                               deviceId: pairing.deviceId,
-                              peerId: "ios-\(pairing.authToken.prefix(6))")
+                              peerId: "ios-\(pairing.authToken.prefix(6))",
+                              sessionViewModel: sessionViewModel)
                 .navigationTitle("Members")
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {

@@ -469,6 +469,14 @@ impl SessionManager {
         r: teamclaw::CreateWorkItemRequest,
     ) -> RpcResponse {
         let work_item_id = Uuid::new_v4().to_string();
+        // Prefer the sender's actor/member id when the client supplies it.
+        // Older clients that only set sender_device_id still work, they'll
+        // just render as "Unknown" on the current UI.
+        let created_by = if !r.sender_actor_id.is_empty() {
+            r.sender_actor_id.clone()
+        } else {
+            req.sender_device_id.clone()
+        };
         let stored_item = StoredWorkItem {
             work_item_id: work_item_id.clone(),
             session_id: r.session_id.clone(),
@@ -476,7 +484,7 @@ impl SessionManager {
             description: r.description.clone(),
             status: "open".to_string(),
             parent_id: r.parent_id.clone(),
-            created_by: req.sender_device_id.clone(),
+            created_by,
             created_at: Utc::now(),
             archived: false,
         };

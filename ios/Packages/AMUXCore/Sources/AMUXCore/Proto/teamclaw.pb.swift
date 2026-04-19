@@ -848,6 +848,10 @@ public struct Teamclaw_CreateWorkItemRequest: Sendable {
 
   public var parentID: String = String()
 
+  /// Member id of the actor creating this task. Used by the daemon as
+  /// `created_by`; if empty, the daemon falls back to sender_device_id.
+  public var senderActorID: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2372,7 +2376,7 @@ extension Teamclaw_RemoveParticipantRequest: SwiftProtobuf.Message, SwiftProtobu
 
 extension Teamclaw_CreateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateWorkItemRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{1}title\0\u{1}description\0\u{3}parent_id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{1}title\0\u{1}description\0\u{3}parent_id\0\u{3}sender_actor_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2384,6 +2388,7 @@ extension Teamclaw_CreateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
       case 2: try { try decoder.decodeSingularStringField(value: &self.title) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.parentID) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.senderActorID) }()
       default: break
       }
     }
@@ -2402,6 +2407,9 @@ extension Teamclaw_CreateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
     if !self.parentID.isEmpty {
       try visitor.visitSingularStringField(value: self.parentID, fieldNumber: 4)
     }
+    if !self.senderActorID.isEmpty {
+      try visitor.visitSingularStringField(value: self.senderActorID, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2410,6 +2418,7 @@ extension Teamclaw_CreateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
     if lhs.title != rhs.title {return false}
     if lhs.description_p != rhs.description_p {return false}
     if lhs.parentID != rhs.parentID {return false}
+    if lhs.senderActorID != rhs.senderActorID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

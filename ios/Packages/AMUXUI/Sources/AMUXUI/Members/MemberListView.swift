@@ -47,7 +47,7 @@ public struct MemberListView: View {
                         NavigationLink {
                             MemberDetailView(member: member)
                         } label: {
-                            MemberRow(member: member)
+                            MemberRow(member: member, isOnline: viewModel.isOnline(member))
                         }
                     }
                 }
@@ -142,7 +142,7 @@ public struct MemberListView: View {
                 Image(systemName: selectedIDs.contains(member.memberId) ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(selectedIDs.contains(member.memberId) ? Color.accentColor : Color.secondary)
                     .font(.title3)
-                MemberRow(member: member)
+                MemberRow(member: member, isOnline: viewModel.isOnline(member))
             }
         }
         .tint(.primary)
@@ -153,14 +153,28 @@ public struct MemberListView: View {
 
 private struct MemberRow: View {
     let member: Member
+    let isOnline: Bool
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading) {
+            Circle()
+                .fill(isOnline ? Color.green : Color.secondary.opacity(0.4))
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
                 Text(member.displayName).font(.body)
-                Text(member.roleLabel).font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(member.roleLabel)
+                    Text("·").foregroundStyle(.tertiary)
+                    Text(departmentLabel(for: member))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             Spacer()
+            // Placeholder: wire real count once session-participant mapping lands.
+            Text("0 sessions")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
             if member.isOwner {
                 Image(systemName: "crown.fill").foregroundStyle(.orange).font(.caption)
             }
@@ -168,17 +182,55 @@ private struct MemberRow: View {
     }
 }
 
+private func departmentLabel(for member: Member) -> String {
+    if let dept = member.department, !dept.isEmpty { return dept }
+    return "—"
+}
+
 // MARK: - MemberDetailView
 
 private struct MemberDetailView: View {
     let member: Member
+
+    @Query private var allMessages: [SessionMessage]
+    @Query(sort: \CollabSession.lastMessageAt, order: .reverse)
+    private var allSessions: [CollabSession]
+
+    private var memberSessions: [CollabSession] {
+        let sessionIds = Set(
+            allMessages
+                .filter { $0.senderActorId == member.memberId }
+                .map(\.sessionId)
+        )
+        return allSessions.filter { sessionIds.contains($0.sessionId) }
+    }
 
     var body: some View {
         List {
             Section("Info") {
                 LabeledContent("Name", value: member.displayName)
                 LabeledContent("Role", value: member.roleLabel)
+                LabeledContent("Department", value: departmentLabel(for: member))
                 LabeledContent("Joined", value: member.joinedAt.formatted(date: .abbreviated, time: .shortened))
+            }
+            Section("Collab Sessions") {
+                if memberSessions.isEmpty {
+                    Text("No sessions yet")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(memberSessions, id: \.sessionId) { session in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(session.title.isEmpty ? "(untitled)" : session.title)
+                                .font(.body)
+                            if let last = session.lastMessageAt {
+                                Text(last.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
             }
             Section("ID") {
                 Text(member.memberId)
