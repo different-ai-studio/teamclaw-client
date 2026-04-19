@@ -463,6 +463,47 @@ public final class TeamclawService {
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
 
+    /// Updates a work item's status via `UpdateWorkItem` RPC. Mirrors
+    /// `archiveWorkItem` — fire-and-forget; authoritative state arrives
+    /// via `WorkItemEvent.updated` broadcast and flows through
+    /// `syncWorkItemEvent`. The call site typically flips `status` on the
+    /// SwiftData model first for optimistic UI; if the RPC fails, the next
+    /// broadcast will reinstate the prior value.
+    ///
+    /// - Parameter status: one of `"open"`, `"in_progress"`, `"done"`.
+    ///   Any other value is sent as `.unknown` (which SwiftProtobuf skips,
+    ///   producing a no-op update on the daemon side).
+    public func updateWorkItemStatus(workItemId: String, sessionId: String, status: String) async {
+        guard let mqtt else { return }
+
+        var update = Teamclaw_UpdateWorkItemRequest()
+        update.sessionID = sessionId
+        update.workItemID = workItemId
+        update.status = protoStatus(from: status)
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .updateWorkItem(update)
+
+        let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
+        guard let data = try? rpcReq.serializedData() else { return }
+        try? await mqtt.publish(topic: topic, payload: data, retain: false)
+    }
+
+    /// Maps the SwiftData `WorkItem.status` string domain to the protobuf
+    /// `WorkItemStatus` enum. Unknown inputs map to `.unknown` — defensive
+    /// against future status values landing in the model before this mapper
+    /// is updated.
+    private func protoStatus(from status: String) -> Teamclaw_WorkItemStatus {
+        switch status {
+        case "open": return .open
+        case "in_progress": return .inProgress
+        case "done": return .done
+        default: return .unknown
+        }
+    }
+
     public func subscribeToSession(_ sessionId: String) {
         guard let mqtt else { return }
         let base = "teamclaw/\(teamId)/session/\(sessionId)"
