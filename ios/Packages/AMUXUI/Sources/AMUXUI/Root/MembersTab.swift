@@ -8,6 +8,7 @@ public struct MembersTab: View {
     let sessionViewModel: SessionListViewModel
 
     @State private var showSettings = false
+    @State private var showInvite = false
 
     public init(mqtt: MQTTService,
                 pairing: PairingManager,
@@ -33,12 +34,23 @@ public struct MembersTab: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button { showInvite = true } label: {
+                            Image(systemName: "person.badge.plus").font(.title3)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .sheet(isPresented: $showSettings) {
                     SettingsView(pairing: pairing,
                                  connectionMonitor: connectionMonitor,
                                  mqtt: mqtt,
                                  sessionViewModel: sessionViewModel)
+                }
+                .sheet(isPresented: $showInvite) {
+                    MemberInviteSheet(mqtt: mqtt,
+                                deviceId: pairing.deviceId,
+                                peerId: "ios-\(pairing.authToken.prefix(6))")
                 }
         }
     }
