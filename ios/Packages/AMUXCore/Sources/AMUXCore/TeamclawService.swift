@@ -509,6 +509,36 @@ public final class TeamclawService {
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
 
+    /// Patches any combination of title, description, and status on a work
+    /// item. Title / description are sent as empty strings when `nil` is
+    /// passed (SwiftProtobuf treats empty strings as "unset" on the
+    /// daemon side). Status omitted when `nil`. Fire-and-forget.
+    public func updateWorkItem(
+        workItemId: String,
+        sessionId: String,
+        title: String? = nil,
+        description: String? = nil,
+        status: String? = nil
+    ) async {
+        guard let mqtt else { return }
+
+        var update = Teamclaw_UpdateWorkItemRequest()
+        update.sessionID = sessionId
+        update.workItemID = workItemId
+        if let title { update.title = title }
+        if let description { update.description_p = description }
+        if let status { update.status = protoStatus(from: status) }
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .updateWorkItem(update)
+
+        let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
+        guard let data = try? rpcReq.serializedData() else { return }
+        try? await mqtt.publish(topic: topic, payload: data, retain: false)
+    }
+
     /// Maps the SwiftData `WorkItem.status` string domain to the protobuf
     /// `WorkItemStatus` enum. Unknown inputs map to `.unknown` — defensive
     /// against future status values landing in the model before this mapper

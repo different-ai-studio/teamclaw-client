@@ -88,9 +88,17 @@ struct TaskEditorView: View {
             try? modelContext.save()
             let id = existing.workItemId
             let sid = existing.sessionId
+            let newTitle = trimmedTitle
+            let newDescription = descriptionText
             let desiredStatus = status
             Task {
-                await teamclawService.updateWorkItemStatus(workItemId: id, sessionId: sid, status: desiredStatus)
+                await teamclawService.updateWorkItem(
+                    workItemId: id,
+                    sessionId: sid,
+                    title: newTitle,
+                    description: newDescription,
+                    status: desiredStatus
+                )
                 await MainActor.run { isBusy = false; onDone() }
             }
         } else {
