@@ -1,7 +1,6 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
-import PhotosUI
 
 /// Pushable/embeddable work item list body. Parent owns NavigationStack
 /// and provides the "+" toolbar action.
