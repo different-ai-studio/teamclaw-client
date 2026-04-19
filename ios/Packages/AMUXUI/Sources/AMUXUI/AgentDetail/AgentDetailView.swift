@@ -274,6 +274,7 @@ public struct AgentDetailView: View {
                        isStreaming: viewModel.isStreaming,
                        hasAgent: viewModel.hasAgent,
                        agent: viewModel.agent,
+                       availableCommands: viewModel.availableCommands,
                        onSend: { modelId in
                            let t = promptText; promptText = ""
                            Task { try? await viewModel.sendPrompt(t, modelId: modelId, modelContext: modelContext) }
@@ -342,12 +343,15 @@ private struct ReplySheet: View {
     let isStreaming: Bool
     let hasAgent: Bool
     let agent: Agent?
+    let availableCommands: [SlashCommand]
     let onSend: (String?) -> Void
     let onCancel: () -> Void
     @FocusState private var isFocused: Bool
     @State private var showFilePicker = false
     @State private var selectedModelId: String?
     @State private var attachedFiles: [String] = []
+    @State private var slashCandidates: [SlashCommand] = []
+    @State private var hasPendingSlashCommand: Bool = false
 
     private var resolvedModelId: String? {
         if let selectedModelId, !selectedModelId.isEmpty { return selectedModelId }
@@ -357,6 +361,52 @@ private struct ReplySheet: View {
 
     private var canSend: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isDisabled && !isStreaming
+    }
+
+    /// If `text` is `/<word>` and nothing else, returns the prefix after `/`.
+    /// Returns nil when the text does not match.
+    private var slashPrefixInProgress: String? {
+        let trimmed = text
+        guard let first = trimmed.first, first == "/" else { return nil }
+        let rest = trimmed.dropFirst()
+        guard rest.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }) else {
+            return nil
+        }
+        return String(rest)
+    }
+
+    /// True when the composer currently holds `/<knownName>` (optionally
+    /// followed by a space + argument). Drives the send-button emphasis.
+    private var textMatchesKnownCommand: Bool {
+        guard text.hasPrefix("/") else { return false }
+        let afterSlash = text.dropFirst()
+        let head = afterSlash.split(whereSeparator: { $0.isWhitespace }).first.map(String.init) ?? String(afterSlash)
+        guard !head.isEmpty else { return false }
+        return availableCommands.contains(where: { $0.name == head })
+    }
+
+    /// Hint to display below the composer once a command with an input
+    /// hint has been inserted but the user hasn't typed the argument yet.
+    private var activeInputHint: String? {
+        guard hasPendingSlashCommand, text.hasPrefix("/") else { return nil }
+        for cmd in availableCommands {
+            let prefix = "/\(cmd.name) "
+            if text == prefix, !cmd.inputHint.isEmpty {
+                return cmd.inputHint
+            }
+        }
+        return nil
+    }
+
+    private func recomputeSlashCandidates() {
+        if let prefix = slashPrefixInProgress {
+            let lower = prefix.lowercased()
+            slashCandidates = availableCommands
+                .filter { $0.name.lowercased().hasPrefix(lower) }
+        } else {
+            slashCandidates = []
+        }
+        hasPendingSlashCommand = textMatchesKnownCommand
     }
 
     var body: some View {
@@ -382,21 +432,52 @@ private struct ReplySheet: View {
                 .padding()
             } else {
                 // Immersive text editor — no title, just write
-                TextEditor(text: $text)
-                    .focused($isFocused)
-                    .font(.body)
-                    .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .overlay(alignment: .topLeading) {
-                        if text.isEmpty {
-                            Text("Send a message…")
-                                .foregroundStyle(.tertiary)
-                                .padding(.horizontal, 21)
-                                .padding(.top, 20)
-                                .allowsHitTesting(false)
+                ZStack(alignment: .bottom) {
+                    TextEditor(text: $text)
+                        .focused($isFocused)
+                        .font(.body)
+                        .scrollContentBackground(.hidden)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .overlay(alignment: .topLeading) {
+                            if text.isEmpty {
+                                Text("Send a message…")
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.horizontal, 21)
+                                    .padding(.top, 20)
+                                    .allowsHitTesting(false)
+                            }
                         }
+                        .onChange(of: text) { _, _ in
+                            recomputeSlashCandidates()
+                        }
+                        .onChange(of: availableCommands) { _, _ in
+                            recomputeSlashCandidates()
+                        }
+
+                    if !slashCandidates.isEmpty {
+                        SlashCommandsPopup(
+                            candidates: slashCandidates,
+                            onTap: { cmd in
+                                text = "/\(cmd.name) "
+                                slashCandidates = []
+                                hasPendingSlashCommand = true
+                            }
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                        .animation(.easeInOut(duration: 0.15), value: slashCandidates)
                     }
+                }
+
+                if let hint = activeInputHint {
+                    Text(hint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 2)
+                }
 
                 // Attached files
                 if !attachedFiles.isEmpty {
@@ -464,19 +545,21 @@ private struct ReplySheet: View {
 
                     Button {
                         onSend(resolvedModelId)
+                        hasPendingSlashCommand = false
                         dismiss()
                     } label: {
                         Image(systemName: "arrow.up")
                             .font(.body)
                             .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(hasPendingSlashCommand && canSend ? Color.white : Color.primary)
                             .frame(width: 40, height: 40)
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .liquidGlass(in: Circle())
+                    .modifier(SendButtonGlassModifier(emphasized: hasPendingSlashCommand && canSend))
                     .disabled(!canSend)
                     .opacity(canSend ? 1 : 0.4)
+                    .animation(.easeInOut(duration: 0.15), value: hasPendingSlashCommand)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
@@ -490,6 +573,17 @@ private struct ReplySheet: View {
                     if !attachedFiles.contains(name) { attachedFiles.append(name) }
                 }
             }
+        }
+    }
+}
+
+private struct SendButtonGlassModifier: ViewModifier {
+    let emphasized: Bool
+    func body(content: Content) -> some View {
+        if emphasized {
+            content.liquidGlass(in: Circle(), tint: .accentColor)
+        } else {
+            content.liquidGlass(in: Circle())
         }
     }
 }
