@@ -5,9 +5,17 @@ public struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     let pairing: PairingManager
     let connectionMonitor: ConnectionMonitor
+    let mqtt: MQTTService
+    let sessionViewModel: SessionListViewModel
 
-    public init(pairing: PairingManager, connectionMonitor: ConnectionMonitor) {
-        self.pairing = pairing; self.connectionMonitor = connectionMonitor
+    public init(pairing: PairingManager,
+                connectionMonitor: ConnectionMonitor,
+                mqtt: MQTTService,
+                sessionViewModel: SessionListViewModel) {
+        self.pairing = pairing
+        self.connectionMonitor = connectionMonitor
+        self.mqtt = mqtt
+        self.sessionViewModel = sessionViewModel
     }
 
     private var appVersion: String {
@@ -18,9 +26,33 @@ public struct SettingsView: View {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
 
+    private var currentWorkspaceName: String? {
+        sessionViewModel.workspaces.first?.displayName
+    }
+
     public var body: some View {
         NavigationStack {
             List {
+                Section("Workspace") {
+                    NavigationLink {
+                        WorkspaceManagementView(mqtt: mqtt,
+                                                deviceId: pairing.deviceId,
+                                                peerId: "ios-\(pairing.authToken.prefix(6))",
+                                                viewModel: sessionViewModel)
+                    } label: {
+                        HStack {
+                            Image(systemName: "folder")
+                            Text("Workspaces")
+                            Spacer()
+                            if let name = currentWorkspaceName {
+                                Text(name)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                }
+
                 Section("Connection") {
                     HStack { Text("Daemon"); Spacer(); ConnectionStatusBadge(isOnline: connectionMonitor.daemonOnline, deviceName: connectionMonitor.deviceName) }
                     HStack { Text("Broker"); Spacer(); Text(pairing.brokerHost).foregroundStyle(.secondary) }
