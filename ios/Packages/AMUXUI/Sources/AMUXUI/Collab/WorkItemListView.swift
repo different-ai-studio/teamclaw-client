@@ -42,15 +42,17 @@ public struct WorkItemListView: View {
             } else {
                 List {
                     ForEach(workItems, id: \.workItemId) { item in
-                        WorkItemRow(item: item)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button {
-                                    archiveTapped(item)
-                                } label: {
-                                    Label("Archive", systemImage: "archivebox.fill")
-                                }
-                                .tint(.gray)
+                        NavigationLink(value: "task:\(item.workItemId)") {
+                            WorkItemRow(item: item)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button {
+                                archiveTapped(item)
+                            } label: {
+                                Label("Archive", systemImage: "archivebox.fill")
                             }
+                            .tint(.gray)
+                        }
                     }
                 }
                 .listStyle(.plain)
