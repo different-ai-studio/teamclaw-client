@@ -454,6 +454,7 @@ private struct ReplySheet: View {
                         .onChange(of: availableCommands) { _, _ in
                             recomputeSlashCandidates()
                         }
+                        .onAppear { recomputeSlashCandidates() }
 
                     if !slashCandidates.isEmpty {
                         SlashCommandsPopup(
