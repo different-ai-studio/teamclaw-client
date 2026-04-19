@@ -2,9 +2,26 @@ import Foundation
 import Observation
 import SwiftData
 
+public struct SlashCommand: Identifiable, Equatable, Hashable, Sendable {
+    public let name: String
+    public let description: String
+    public let inputHint: String   // "" = no input required
+    public var id: String { name }
+
+    public init(name: String, description: String, inputHint: String) {
+        self.name = name
+        self.description = description
+        self.inputHint = inputHint
+    }
+}
+
 @Observable @MainActor
 public final class AgentDetailViewModel {
     public var events: [AgentEvent] = []
+    /// Slash commands announced by the attached agent via
+    /// ACP `AvailableCommandsUpdate`. Replaced wholesale on each push.
+    /// In-memory only — not persisted to SwiftData.
+    public var availableCommands: [SlashCommand] = []
     /// Memoised tool-run grouping over `events`. Views should iterate this
     /// instead of calling `groupEvents(vm.events)` in body, which previously
     /// made grouping O(n) on every streaming delta frame. Recomputed by
@@ -400,6 +417,13 @@ public final class AgentDetailViewModel {
                     if event.success == nil { event.success = true }
                 }
             }
+        case .availableCommands(let upd):
+            availableCommands = upd.commands
+                .filter { !$0.name.isEmpty }
+                .map { SlashCommand(name: $0.name,
+                                    description: $0.description_p,
+                                    inputHint: $0.inputHint) }
+            // No SwiftData mutation; `dirty` stays false.
         case .raw(let raw):
             if raw.method == "tool_title_update" {
                 let payload = String(data: raw.jsonPayload, encoding: .utf8) ?? ""
