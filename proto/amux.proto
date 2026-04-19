@@ -55,6 +55,7 @@ message AcpEvent {
     AcpPermissionRequest permission_request = 6;
     AcpStatusChange status_change = 7;
     AcpTodoUpdate todo_update = 8;
+    AcpAvailableCommands available_commands = 9;
     AcpRawJson raw = 15;           // Catch-all for new ACP events not yet mapped
   }
   // Model id that produced this event. Set by the daemon for agent-reply
@@ -105,6 +106,16 @@ message AcpStatusChange {
 
 message AcpTodoUpdate {
   repeated TodoItem items = 1;
+}
+
+message AcpAvailableCommand {
+  string name = 1;              // e.g. "clear", "compact"
+  string description = 2;       // human-readable
+  string input_hint = 3;        // "" = no input; non-empty = hint for unstructured arg
+}
+
+message AcpAvailableCommands {
+  repeated AcpAvailableCommand commands = 1;
 }
 
 message AcpRawJson {
