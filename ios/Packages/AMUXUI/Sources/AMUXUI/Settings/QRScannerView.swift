@@ -117,7 +117,7 @@ private final class QRCaptureViewController: UIViewController, @preconcurrency A
     var onScanned: ((String) -> Void)?
     var onError: ((String) -> Void)?
 
-    private let session = AVCaptureSession()
+    private nonisolated(unsafe) let session = AVCaptureSession()
     private var previewLayer: AVCaptureVideoPreviewLayer?
     private var didDeliver = false
 
