@@ -5,27 +5,56 @@ import AMUXCore
 struct TaskListColumn: View {
     @Binding var selectedTaskId: String?
     let teamclawService: TeamclawService?
+    let archivedVisible: Bool
 
     @Environment(\.openWindow) private var openWindow
 
     @Query(filter: #Predicate<WorkItem> { !$0.archived })
     private var allTasks: [WorkItem]
+    @Query(filter: #Predicate<WorkItem> { $0.archived }, sort: \WorkItem.createdAt, order: .reverse)
+    private var archivedTasks: [WorkItem]
     @Query private var allSessions: [CollabSession]
+
+    @State private var archivedExpanded: Bool = false
 
     var body: some View {
         let sortedTasks = allTasks.sorted(by: TaskListColumn.compare)
 
         Group {
-            if sortedTasks.isEmpty {
+            if sortedTasks.isEmpty && (!archivedVisible || archivedTasks.isEmpty) {
                 ContentUnavailableView("No tasks yet", systemImage: "checkmark.circle")
             } else {
-                List(sortedTasks, id: \.workItemId, selection: $selectedTaskId) { task in
-                    TaskRow(
-                        workItem: task,
-                        sessionTitle: sessionTitle(for: task.sessionId),
-                        teamclawService: teamclawService
-                    )
-                    .tag(task.workItemId)
+                List(selection: $selectedTaskId) {
+                    ForEach(sortedTasks, id: \.workItemId) { task in
+                        TaskRow(
+                            workItem: task,
+                            sessionTitle: sessionTitle(for: task.sessionId),
+                            teamclawService: teamclawService
+                        )
+                        .tag(task.workItemId)
+                    }
+                    if archivedVisible && !archivedTasks.isEmpty {
+                        Section {
+                            DisclosureGroup("Archived (\(archivedTasks.count))", isExpanded: $archivedExpanded) {
+                                ForEach(archivedTasks, id: \.workItemId) { task in
+                                    TaskRow(
+                                        workItem: task,
+                                        sessionTitle: sessionTitle(for: task.sessionId),
+                                        teamclawService: teamclawService
+                                    )
+                                    .tag(task.workItemId)
+                                    .opacity(0.55)
+                                    .contextMenu {
+                                        Button("Unarchive") {
+                                            let id = task.workItemId
+                                            let sid = task.sessionId
+                                            Task { await teamclawService?.archiveWorkItem(workItemId: id, sessionId: sid, archived: false) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 .listStyle(.inset)
             }

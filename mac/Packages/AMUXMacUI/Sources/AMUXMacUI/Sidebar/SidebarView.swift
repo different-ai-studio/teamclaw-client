@@ -8,6 +8,7 @@ struct SidebarView: View {
     let mqtt: MQTTService?
     let deviceId: String
     let peerId: String
+    @Binding var archivedVisible: Bool
 
     @Query(sort: \CollabSession.lastMessageAt, order: .reverse)
     private var sessions: [CollabSession]
@@ -31,6 +32,11 @@ struct SidebarView: View {
 
                 FunctionRow(function: .tasks, count: openTasks.count)
                     .tag(SidebarItem.function(.tasks))
+                    .contextMenu {
+                        Button(archivedVisible ? "Hide Archived" : "Show Archived") {
+                            archivedVisible.toggle()
+                        }
+                    }
             }
 
             Section {

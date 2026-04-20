@@ -9,6 +9,7 @@ public struct MainWindowView: View {
     @SceneStorage("amux.mainWindow.sidebar") private var sidebarStorage: String = "function:sessions"
     @SceneStorage("amux.mainWindow.selectedSession") private var selectedSessionId: String?
     @SceneStorage("amux.mainWindow.selectedTask") private var selectedTaskId: String?
+    @SceneStorage("amux.mainWindow.archivedVisible") private var archivedVisible: Bool = false
     @State private var showNewSession = false
     @State private var searchText: String = ""
     let teamclaw: TeamclawService
@@ -93,7 +94,8 @@ public struct MainWindowView: View {
                 members: members.members,
                 mqtt: mqtt,
                 deviceId: pairing.deviceId,
-                peerId: peerId
+                peerId: peerId,
+                archivedVisible: $archivedVisible
             )
             Divider()
             DaemonStatusFooter(pairing: pairing, monitor: monitor)
@@ -119,7 +121,11 @@ public struct MainWindowView: View {
             } else {
                 switch sidebarSelection {
                 case .function(.tasks):
-                    TaskListColumn(selectedTaskId: $selectedTaskId, teamclawService: teamclaw)
+                    TaskListColumn(
+                        selectedTaskId: $selectedTaskId,
+                        teamclawService: teamclaw,
+                        archivedVisible: archivedVisible
+                    )
                 case .function(.sessions), .none:
                     SessionListColumn(
                         memberFilter: nil,
