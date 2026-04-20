@@ -13,15 +13,6 @@ public struct MembersWindowScene: Scene {
         Window("Members", id: "amux.members") {
             MembersWindowView(pairing: pairing)
                 .frame(minWidth: 480, minHeight: 540)
-                .modelContainer(for: [
-                    Agent.self,
-                    AgentEvent.self,
-                    Member.self,
-                    CollabSession.self,
-                    SessionMessage.self,
-                    WorkItem.self,
-                    Workspace.self,
-                ])
         }
         .keyboardShortcut("m", modifiers: [.command, .shift])
     }
@@ -47,11 +38,7 @@ private struct MembersWindowView: View {
             Divider()
             MembersListView(
                 mqtt: shared.mqtt,
-                deviceId: pairing.deviceId,
-                peerId: shared.peerId,
-                onInviteTapped: {
-                    openWindow(id: "amux.invite", value: InviteIntent.newMember(role: "member"))
-                }
+                deviceId: pairing.deviceId
             )
         }
         .task { await shared.connectIfNeeded(pairing: pairing) }

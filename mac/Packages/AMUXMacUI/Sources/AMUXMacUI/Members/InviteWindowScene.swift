@@ -83,6 +83,7 @@ private struct InviteWindowView: View {
             }
         }
         .padding(24)
+        .task { await shared.connectIfNeeded(pairing: pairing) }
     }
 
     private func generate() {

@@ -9,8 +9,6 @@ struct MembersListView: View {
     @State private var viewModel = MemberListViewModel()
     let mqtt: MQTTService?
     let deviceId: String
-    let peerId: String
-    let onInviteTapped: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
