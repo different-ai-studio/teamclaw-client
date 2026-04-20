@@ -1,4 +1,7 @@
+use std::time::SystemTime;
+
 use chrono::{Duration, Utc};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::config::{MemberStore, PendingInvite, StoredMember};
@@ -7,6 +10,10 @@ use crate::proto::amux;
 pub struct AuthManager {
     store_path: std::path::PathBuf,
     store: MemberStore,
+    /// Mtime of `members.toml` last time we loaded it. Used by `reload_if_changed`
+    /// to pick up out-of-process edits (e.g. `amuxd invite` writing a new pending
+    /// invite while the daemon is running) without needing a file watcher.
+    last_loaded: Option<SystemTime>,
 }
 
 pub enum AuthResult {
@@ -17,10 +24,42 @@ pub enum AuthResult {
 impl AuthManager {
     pub fn new(store_path: std::path::PathBuf) -> crate::error::Result<Self> {
         let store = MemberStore::load(&store_path)?;
-        Ok(Self { store_path, store })
+        let last_loaded = Self::read_mtime(&store_path);
+        Ok(Self { store_path, store, last_loaded })
+    }
+
+    fn read_mtime(path: &std::path::Path) -> Option<SystemTime> {
+        std::fs::metadata(path).and_then(|m| m.modified()).ok()
+    }
+
+    /// Reloads `members.toml` from disk if its mtime is newer than our last load.
+    /// Called at the start of every read path so CLI-created invites are visible
+    /// to a running daemon without requiring a restart.
+    fn reload_if_changed(&mut self) {
+        let Some(mtime) = Self::read_mtime(&self.store_path) else { return };
+        if self.last_loaded.map_or(true, |lt| mtime > lt) {
+            match MemberStore::load(&self.store_path) {
+                Ok(store) => {
+                    self.store = store;
+                    self.last_loaded = Some(mtime);
+                    info!("members.toml reloaded from disk");
+                }
+                Err(e) => warn!("members.toml reload failed: {}", e),
+            }
+        }
+    }
+
+    fn save_and_mark(&mut self) {
+        if let Err(e) = self.store.save(&self.store_path) {
+            warn!("members.toml save failed: {}", e);
+            return;
+        }
+        self.last_loaded = Self::read_mtime(&self.store_path);
     }
 
     pub fn authenticate(&mut self, token: &str) -> AuthResult {
+        self.reload_if_changed();
+
         if let Some(member) = self.store.find_member_by_token(token) {
             return AuthResult::Accepted { member: member.clone() };
         }
@@ -36,7 +75,7 @@ impl AuthManager {
                 department: None,
             };
             self.store.add_member(member.clone());
-            let _ = self.store.save(&self.store_path);
+            self.save_and_mark();
             return AuthResult::Accepted { member };
         }
 
@@ -46,6 +85,7 @@ impl AuthManager {
     }
 
     pub fn create_invite(&mut self, display_name: &str, expires_hours: u32, role: &str) -> crate::error::Result<PendingInvite> {
+        self.reload_if_changed();
         let invite = PendingInvite {
             invite_token: Uuid::new_v4().to_string(),
             display_name: display_name.into(),
@@ -55,18 +95,22 @@ impl AuthManager {
         };
         self.store.add_invite(invite.clone());
         self.store.save(&self.store_path)?;
+        self.last_loaded = Self::read_mtime(&self.store_path);
         Ok(invite)
     }
 
     pub fn remove_member(&mut self, member_id: &str) -> crate::error::Result<bool> {
+        self.reload_if_changed();
         let removed = self.store.remove_member(member_id);
         if removed {
             self.store.save(&self.store_path)?;
+            self.last_loaded = Self::read_mtime(&self.store_path);
         }
         Ok(removed)
     }
 
-    pub fn to_proto_member_list(&self) -> amux::MemberList {
+    pub fn to_proto_member_list(&mut self) -> amux::MemberList {
+        self.reload_if_changed();
         amux::MemberList {
             members: self.store.members.iter().map(|m| amux::MemberInfo {
                 member_id: m.member_id.clone(),
@@ -78,13 +122,15 @@ impl AuthManager {
         }
     }
 
-    pub fn is_owner(&self, member_id: &str) -> bool {
+    pub fn is_owner(&mut self, member_id: &str) -> bool {
+        self.reload_if_changed();
         self.store.members.iter().any(|m| m.member_id == member_id && m.is_owner())
     }
 
     /// Look up a member's role by matching the start of their token.
     /// Used when peer state was lost (daemon restart) but we can recover from peer_id format.
-    pub fn find_role_by_token_prefix(&self, prefix: &str) -> Option<amux::MemberRole> {
+    pub fn find_role_by_token_prefix(&mut self, prefix: &str) -> Option<amux::MemberRole> {
+        self.reload_if_changed();
         self.store.members.iter()
             .find(|m| m.token.starts_with(prefix))
             .map(|m| if m.is_owner() { amux::MemberRole::Owner } else { amux::MemberRole::Member })

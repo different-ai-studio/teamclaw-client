@@ -63,7 +63,10 @@ public final class PairingManager {
             throw PairingError.invalidURL
         }
         let params = Dictionary(uniqueKeysWithValues: items.compactMap { item in
-            item.value.map { (item.name, $0) }
+            // Strip whitespace/newlines from query values. Terminal copy-paste
+            // often wraps long URLs across lines and leaves \n plus indentation
+            // inside the token — the daemon then rejects it as invalid.
+            item.value.map { (item.name, $0.filter { !$0.isWhitespace && !$0.isNewline }) }
         })
         guard let broker = params["broker"],
               let device = params["device"],
