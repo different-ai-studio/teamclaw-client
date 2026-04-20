@@ -98,15 +98,12 @@ struct NewSessionSheet: View {
                 .font(.title2)
                 .fontWeight(.bold)
             Spacer()
+            Button("Cancel") { dismiss() }
+                .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
         .padding(.bottom, 12)
-        .background {
-            Button("", action: { dismiss() })
-                .keyboardShortcut(.cancelAction)
-                .hidden()
-        }
     }
 
     // MARK: - Workspace & Agent Type
