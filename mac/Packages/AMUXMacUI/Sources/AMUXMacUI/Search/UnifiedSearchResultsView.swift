@@ -12,15 +12,13 @@ struct UnifiedSearchResultsView: View {
     @Query private var messages: [SessionMessage]
     @Query private var tasks: [WorkItem]
 
-    private var lowered: String { query.lowercased() }
-
     private var sessionHits: [SessionHit] {
         let collab: [SessionHit] = sessions.compactMap { s in
-            guard s.title.lowercased().contains(lowered) else { return nil }
+            guard s.title.localizedCaseInsensitiveContains(query) else { return nil }
             return SessionHit(id: s.sessionId, title: s.title.isEmpty ? s.sessionId : s.title, subtitle: "collab")
         }
         let agentHits: [SessionHit] = agents.compactMap { a in
-            guard a.sessionTitle.lowercased().contains(lowered) else { return nil }
+            guard a.sessionTitle.localizedCaseInsensitiveContains(query) else { return nil }
             return SessionHit(id: a.agentId, title: a.sessionTitle.isEmpty ? a.agentId : a.sessionTitle, subtitle: "agent")
         }
         return collab + agentHits
