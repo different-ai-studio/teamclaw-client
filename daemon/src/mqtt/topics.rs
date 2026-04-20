@@ -14,10 +14,6 @@ impl Topics {
         format!("amux/{}/status", self.device_id)
     }
 
-    pub fn agents(&self) -> String {
-        format!("amux/{}/agents", self.device_id)
-    }
-
     pub fn peers(&self) -> String {
         format!("amux/{}/peers", self.device_id)
     }

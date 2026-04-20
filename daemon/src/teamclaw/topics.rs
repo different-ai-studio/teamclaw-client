@@ -34,13 +34,13 @@ impl TeamclawTopics {
         format!("teamclaw/{}/session/{}/presence", self.team_id, session_id)
     }
 
-    pub fn session_workitems(&self, session_id: &str) -> String {
-        format!("teamclaw/{}/session/{}/workitems", self.team_id, session_id)
+    pub fn session_tasks(&self, session_id: &str) -> String {
+        format!("teamclaw/{}/session/{}/tasks", self.team_id, session_id)
     }
 
-    /// Global work items topic (not tied to a session)
-    pub fn workitems(&self) -> String {
-        format!("teamclaw/{}/workitems", self.team_id)
+    /// Global tasks topic (not tied to a session)
+    pub fn tasks(&self) -> String {
+        format!("teamclaw/{}/tasks", self.team_id)
     }
 
     // User-level
@@ -72,9 +72,9 @@ impl TeamclawTopics {
         format!("teamclaw/{}/session/+/meta", self.team_id)
     }
 
-    /// Subscribe pattern for all work item events (wildcard).
-    pub fn all_session_workitems(&self) -> String {
-        format!("teamclaw/{}/session/+/workitems", self.team_id)
+    /// Subscribe pattern for all task events (wildcard).
+    pub fn all_session_tasks(&self) -> String {
+        format!("teamclaw/{}/session/+/tasks", self.team_id)
     }
 }
 
@@ -95,7 +95,7 @@ mod tests {
         assert_eq!(t.session_messages("s1"), "teamclaw/team1/session/s1/messages");
         assert_eq!(t.session_meta("s1"), "teamclaw/team1/session/s1/meta");
         assert_eq!(t.session_presence("s1"), "teamclaw/team1/session/s1/presence");
-        assert_eq!(t.session_workitems("s1"), "teamclaw/team1/session/s1/workitems");
+        assert_eq!(t.session_tasks("s1"), "teamclaw/team1/session/s1/tasks");
     }
 
     #[test]
@@ -117,6 +117,6 @@ mod tests {
         assert_eq!(t.rpc_incoming_requests(), "teamclaw/team1/rpc/dev-a/+/req");
         assert_eq!(t.all_session_messages(), "teamclaw/team1/session/+/messages");
         assert_eq!(t.all_session_meta(), "teamclaw/team1/session/+/meta");
-        assert_eq!(t.all_session_workitems(), "teamclaw/team1/session/+/workitems");
+        assert_eq!(t.all_session_tasks(), "teamclaw/team1/session/+/tasks");
     }
 }

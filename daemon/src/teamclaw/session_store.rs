@@ -7,11 +7,11 @@ use crate::proto::teamclaw;
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct TeamclawSessionStore {
     #[serde(default)]
-    pub sessions: Vec<StoredCollabSession>,
+    pub sessions: Vec<StoredSession>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoredCollabSession {
+pub struct StoredSession {
     pub session_id: String,
     /// "control" or "collab"
     pub session_type: String,
@@ -21,6 +21,8 @@ pub struct StoredCollabSession {
     pub created_by: String,
     pub created_at: DateTime<Utc>,
     pub summary: String,
+    #[serde(default)]
+    pub task_id: String,
     #[serde(default)]
     pub participants: Vec<StoredParticipant>,
     /// The host's primary agent_id when this session was created. Used to
@@ -64,7 +66,7 @@ impl TeamclawSessionStore {
         Ok(())
     }
 
-    pub fn upsert(&mut self, session: StoredCollabSession) {
+    pub fn upsert(&mut self, session: StoredSession) {
         if let Some(existing) = self.sessions.iter_mut().find(|s| s.session_id == session.session_id) {
             *existing = session;
         } else {
@@ -72,11 +74,11 @@ impl TeamclawSessionStore {
         }
     }
 
-    pub fn find_by_id(&self, session_id: &str) -> Option<&StoredCollabSession> {
+    pub fn find_by_id(&self, session_id: &str) -> Option<&StoredSession> {
         self.sessions.iter().find(|s| s.session_id == session_id)
     }
 
-    pub fn find_by_id_mut(&mut self, session_id: &str) -> Option<&mut StoredCollabSession> {
+    pub fn find_by_id_mut(&mut self, session_id: &str) -> Option<&mut StoredSession> {
         self.sessions.iter_mut().find(|s| s.session_id == session_id)
     }
 
@@ -86,7 +88,7 @@ impl TeamclawSessionStore {
         self.sessions.len() < len
     }
 
-    pub fn hosted_sessions(&self, device_id: &str) -> Vec<&StoredCollabSession> {
+    pub fn hosted_sessions(&self, device_id: &str) -> Vec<&StoredSession> {
         self.sessions.iter().filter(|s| s.host_device_id == device_id).collect()
     }
 
@@ -127,6 +129,9 @@ impl TeamclawSessionStore {
                 participants,
                 summary: s.summary.clone(),
                 primary_agent_id: s.primary_agent_id.clone(),
+                task_id: s.task_id.clone(),
+                last_message_preview: String::new(),
+                last_message_at: 0,
             }
         })
     }
@@ -155,8 +160,8 @@ mod tests {
     use chrono::Utc;
     use tempfile::TempDir;
 
-    fn make_session(id: &str, session_type: &str, host: &str) -> StoredCollabSession {
-        StoredCollabSession {
+    fn make_session(id: &str, session_type: &str, host: &str) -> StoredSession {
+        StoredSession {
             session_id: id.to_string(),
             session_type: session_type.to_string(),
             team_id: "team1".to_string(),
@@ -165,6 +170,7 @@ mod tests {
             created_by: "user1".to_string(),
             created_at: Utc::now(),
             summary: String::new(),
+            task_id: String::new(),
             participants: vec![],
             primary_agent_id: String::new(),
         }

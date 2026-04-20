@@ -22,4 +22,5 @@ public enum SidebarFunction: String, CaseIterable, Hashable, Sendable {
 public enum SidebarItem: Hashable, Sendable {
     case function(SidebarFunction)
     case member(memberId: String)
+    case workspace(workspaceId: String)
 }

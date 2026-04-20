@@ -18,6 +18,7 @@ public struct SettingsScene: Scene {
                     .tabItem { Label("Account", systemImage: "person.crop.circle") }
             }
             .frame(minWidth: 460, minHeight: 320)
+            .appAppearance()
         }
     }
 }

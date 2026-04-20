@@ -53,7 +53,6 @@ impl TestClient {
 
         // Subscribe to all device-level and agent-level topics
         self.client.subscribe(self.topics.status(), QoS::AtLeastOnce).await?;
-        self.client.subscribe(self.topics.agents(), QoS::AtLeastOnce).await?;
         self.client.subscribe(self.topics.peers(), QoS::AtLeastOnce).await?;
         self.client.subscribe(self.topics.members(), QoS::AtLeastOnce).await?;
         self.client.subscribe(self.topics.collab(), QoS::AtLeastOnce).await?;
@@ -85,20 +84,6 @@ pub async fn run_watch(config: DaemonConfig) -> anyhow::Result<()> {
                         Ok(s) => println!("📌 {} → DeviceStatus {{ online: {}, name: \"{}\" }}{}",
                             topic, s.online, s.device_name, retained),
                         Err(_) => println!("❓ {} → {} bytes (decode failed){}", topic, payload.len(), retained),
-                    }
-                } else if topic.ends_with("/agents") {
-                    match amux::AgentList::decode(payload.as_ref()) {
-                        Ok(list) => {
-                            println!("📋 {} → AgentList ({} agents){}", topic, list.agents.len(), retained);
-                            for a in &list.agents {
-                                println!("    {} [{}] status={} worktree=\"{}\" prompt=\"{}\"",
-                                    a.agent_id,
-                                    amux::AgentType::try_from(a.agent_type).map(|t| format!("{:?}", t)).unwrap_or("?".into()),
-                                    amux::AgentStatus::try_from(a.status).map(|s| format!("{:?}", s)).unwrap_or("?".into()),
-                                    a.worktree, a.current_prompt);
-                            }
-                        }
-                        Err(_) => println!("❓ {} → {} bytes{}", topic, payload.len(), retained),
                     }
                 } else if topic.ends_with("/peers") {
                     match amux::PeerList::decode(payload.as_ref()) {
@@ -452,14 +437,6 @@ fn print_publish(publish: &rumqttc::Publish) {
     if topic.ends_with("/status") {
         if let Ok(s) = amux::DeviceStatus::decode(payload.as_ref()) {
             println!("📌 DeviceStatus {{ online: {}, name: \"{}\" }}{}", s.online, s.device_name, retained);
-        }
-    } else if topic.ends_with("/agents") {
-        if let Ok(list) = amux::AgentList::decode(payload.as_ref()) {
-            println!("📋 AgentList ({} agents){}", list.agents.len(), retained);
-            for a in &list.agents {
-                println!("    {} status={:?} worktree=\"{}\"", a.agent_id,
-                    amux::AgentStatus::try_from(a.status).unwrap_or(amux::AgentStatus::Unknown), a.worktree);
-            }
         }
     } else if topic.ends_with("/peers") {
         if let Ok(list) = amux::PeerList::decode(payload.as_ref()) {

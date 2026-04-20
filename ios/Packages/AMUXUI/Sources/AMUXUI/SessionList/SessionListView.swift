@@ -3,6 +3,8 @@ import SwiftData
 import AMUXCore
 import AMUXSharedUI
 
+#if os(iOS)
+
 // MARK: - SessionListView (NetNewsWire-style)
 
 public struct SessionListView: View {
@@ -16,7 +18,7 @@ public struct SessionListView: View {
     @State private var viewModel = SessionListViewModel()
 
     @State private var showSettings = false
-    @State private var showWorkItems = false
+    @State private var showTasks = false
     @State private var showMembers = false
     @State private var showWorkspaces = false
     @State private var showNewSession = false
@@ -69,7 +71,7 @@ public struct SessionListView: View {
                         Image(systemName: "gearshape").font(.title3).foregroundStyle(.primary)
                     }
                     .buttonStyle(.plain)
-                    Button { showWorkItems = true } label: {
+                    Button { showTasks = true } label: {
                         Image(systemName: "checklist").font(.title3).foregroundStyle(.primary)
                     }
                     .buttonStyle(.plain)
@@ -105,17 +107,17 @@ public struct SessionListView: View {
             .navigationDestination(for: String.self) { id in
                 if id.hasPrefix("collab:") {
                     let sessionId = String(id.dropFirst("collab:".count))
-                    let descriptor = FetchDescriptor<CollabSession>(
+                    let descriptor = FetchDescriptor<Session>(
                         predicate: #Predicate { $0.sessionId == sessionId }
                     )
                     if let session = (try? modelContext.fetch(descriptor))?.first {
-                        AgentDetailView(collabSession: session, mqtt: mqtt,
+                        AgentDetailView(session: session, mqtt: mqtt,
                                         deviceId: pairing.deviceId,
                                         peerId: "ios-\(pairing.authToken.prefix(6))",
                                         teamclawService: teamclawService,
                                         navigationPath: $navigationPath)
                     } else {
-                        Text("Collab session not found")
+                        Text("Session not found")
                     }
                 } else if let agent = viewModel.agents.first(where: { $0.agentId == id }) {
                     AgentDetailView(agent: agent, mqtt: mqtt, deviceId: pairing.deviceId,
@@ -126,8 +128,8 @@ public struct SessionListView: View {
                     Text("Agent not found")
                 }
             }
-            .sheet(isPresented: $showWorkItems) {
-                WorkItemSheet(pairing: pairing, connectionMonitor: connectionMonitor, teamclawService: teamclawService)
+            .sheet(isPresented: $showTasks) {
+                TaskSheet(pairing: pairing, connectionMonitor: connectionMonitor, teamclawService: teamclawService)
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView(pairing: pairing,
@@ -147,6 +149,7 @@ public struct SessionListView: View {
             .sheet(isPresented: $showNewSession) {
                 NewSessionSheet(mqtt: mqtt, deviceId: pairing.deviceId,
                                peerId: "ios-\(pairing.authToken.prefix(6))",
+                               teamclawService: teamclawService,
                                viewModel: viewModel) { agentId in
                     navigationPath.append(agentId)
                 }
@@ -156,11 +159,20 @@ public struct SessionListView: View {
                 viewModel.start(mqtt: mqtt, deviceId: pairing.deviceId, modelContext: modelContext)
             }
             .onChange(of: teamclawService?.sessions.count) {
-                viewModel.reloadCollabSessions(modelContext: modelContext)
+                viewModel.reloadSessions(modelContext: modelContext)
             }
         }
     }
 }
+#else
+public struct SessionListView: View {
+    public init(mqtt: MQTTService, pairing: PairingManager, connectionMonitor: ConnectionMonitor, teamclawService: TeamclawService? = nil, onReconnect: (() -> Void)? = nil) {}
+
+    public var body: some View {
+        ContentUnavailableView("Sessions", systemImage: "rectangle.stack")
+    }
+}
+#endif
 
 // MARK: - SessionListContent
 
@@ -370,10 +382,10 @@ struct AgentRowView: View {
     }
 }
 
-// MARK: - SessionRowView (collab sessions, same style as AgentRowView)
+// MARK: - SessionRowView
 
 struct SessionRowView: View {
-    let session: CollabSession
+    let session: Session
 
     private func formatTime(_ date: Date) -> String {
         let seconds = Int(-date.timeIntervalSinceNow)

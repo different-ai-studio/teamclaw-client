@@ -36,7 +36,7 @@ pub mod teamclaw {
 
 impl_encode!(teamclaw::SessionMessageEnvelope);
 impl_encode!(teamclaw::SessionMetaEnvelope);
-impl_encode!(teamclaw::WorkItemEvent);
+impl_encode!(teamclaw::TaskEvent);
 impl_encode!(teamclaw::PresenceList);
 impl_encode!(teamclaw::InviteEnvelope);
 impl_encode!(teamclaw::TeamMemberList);

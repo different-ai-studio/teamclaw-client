@@ -2,9 +2,9 @@ import Foundation
 import SwiftData
 
 @Model
-public final class CollabSession {
+public final class Session {
     @Attribute(.unique) public var sessionId: String
-    public var sessionType: String       // "control" or "collab"
+    public var mode: String       // "control" or "collab"
     public var teamId: String
     public var title: String
     public var hostDeviceId: String
@@ -14,12 +14,12 @@ public final class CollabSession {
     public var participantCount: Int
     public var lastMessagePreview: String
     public var lastMessageAt: Date?
-    public var workItemId: String
+    public var taskId: String
     public var primaryAgentId: String?
 
     public init(
         sessionId: String,
-        sessionType: String = "collab",
+        mode: String = "collab",
         teamId: String = "",
         title: String = "",
         hostDeviceId: String = "",
@@ -29,10 +29,10 @@ public final class CollabSession {
         participantCount: Int = 0,
         lastMessagePreview: String = "",
         lastMessageAt: Date? = nil,
-        workItemId: String = ""
+        taskId: String = ""
     ) {
         self.sessionId = sessionId
-        self.sessionType = sessionType
+        self.mode = mode
         self.teamId = teamId
         self.title = title
         self.hostDeviceId = hostDeviceId
@@ -42,9 +42,9 @@ public final class CollabSession {
         self.participantCount = participantCount
         self.lastMessagePreview = lastMessagePreview
         self.lastMessageAt = lastMessageAt
-        self.workItemId = workItemId
+        self.taskId = taskId
     }
 
-    public var isCollab: Bool { sessionType == "collab" }
-    public var isControl: Bool { sessionType == "control" }
+    public var isCollab: Bool { mode == "collab" }
+    public var isControl: Bool { mode == "control" }
 }

@@ -5,12 +5,14 @@ import AMUXCore
 struct SessionListColumn: View {
     let memberFilter: String?
     let memberName: String?
+    let workspaceFilter: String?
+    let workspaceName: String?
     @Binding var selectedSessionId: String?
     var onNewSession: () -> Void = {}
     @Environment(\.openWindow) private var openWindow
 
-    @Query(sort: \CollabSession.lastMessageAt, order: .reverse)
-    private var sessions: [CollabSession]
+    @Query(sort: \Session.lastMessageAt, order: .reverse)
+    private var sessions: [Session]
 
     @Query private var allMessages: [SessionMessage]
     @Query private var allAgents: [Agent]
@@ -28,39 +30,66 @@ struct SessionListColumn: View {
         Dictionary(uniqueKeysWithValues: allWorkspaces.map { ($0.workspaceId, $0.displayName) })
     }
 
-    private func primaryAgent(for session: CollabSession) -> Agent? {
+    private func primaryAgent(for session: Session) -> Agent? {
         guard let id = session.primaryAgentId else { return nil }
         return agentLookup[id]
     }
 
-    private func workspaceName(for session: CollabSession) -> String {
+    private func workspaceName(for session: Session) -> String {
         guard let agent = primaryAgent(for: session) else { return "" }
         return workspaceLookup[agent.workspaceId] ?? ""
     }
 
-    private var visibleSessions: [CollabSession] {
+    private var visibleItems: [SessionListItem] {
         let sessionSenders = buildSessionSenders()
         let allowedIds = SessionFilters.sessionIdsInvolving(
             memberId: memberFilter,
             sessionSenders: sessionSenders
         )
-        var list = sessions.filter { session in
-            guard let allowed = allowedIds else { return true }
-            return allowed.contains(session.sessionId)
+
+        // Shared sessions first — filter by member + search.
+        var items: [SessionListItem] = sessions.compactMap { session in
+            if let allowed = allowedIds, !allowed.contains(session.sessionId) { return nil }
+            if let workspaceFilter,
+               primaryAgent(for: session)?.workspaceId != workspaceFilter {
+                return nil
+            }
+            if !searchText.isEmpty {
+                let matchesTitle = session.title.localizedCaseInsensitiveContains(searchText)
+                let matchesAgent = primaryAgent(for: session)?
+                    .sessionTitle.localizedCaseInsensitiveContains(searchText) ?? false
+                guard matchesTitle || matchesAgent else { return nil }
+            }
+            return .collab(session)
         }
-        if !searchText.isEmpty {
-            list = list.filter { session in
-                if session.title.localizedCaseInsensitiveContains(searchText) { return true }
-                if let agent = primaryAgent(for: session),
-                   agent.sessionTitle.localizedCaseInsensitiveContains(searchText) { return true }
-                return false
+
+        // Solo agents: only those NOT already bound as a shared session's
+        // primary agent (otherwise the same session renders twice). When a
+        // member filter is active, keep agents out — they have no sender log
+        // to match against.
+        if allowedIds == nil {
+            let boundAgentIds = Set(sessions.compactMap { $0.primaryAgentId })
+            let soloAgents = allAgents.filter {
+                !boundAgentIds.contains($0.agentId) &&
+                (workspaceFilter == nil || $0.workspaceId == workspaceFilter)
+            }
+            for agent in soloAgents {
+                if !searchText.isEmpty {
+                    let matchesTitle = agent.sessionTitle.localizedCaseInsensitiveContains(searchText)
+                    let matchesPrompt = agent.currentPrompt.localizedCaseInsensitiveContains(searchText)
+                    let matchesWorktree = agent.worktree.localizedCaseInsensitiveContains(searchText)
+                    guard matchesTitle || matchesPrompt || matchesWorktree else { continue }
+                }
+                items.append(.agent(agent))
             }
         }
-        return list
+
+        items.sort { $0.date > $1.date }
+        return items
     }
 
     private var headerTitle: String {
-        memberName ?? "Sessions"
+        workspaceName ?? memberName ?? "Sessions"
     }
 
     var body: some View {
@@ -72,25 +101,39 @@ struct SessionListColumn: View {
                     .padding(.bottom, 8)
             }
 
-            if visibleSessions.isEmpty {
+            if visibleItems.isEmpty {
                 ContentUnavailableView(
                     memberFilter == nil ? "No sessions yet" : "No sessions involving this member",
                     systemImage: "bubble.left.and.bubble.right"
                 )
             } else {
                 List(selection: $selectedSessionId) {
-                    ForEach(SessionGrouping.grouped(visibleSessions)) { group in
+                    ForEach(SessionGrouping.grouped(visibleItems)) { group in
                         Section {
-                            ForEach(group.sessions, id: \.sessionId) { session in
-                                SessionRow(
-                                    session: session,
-                                    primaryAgent: primaryAgent(for: session),
-                                    workspaceName: workspaceName(for: session)
-                                )
-                                .tag(session.sessionId)
-                                .contextMenu {
-                                    Button("Open in New Window") {
-                                        openWindow(id: "session-detail", value: session.sessionId)
+                            ForEach(group.items) { item in
+                                switch item {
+                                case .collab(let session):
+                                    SessionRow(
+                                        session: session,
+                                        primaryAgent: primaryAgent(for: session),
+                                        workspaceName: workspaceName(for: session)
+                                    )
+                                    .tag(session.sessionId)
+                                    .contextMenu {
+                                        Button("Open in New Window") {
+                                            openWindow(id: "session-detail", value: session.sessionId)
+                                        }
+                                    }
+                                case .agent(let agent):
+                                    AgentSessionRow(
+                                        agent: agent,
+                                        workspaceName: workspaceLookup[agent.workspaceId] ?? ""
+                                    )
+                                    .tag(agent.agentId)
+                                    .contextMenu {
+                                        Button("Open in New Window") {
+                                            openWindow(id: "session-detail", value: agent.agentId)
+                                        }
                                     }
                                 }
                             }

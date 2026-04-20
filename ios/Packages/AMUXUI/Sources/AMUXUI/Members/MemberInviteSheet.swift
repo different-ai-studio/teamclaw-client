@@ -2,6 +2,8 @@ import SwiftUI
 import SwiftData
 import AMUXCore
 
+#if os(iOS)
+
 /// Modal for inviting a new member. Extracted from MemberListView
 /// so MembersTab can present it from its toolbar.
 public struct MemberInviteSheet: View {
@@ -174,3 +176,13 @@ public struct MemberInviteSheet: View {
         expiresAt = nil
     }
 }
+#else
+public struct MemberInviteSheet: View {
+    public init(mqtt: MQTTService, deviceId: String, peerId: String) {}
+
+    public var body: some View {
+        Text("Member invites are only available on iOS in AMUXUI.")
+            .padding(24)
+    }
+}
+#endif

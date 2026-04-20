@@ -19,9 +19,13 @@ struct NewSessionSheet: View {
     let mqtt: MQTTService
     let deviceId: String
     let peerId: String
+    // Workspaces are passed in from MainWindowView. A prior attempt used
+    // @Query directly here, but the sheet's separate NSWindow doesn't reliably
+    // inherit the parent's modelContainer, and adding `.modelContainer(...)`
+    // to the sheet triggered a window-scene rebuild that wiped column 2's
+    // toolbar items. Taking the rows as a plain parameter avoids both issues.
+    let workspaces: [Workspace]
     var onSessionCreated: ((String) -> Void)?
-
-    @Query(sort: \Workspace.displayName) private var workspaces: [Workspace]
 
     @State private var selectedWorkspaceId: String?
     @State private var selectedAgentType: Amux_AgentType = .claudeCode
@@ -36,7 +40,7 @@ struct NewSessionSheet: View {
     private static let teamId = "teamclaw"
 
     private var canSend: Bool {
-        // Collab sessions don't require a workspace — the daemon binds the
+        // Shared sessions don't require a workspace — the daemon binds the
         // primary agent later from the host's workspace.
         let workspaceOK = selectedWorkspaceId != nil || !collaborators.isEmpty
         return workspaceOK &&
@@ -253,7 +257,7 @@ struct NewSessionSheet: View {
         errorMessage = nil
 
         if !collaborators.isEmpty {
-            createCollabSession(text: text)
+            createSharedSession(text: text)
             return
         }
 
@@ -262,8 +266,12 @@ struct NewSessionSheet: View {
         isSending = true
 
         Task {
+            // Per-agent retained state topic replaces the old bulk AgentList;
+            // we now watch `agent/{id}/state` publishes to detect our new
+            // session by matching the prompt.
             let stream = mqtt.messages()
-            let agentsTopic = "amux/\(deviceId)/agents"
+            let agentStatePrefix = "amux/\(deviceId)/agent/"
+            let agentStateSuffix = "/state"
             let collabTopic = "amux/\(deviceId)/collab"
 
             var cmd = Amux_CommandEnvelope()
@@ -292,7 +300,7 @@ struct NewSessionSheet: View {
                 return
             }
 
-            // Wait up to 15s for agent list update or rejection
+            // Wait up to 15s for the new agent's state publish or a rejection.
             let deadline = Date().addingTimeInterval(15)
             for await msg in stream {
                 if Date() > deadline { break }
@@ -307,10 +315,12 @@ struct NewSessionSheet: View {
                     return
                 }
 
-                if msg.topic == agentsTopic,
-                   let list = try? ProtoMQTTCoder.decode(Amux_AgentList.self, from: msg.payload),
-                   let newAgent = list.agents.first(where: { $0.currentPrompt == text }) {
-                    let agentId = newAgent.agentID
+                if msg.topic.hasPrefix(agentStatePrefix),
+                   msg.topic.hasSuffix(agentStateSuffix),
+                   !msg.payload.isEmpty,
+                   let info = try? ProtoMQTTCoder.decode(Amux_AgentInfo.self, from: msg.payload),
+                   info.currentPrompt == text {
+                    let agentId = info.agentID
                     await MainActor.run {
                         isSending = false
                         onSessionCreated?(agentId)
@@ -327,13 +337,13 @@ struct NewSessionSheet: View {
         }
     }
 
-    // MARK: - Collab session (Teamclaw CreateSessionRequest RPC)
+    // MARK: - Shared Session (Teamclaw CreateSessionRequest RPC)
     //
-    // Mirrors iOS NewSessionSheet.createCollabSession. The daemon listens on
+    // Mirrors iOS NewSessionSheet.createSharedSession. The daemon listens on
     // teamclaw/{teamId}/rpc/{deviceId}/{requestId}/req and replies on the
     // matching /res topic with a Teamclaw_RpcResponse.
 
-    private func createCollabSession(text: String) {
+    private func createSharedSession(text: String) {
         isSending = true
 
         var createReq = Teamclaw_CreateSessionRequest()
@@ -373,9 +383,9 @@ struct NewSessionSheet: View {
 
                 if response.success, case .sessionInfo(let info) = response.result {
                     await MainActor.run {
-                        let session = CollabSession(
+                        let session = Session(
                             sessionId: info.sessionID,
-                            sessionType: "collab",
+                            mode: "collab",
                             teamId: info.teamID,
                             title: info.title,
                             hostDeviceId: info.hostDeviceID,
@@ -389,7 +399,7 @@ struct NewSessionSheet: View {
                         try? modelContext.save()
 
                         isSending = false
-                        onSessionCreated?("collab:\(info.sessionID)")
+                        onSessionCreated?(info.sessionID)
                         dismiss()
                     }
                     return

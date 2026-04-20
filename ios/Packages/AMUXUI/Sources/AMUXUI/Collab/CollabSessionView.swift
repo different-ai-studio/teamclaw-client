@@ -2,20 +2,18 @@ import SwiftUI
 import SwiftData
 import AMUXCore
 
-public struct CollabSessionView: View {
-    let session: CollabSession
+public struct SessionView: View {
+    let session: Session
     let teamclawService: TeamclawService
-    let actorId: String
 
     @Environment(\.modelContext) private var modelContext
-    @State private var viewModel: CollabSessionViewModel
+    @State private var viewModel: SessionViewModel
     @State private var promptText = ""
 
-    public init(session: CollabSession, teamclawService: TeamclawService, actorId: String) {
+    public init(session: Session, teamclawService: TeamclawService) {
         self.session = session
         self.teamclawService = teamclawService
-        self.actorId = actorId
-        self._viewModel = State(initialValue: CollabSessionViewModel(session: session))
+        self._viewModel = State(initialValue: SessionViewModel(session: session))
     }
 
     public var body: some View {
@@ -25,9 +23,9 @@ public struct CollabSessionView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
                         ForEach(viewModel.messages, id: \.messageId) { message in
-                            CollabMessageBubble(
+                            SessionMessageBubble(
                                 message: message,
-                                isMe: message.senderActorId == actorId,
+                                isMe: message.senderActorId == teamclawService.currentHumanActorId,
                                 senderName: resolveName(message.senderActorId)
                             )
                             .id(message.messageId)
@@ -42,7 +40,7 @@ public struct CollabSessionView: View {
                 }
             }
 
-            // Work items bar (if any)
+            // Task bar (if any)
             if !viewModel.workItems.isEmpty {
                 workItemBar
             }
@@ -50,9 +48,9 @@ public struct CollabSessionView: View {
             // Input bar
             inputBar
         }
-        .navigationTitle(session.title.isEmpty ? "Collab Session" : session.title)
+        .navigationTitle(session.title.isEmpty ? "Session" : session.title)
         .task {
-            viewModel.start(teamclawService: teamclawService, actorId: actorId, modelContext: modelContext)
+            viewModel.start(teamclawService: teamclawService, modelContext: modelContext)
         }
         .onDisappear { viewModel.stop() }
     }
@@ -60,7 +58,7 @@ public struct CollabSessionView: View {
     private var workItemBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(viewModel.workItems, id: \.workItemId) { item in
+                ForEach(viewModel.workItems, id: \.taskId) { item in
                     HStack(spacing: 4) {
                         Circle()
                             .fill(item.isDone ? .green : item.isInProgress ? .orange : .blue)
@@ -121,7 +119,7 @@ public struct CollabSessionView: View {
     }
 }
 
-struct CollabMessageBubble: View {
+struct SessionMessageBubble: View {
     let message: SessionMessage
     let isMe: Bool
     let senderName: String

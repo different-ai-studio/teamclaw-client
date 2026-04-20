@@ -15,6 +15,7 @@ public struct InviteWindowScene: Scene {
             if let intent {
                 InviteWindowView(intent: intent, pairing: pairing)
                     .frame(minWidth: 440, minHeight: 560)
+                    .appAppearance()
             }
         }
         .windowResizability(.contentSize)

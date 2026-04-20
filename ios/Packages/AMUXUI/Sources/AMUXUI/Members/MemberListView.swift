@@ -193,10 +193,10 @@ private struct MemberDetailView: View {
     let member: Member
 
     @Query private var allMessages: [SessionMessage]
-    @Query(sort: \CollabSession.lastMessageAt, order: .reverse)
-    private var allSessions: [CollabSession]
+    @Query(sort: \Session.lastMessageAt, order: .reverse)
+    private var allSessions: [Session]
 
-    private var memberSessions: [CollabSession] {
+    private var memberSessions: [Session] {
         let sessionIds = Set(
             allMessages
                 .filter { $0.senderActorId == member.memberId }

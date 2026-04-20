@@ -19,6 +19,7 @@ public struct DetailWindowScene: Scene {
                 teamclawService: teamclawService
             )
             .frame(minWidth: 540, minHeight: 480)
+            .appAppearance()
         }
     }
 }
@@ -29,7 +30,7 @@ private struct DetachedSessionRoot: View {
     let teamclawService: TeamclawService
 
     @Environment(SharedConnection.self) private var shared
-    @Query private var sessions: [CollabSession]
+    @Query private var sessions: [Session]
 
     var body: some View {
         Group {

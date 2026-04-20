@@ -4,22 +4,20 @@ import AMUXCore
 
 @Observable
 @MainActor
-public final class CollabSessionViewModel {
+public final class SessionViewModel {
     public var messages: [SessionMessage] = []
-    public var workItems: [WorkItem] = []
-    public var session: CollabSession
+    public var workItems: [SessionTask] = []
+    public var session: Session
 
     private var teamclawService: TeamclawService?
     private var listenerTask: Task<Void, Never>?
-    private var actorId: String = ""
 
-    public init(session: CollabSession) {
+    public init(session: Session) {
         self.session = session
     }
 
-    public func start(teamclawService: TeamclawService, actorId: String, modelContext: ModelContext) {
+    public func start(teamclawService: TeamclawService, modelContext: ModelContext) {
         self.teamclawService = teamclawService
-        self.actorId = actorId
         teamclawService.subscribeToSession(session.sessionId)
 
         listenerTask?.cancel()
@@ -33,7 +31,7 @@ public final class CollabSessionViewModel {
                 )
                 self.messages = (try? modelContext.fetch(msgDescriptor)) ?? []
 
-                let wiDescriptor = FetchDescriptor<WorkItem>(
+                let wiDescriptor = FetchDescriptor<SessionTask>(
                     predicate: #Predicate { $0.sessionId == sid },
                     sortBy: [SortDescriptor(\.createdAt)]
                 )
@@ -52,8 +50,7 @@ public final class CollabSessionViewModel {
     public func sendMessage(_ text: String) {
         teamclawService?.sendMessage(
             sessionId: session.sessionId,
-            content: text,
-            actorId: actorId
+            content: text
         )
     }
 }

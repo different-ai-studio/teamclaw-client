@@ -2,24 +2,24 @@ import SwiftUI
 import SwiftData
 import AMUXCore
 
-/// Pushable/embeddable work item list body. Parent owns NavigationStack
+/// Pushable/embeddable task list body. Parent owns NavigationStack
 /// and provides the "+" toolbar action.
-public struct WorkItemListView: View {
+public struct TaskListView: View {
     @Environment(\.modelContext) private var modelContext
 
     let pairing: PairingManager
     let connectionMonitor: ConnectionMonitor
     let teamclawService: TeamclawService?
 
-    // SwiftData-driven list; any mutation from syncWorkItemEvent refreshes
+    // SwiftData-driven list; any mutation from syncTaskEvent refreshes
     // the UI without manual reloads.
-    @Query(filter: #Predicate<WorkItem> { !$0.archived },
-           sort: \WorkItem.createdAt, order: .reverse)
-    private var workItems: [WorkItem]
+    @Query(filter: #Predicate<SessionTask> { !$0.archived },
+           sort: \SessionTask.createdAt, order: .reverse)
+    private var tasks: [SessionTask]
 
     // Count of archived items for the "Archived (N)" footer row.
-    @Query(filter: #Predicate<WorkItem> { $0.archived })
-    private var archivedItems: [WorkItem]
+    @Query(filter: #Predicate<SessionTask> { $0.archived })
+    private var archivedItems: [SessionTask]
 
     @Query private var members: [Member]
 
@@ -42,15 +42,15 @@ public struct WorkItemListView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            if workItems.isEmpty {
+            if tasks.isEmpty {
                 ContentUnavailableView("No Tasks", systemImage: "checklist",
                     description: Text("Tap + to create a task"))
             } else {
                 List {
-                    ForEach(workItems, id: \.workItemId) { item in
-                        NavigationLink(value: "task:\(item.workItemId)") {
-                            WorkItemRow(item: item,
-                                        creatorName: creatorLabel(for: item))
+                    ForEach(tasks, id: \.taskId) { item in
+                        NavigationLink(value: "task:\(item.taskId)") {
+                            TaskRow(item: item,
+                                    creatorName: creatorLabel(for: item))
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button {
@@ -90,25 +90,25 @@ public struct WorkItemListView: View {
             }
         }
         .sheet(isPresented: $showCreate) {
-            CreateWorkItemSheet(teamclawService: teamclawService) { }
+            CreateTaskSheet(teamclawService: teamclawService) { }
         }
         .sheet(isPresented: $showArchived) {
-            ArchivedWorkItemsView(teamclawService: teamclawService)
+            ArchivedTasksView(teamclawService: teamclawService)
         }
     }
 
-    private func creatorLabel(for item: WorkItem) -> String? {
+    private func creatorLabel(for item: SessionTask) -> String? {
         guard !item.createdBy.isEmpty else { return nil }
         // Show the member's display name, or nothing — never the raw id.
         return memberNameById[item.createdBy]
     }
 
-    private func archiveTapped(_ item: WorkItem) {
+    private func archiveTapped(_ item: SessionTask) {
         // Optimistic flip — @Query animates the row out immediately.
         item.archived = true
         try? modelContext.save()
-        let id = item.workItemId
+        let id = item.taskId
         let sessionId = item.sessionId
-        Task { await teamclawService?.archiveWorkItem(workItemId: id, sessionId: sessionId, archived: true) }
+        Task { await teamclawService?.archiveTask(taskId: id, sessionId: sessionId, archived: true) }
     }
 }

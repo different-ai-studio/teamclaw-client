@@ -67,11 +67,11 @@ public struct NewCollabSheet: View {
         guard let mqtt = teamclawService.mqttRef else { return }
         isSending = true
 
-        var createReq = Teamclaw_CreateSessionRequest()
-        createReq.sessionType = .collab
-        createReq.teamID = teamId
-        createReq.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        createReq.summary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let createReq = teamclawService.makeCreateSessionRequest(
+            teamId: teamId,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            summary: summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8).lowercased())

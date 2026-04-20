@@ -13,8 +13,8 @@ public struct SearchTab: View {
     @Environment(\.modelContext) private var modelContext
     @State private var query: String = ""
 
-    @Query(filter: #Predicate<WorkItem> { !$0.archived })
-    private var allTasks: [WorkItem]
+    @Query(filter: #Predicate<SessionTask> { !$0.archived })
+    private var allTasks: [SessionTask]
 
     @Query private var allMembers: [Member]
 
@@ -41,10 +41,10 @@ public struct SearchTab: View {
         }
     }
 
-    private var taskMatches: [WorkItem] {
+    private var taskMatches: [SessionTask] {
         allTasks.filter {
             SearchMatcher.matchesAny(
-                fields: [$0.title, $0.itemDescription],
+                fields: [$0.title, $0.taskDescription],
                 query: query
             )
         }
@@ -83,8 +83,8 @@ public struct SearchTab: View {
 
                     if !taskMatches.isEmpty {
                         Section("Tasks") {
-                            ForEach(taskMatches, id: \.workItemId) { item in
-                                WorkItemRow(item: item)
+                            ForEach(taskMatches, id: \.taskId) { item in
+                                TaskRow(item: item)
                             }
                         }
                     }

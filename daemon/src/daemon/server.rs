@@ -105,14 +105,13 @@ impl DaemonServer {
         }
 
         let publisher = Publisher::new(&self.mqtt);
-        publisher.publish_agent_list(&self.merged_agent_list()).await
-            .map_err(crate::error::AmuxError::Mqtt)?;
         publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await
             .map_err(crate::error::AmuxError::Mqtt)?;
         publisher.publish_member_list(&self.auth.to_proto_member_list()).await
             .map_err(crate::error::AmuxError::Mqtt)?;
         publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await
             .map_err(crate::error::AmuxError::Mqtt)?;
+        self.publish_all_agent_states().await;
 
         info!(device_id = %self.config.device.id, "MQTT connected, listening for commands");
 
@@ -138,10 +137,10 @@ impl DaemonServer {
                         let _ = tc.subscribe_all().await;
                     }
                     let publisher = Publisher::new(&self.mqtt);
-                    let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
                     let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
                     let _ = publisher.publish_member_list(&self.auth.to_proto_member_list()).await;
                     let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
+                    self.publish_all_agent_states().await;
                 }
                 Ok(Ok(Event::Incoming(Packet::Publish(publish)))) => {
                     if let Some(msg) = subscriber::parse_incoming(&publish) {
@@ -158,7 +157,9 @@ impl DaemonServer {
         }
     }
 
-    /// Build merged agent list: active agents + historical (non-active) sessions
+    /// Build merged agent list: active agents + historical (non-active) sessions.
+    /// Now only used by `publish_all_agent_states` to iterate startup/reconnect state.
+    /// Per-agent updates should go through `publish_agent_state_by_id`.
     fn merged_agent_list(&self) -> amux::AgentList {
         let mut agent_list = self.agents.to_proto_agent_list();
         let active_ids: std::collections::HashSet<String> = agent_list.agents.iter().map(|a| a.agent_id.clone()).collect();
@@ -168,6 +169,35 @@ impl DaemonServer {
             }
         }
         agent_list
+    }
+
+    /// Look up a single agent's current AgentInfo — live adapter first, then
+    /// the historical session store. Returns `None` if unknown.
+    fn agent_info_by_id(&self, agent_id: &str) -> Option<amux::AgentInfo> {
+        self.agents
+            .to_proto_info(agent_id)
+            .or_else(|| self.sessions.to_proto_agent_info(agent_id))
+    }
+
+    /// Publish retained AgentInfo for a single agent on its per-agent state
+    /// topic. Swallows errors (same convention as other publish helpers).
+    async fn publish_agent_state_by_id(&self, agent_id: &str) {
+        if let Some(info) = self.agent_info_by_id(agent_id) {
+            let publisher = Publisher::new(&self.mqtt);
+            let _ = publisher.publish_agent_state(agent_id, &info).await;
+        }
+    }
+
+    /// Publish every known agent (active + historical) individually. Used on
+    /// startup and after MQTT reconnect so clients subscribing to the wildcard
+    /// `agent/+/state` topic receive one retained message per agent — keeping
+    /// each publish well under HiveMQ's 10 KB packet limit, which the old
+    /// single-list publish would blow past once the session count grew.
+    async fn publish_all_agent_states(&self) {
+        let publisher = Publisher::new(&self.mqtt);
+        for info in self.merged_agent_list().agents {
+            let _ = publisher.publish_agent_state(&info.agent_id, &info).await;
+        }
     }
 
     /// Forward an agent event to MQTT as an Envelope on the agent's events topic
@@ -199,8 +229,7 @@ impl DaemonServer {
                 let title = String::from_utf8_lossy(&raw.json_payload).to_string();
                 if let Some(handle) = self.agents.get_handle_mut(agent_id) {
                     handle.session_title = title;
-                    let publisher = Publisher::new(&self.mqtt);
-                    let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
+                    self.publish_agent_state_by_id(agent_id).await;
                 }
                 return;
             }
@@ -242,8 +271,7 @@ impl DaemonServer {
                 session.status = sc.new_status;
                 let _ = self.sessions.save(&self.sessions_path);
             }
-            let publisher = Publisher::new(&self.mqtt);
-            let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
+            self.publish_agent_state_by_id(agent_id).await;
         }
 
         // Update session on complete output
@@ -296,6 +324,15 @@ impl DaemonServer {
             Some(amux::acp_event::Event::AvailableCommands(_))
         );
 
+        // HiveMQ Cloud free tier caps publishes at 10 240 bytes. Claude Code's
+        // AvailableCommands list with full descriptions routinely lands at
+        // ~12 KB, which trips the broker and knocks the daemon's MQTT session
+        // offline mid-session-start. Trim descriptions (and as a last resort
+        // commands themselves) in-place until the envelope fits.
+        if let Some(amux::acp_event::Event::AvailableCommands(ref mut ac)) = acp_event.event {
+            fit_available_commands_in_budget(ac);
+        }
+
         let envelope = amux::Envelope {
             agent_id: agent_id.into(),
             device_id: self.config.device.id.clone(),
@@ -338,7 +375,7 @@ impl DaemonServer {
                         // Host persists the message
                         if let Some(tc) = &self.teamclaw {
                             if tc.is_host_for(&session_id) {
-                                let _ = tc.persist_message(&session_id, msg);
+                                let _ = tc.persist_message(&session_id, msg).await;
                             }
                         }
                         // Route to local agents
@@ -357,8 +394,7 @@ impl DaemonServer {
                                                 warn!(?e, "send_set_model from collab message failed");
                                             } else {
                                                 self.agents.set_current_model(&agent_actor_id, &desired_model);
-                                                let publisher = Publisher::new(&self.mqtt);
-                                                let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
+                                                self.publish_agent_state_by_id(&agent_actor_id).await;
                                             }
                                         }
                                     }
@@ -375,16 +411,16 @@ impl DaemonServer {
                     }
                 }
             }
-            subscriber::IncomingMessage::TeamclawWorkItemEvent { session_id, payload } => {
-                if let Ok(event) = crate::proto::teamclaw::WorkItemEvent::decode(payload.as_slice()) {
+            subscriber::IncomingMessage::TeamclawTaskEvent { session_id, payload } => {
+                if let Ok(event) = crate::proto::teamclaw::TaskEvent::decode(payload.as_slice()) {
                     if let Some(tc) = &self.teamclaw {
                         let activated = tc.agents_to_activate_for_work_item(&session_id, &event);
                         for agent_actor_id in activated {
                             if self.agents.get_handle(&agent_actor_id).is_some() {
-                                let prompt = format_work_item_prompt(&session_id, &event);
+                                let prompt = format_task_prompt(&session_id, &event);
                                 if !prompt.is_empty() {
                                     if let Err(e) = self.agents.send_prompt(&agent_actor_id, &prompt).await {
-                                        warn!("Failed to route work item to agent {}: {}", agent_actor_id, e);
+                                        warn!("Failed to route task to agent {}: {}", agent_actor_id, e);
                                     }
                                 }
                             }
@@ -398,14 +434,18 @@ impl DaemonServer {
     async fn handle_agent_command(&mut self, agent_id: &str, envelope: amux::CommandEnvelope) {
         let peer_id = envelope.peer_id.clone();
         let command_id = envelope.command_id.clone();
-        let publisher = Publisher::new(&self.mqtt);
 
         let role = self.peers.get_peer(&peer_id)
             .map(|p| p.role)
             .unwrap_or_else(|| {
-                // Peer not in memory (daemon restarted?) — try to match by token prefix
-                // peer_id format: "ios-{token_prefix}" where token_prefix is first 6 chars of auth token
-                let token_prefix = peer_id.strip_prefix("ios-").unwrap_or(&peer_id);
+                // Peer not in memory (daemon restarted?) — try to match by token prefix.
+                // peer_id format: "{platform}-{token_prefix}" where token_prefix is
+                // first 6 chars of auth token. Strip both ios- and mac- so either
+                // platform recovers its role without requiring re-announce.
+                let token_prefix = peer_id
+                    .strip_prefix("ios-")
+                    .or_else(|| peer_id.strip_prefix("mac-"))
+                    .unwrap_or(&peer_id);
                 self.auth.find_role_by_token_prefix(token_prefix)
                     .unwrap_or(amux::MemberRole::Member)
             });
@@ -474,10 +514,7 @@ impl DaemonServer {
                         };
                         self.sessions.upsert(stored);
                         let _ = self.sessions.save(&self.sessions_path);
-                        let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
-                        if let Some(info) = self.agents.to_proto_info(&new_id) {
-                            let _ = publisher.publish_agent_state(&new_id, &info).await;
-                        }
+                        self.publish_agent_state_by_id(&new_id).await;
                     }
                     Err(e) => {
                         error!(peer_id, "failed to start agent: {}", e);
@@ -491,7 +528,7 @@ impl DaemonServer {
                         session.status = amux::AgentStatus::Stopped as i32;
                         let _ = self.sessions.save(&self.sessions_path);
                     }
-                    let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
+                    self.publish_agent_state_by_id(agent_id).await;
                     info!(agent_id, peer_id, "agent stopped");
                 }
             }
@@ -536,7 +573,7 @@ impl DaemonServer {
                                         command_id,
                                     })),
                                 }).await;
-                                let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
+                                self.publish_agent_state_by_id(agent_id).await;
                             }
                             Err(e) => {
                                 warn!(agent_id, "lazy resume failed: {}", e);
@@ -575,7 +612,7 @@ impl DaemonServer {
                         match self.agents.send_set_model(agent_id, &desired_model).await {
                             Ok(()) => {
                                 self.agents.set_current_model(agent_id, &desired_model);
-                                let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
+                                self.publish_agent_state_by_id(agent_id).await;
                             }
                             Err(e) => {
                                 warn!(agent_id, model_id = %desired_model, "send_set_model failed: {}", e);
@@ -601,7 +638,7 @@ impl DaemonServer {
                                 command_id,
                             })),
                         }).await;
-                        let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
+                        self.publish_agent_state_by_id(agent_id).await;
                     }
                     Err(e) => {
                         warn!(agent_id, "failed to send prompt: {}", e);
@@ -616,7 +653,7 @@ impl DaemonServer {
                             handle.status = amux::AgentStatus::Idle;
                         }
                         info!(agent_id, peer_id, "agent cancelled via ACP");
-                        let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
+                        self.publish_agent_state_by_id(agent_id).await;
                     }
                     Err(e) => {
                         warn!(agent_id, "failed to cancel agent: {}", e);
@@ -714,11 +751,13 @@ impl DaemonServer {
                             role: if member.is_owner() { amux::MemberRole::Owner } else { amux::MemberRole::Member },
                             connected_at: chrono::Utc::now().timestamp(),
                         });
-                        // Publish all lists so the new peer gets current state
+                        // Publish all lists so the new peer gets current state.
+                        // Agent list is fanned out as retained per-agent topics; the new
+                        // peer receives them via its wildcard subscription without us
+                        // needing to re-publish here.
                         let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
                         let _ = publisher.publish_member_list(&self.auth.to_proto_member_list()).await;
                         let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
-                        let _ = publisher.publish_agent_list(&self.merged_agent_list()).await;
                     }
                     AuthResult::Rejected { reason } => {
                         warn!(peer_id, %reason, "peer rejected");
@@ -868,13 +907,45 @@ impl DaemonServer {
     }
 }
 
-fn format_work_item_prompt(session_id: &str, event: &crate::proto::teamclaw::WorkItemEvent) -> String {
-    use crate::proto::teamclaw::work_item_event::Event;
+/// Shrinks an `AcpAvailableCommands` list in place so the serialized message
+/// stays under the broker's per-packet cap. Strategy: walk the description
+/// length down (80 → 40 → 20 → 0) until the encoded size fits; if stripping
+/// descriptions is still not enough, drop commands from the tail.
+///
+/// The budget is deliberately well under the 10 240-byte broker limit to
+/// leave headroom for the envelope wrapper (device_id, agent_id, sequence,
+/// etc.) and the MQTT topic name / fixed header.
+fn fit_available_commands_in_budget(ac: &mut crate::proto::amux::AcpAvailableCommands) {
+    use prost::Message;
+    const BUDGET: usize = 8_500;
+
+    if ac.encoded_len() <= BUDGET {
+        return;
+    }
+
+    for &limit in &[80usize, 40, 20, 0] {
+        for cmd in &mut ac.commands {
+            if cmd.description.chars().count() > limit {
+                cmd.description = cmd.description.chars().take(limit).collect();
+            }
+        }
+        if ac.encoded_len() <= BUDGET {
+            return;
+        }
+    }
+
+    while ac.encoded_len() > BUDGET && !ac.commands.is_empty() {
+        ac.commands.pop();
+    }
+}
+
+fn format_task_prompt(session_id: &str, event: &crate::proto::teamclaw::TaskEvent) -> String {
+    use crate::proto::teamclaw::task_event::Event;
     match &event.event {
-        Some(Event::Created(item)) => format!("[Collab session: {}] New work item: {} - {}", session_id, item.title, item.description),
-        Some(Event::Updated(item)) => format!("[Collab session: {}] Work item updated: {}", session_id, item.title),
-        Some(Event::Claimed(claim)) => format!("[Collab session: {}] Work item {} claimed by {}", session_id, claim.work_item_id, claim.actor_id),
-        Some(Event::Submitted(sub)) => format!("[Collab session: {}] Submission for {}: {}", session_id, sub.work_item_id, sub.content),
+        Some(Event::Created(item)) => format!("[Collab session: {}] New task: {} - {}", session_id, item.title, item.description),
+        Some(Event::Updated(item)) => format!("[Collab session: {}] Task updated: {}", session_id, item.title),
+        Some(Event::Claimed(claim)) => format!("[Collab session: {}] Task {} claimed by {}", session_id, claim.task_id, claim.actor_id),
+        Some(Event::Submitted(sub)) => format!("[Collab session: {}] Submission for {}: {}", session_id, sub.task_id, sub.content),
         None => String::new(),
     }
 }

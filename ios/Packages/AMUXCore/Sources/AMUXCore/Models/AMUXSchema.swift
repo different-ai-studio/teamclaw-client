@@ -5,7 +5,7 @@ import SwiftData
 /// and passing it through a `SchemaMigrationPlan` stops SwiftData from falling
 /// back to *destructive* migration the moment it can't auto-derive a
 /// lightweight migration — the silent-wipe that nuked rc19 users' local
-/// agents/workspaces/workitems when the `archived` field landed on `WorkItem`.
+/// agents/workspaces/tasks when the `archived` field landed on the task model.
 ///
 /// Whenever you change the shape of ANY `@Model` class in this module
 /// (add/remove/rename a field, change an attribute type, etc.), you MUST:
@@ -30,9 +30,9 @@ public enum AMUXSchemaV1: VersionedSchema {
             AgentEvent.self,
             Member.self,
             Workspace.self,
-            CollabSession.self,
+            Session.self,
             SessionMessage.self,
-            WorkItem.self,
+            SessionTask.self,
         ]
     }
 }

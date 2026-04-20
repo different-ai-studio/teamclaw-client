@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # ACP
-agent-client-protocol = { version = "0.10.4", features = ["unstable_session_model", "unstable_session_resume"] }
+agent-client-protocol = { version = "0.10.4", features = ["unstable_session_model", "unstable_session_resume", "unstable_session_usage"] }
 
 # MQTT
 rumqttc = "0.24"

@@ -34,7 +34,7 @@ public final class AgentDetailViewModel {
     private var streamingModel: String?
     public var isDaemonOnline = true
     public let agent: Agent?
-    public let collabSession: CollabSession?
+    public let session: Session?
     private let mqtt: MQTTService
     private let deviceId: String
     private let peerId: String
@@ -56,18 +56,18 @@ public final class AgentDetailViewModel {
             }
             return agent.agentId
         }
-        if let collabSession, !collabSession.title.isEmpty { return collabSession.title }
+        if let session, !session.title.isEmpty { return session.title }
         return "Session"
     }
 
     public var isActive: Bool { agent?.isActive ?? false }
     public var isIdle: Bool { agent?.isIdle ?? true }
-    public var participantCount: Int { collabSession?.participantCount ?? 0 }
+    public var participantCount: Int { session?.participantCount ?? 0 }
     public var hasAgent: Bool { agent != nil }
 
-    public init(agent: Agent?, mqtt: MQTTService, deviceId: String, peerId: String, collabSession: CollabSession? = nil, teamclawService: TeamclawService? = nil) {
+    public init(agent: Agent?, mqtt: MQTTService, deviceId: String, peerId: String, session: Session? = nil, teamclawService: TeamclawService? = nil) {
         self.agent = agent; self.mqtt = mqtt; self.deviceId = deviceId; self.peerId = peerId
-        self.collabSession = collabSession; self.teamclawService = teamclawService
+        self.session = session; self.teamclawService = teamclawService
     }
 
     /// Rebuilds `groupedEvents` from `events`. Call after any mutation that
@@ -566,19 +566,19 @@ public final class AgentDetailViewModel {
                 p.modelID = modelId
             }
             try await sendCommand { $0.command = .sendPrompt(p) }
-        } else if let collabSession, let teamclawService {
-            // Collab session: add local bubble + send via TeamclawService
+        } else if let session, let teamclawService {
+            // Shared session: add local bubble + send via TeamclawService
             let seq = (events.last?.sequence ?? 0) + 1
-            let userEvent = AgentEvent(agentId: collabSession.sessionId, sequence: seq, eventType: "user_prompt")
+            let userEvent = AgentEvent(agentId: session.sessionId, sequence: seq, eventType: "user_prompt")
             userEvent.text = text
             if let ctx = modelContext ?? startModelContext { ctx.insert(userEvent); try? ctx.save() }
             appendEvent(userEvent)
             recomputeGroups()
 
             teamclawService.sendMessage(
-                sessionId: collabSession.sessionId,
+                sessionId: session.sessionId,
                 content: text,
-                actorId: peerId
+                modelId: modelId
             )
         }
     }

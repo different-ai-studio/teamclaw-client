@@ -6,7 +6,7 @@ import SwiftData
 
 public enum SessionItem: Identifiable {
     case agent(Agent)
-    case collab(CollabSession)
+    case collab(Session)
 
     public var id: String {
         switch self {
@@ -33,7 +33,7 @@ public struct SessionGroup: Identifiable {
 public final class SessionListViewModel {
     public var agents: [Agent] = []
     public var workspaces: [Workspace] = []
-    public var collabSessions: [CollabSession] = []
+    public var sessions: [Session] = []
     public var isLoading = true
     public var searchText = ""
     private var task: Task<Void, Never>?
@@ -48,10 +48,17 @@ public final class SessionListViewModel {
         // Load cached data immediately
         agents = (try? ctx.fetch(FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
         workspaces = (try? ctx.fetch(FetchDescriptor<Workspace>(sortBy: [SortDescriptor(\.displayName)]))) ?? []
-        collabSessions = (try? ctx.fetch(FetchDescriptor<CollabSession>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
+        sessions = (try? ctx.fetch(FetchDescriptor<Session>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
 
         task?.cancel()
-        let agentsTopic = "amux/\(deviceId)/agents"
+        // Daemon fans each session out to its own retained topic
+        // `amux/{device}/agent/{id}/state` (one AgentInfo per message) so a
+        // single publish never bumps into HiveMQ's 10 KB packet cap. We
+        // subscribe to the wildcard and rebuild our dict as retained
+        // messages arrive.
+        let agentStatePrefix = "amux/\(deviceId)/agent/"
+        let agentStateSuffix = "/state"
+        let agentStateWildcard = "amux/\(deviceId)/agent/+/state"
         let workspacesTopic = "amux/\(deviceId)/workspaces"
         task = Task {
             // Outer loop: each iteration represents a fresh MQTT connection
@@ -80,10 +87,10 @@ public final class SessionListViewModel {
                 }
 
                 let stream = mqtt.messages()
-                try? await mqtt.subscribe(agentsTopic)
+                try? await mqtt.subscribe(agentStateWildcard)
                 try? await mqtt.subscribe(workspacesTopic)
                 isLoading = false
-                NSLog("[SessionListVM] subscribed to %@ + %@", agentsTopic, workspacesTopic)
+                NSLog("[SessionListVM] subscribed to %@ + %@", agentStateWildcard, workspacesTopic)
 
                 for await msg in stream {
                     if msg.topic == workspacesTopic {
@@ -97,11 +104,19 @@ public final class SessionListViewModel {
                         continue
                     }
 
-                    guard msg.topic == agentsTopic else { continue }
-                    guard let list = try? ProtoMQTTCoder.decode(Amux_AgentList.self, from: msg.payload) else { continue }
-                    NSLog("[SessionListVM] AgentList: %d agents", list.agents.count)
-                    syncAgents(list, modelContext: ctx)
-                    refreshCollabSessions(modelContext: ctx)
+                    guard msg.topic.hasPrefix(agentStatePrefix),
+                          msg.topic.hasSuffix(agentStateSuffix) else { continue }
+                    // Empty retained payload = the daemon cleared this agent's
+                    // slot (session deletion). Drop the local row to match.
+                    if msg.payload.isEmpty {
+                        let agentId = String(msg.topic.dropFirst(agentStatePrefix.count).dropLast(agentStateSuffix.count))
+                        removeAgent(agentId: agentId, modelContext: ctx)
+                        refreshSessions(modelContext: ctx)
+                        continue
+                    }
+                    guard let info = try? ProtoMQTTCoder.decode(Amux_AgentInfo.self, from: msg.payload) else { continue }
+                    syncAgent(info, modelContext: ctx)
+                    refreshSessions(modelContext: ctx)
                 }
                 if Task.isCancelled { return }
                 NSLog("[SessionListVM] stream ended, waiting to resubscribe…")
@@ -111,57 +126,66 @@ public final class SessionListViewModel {
 
     public func stop() { task?.cancel(); task = nil }
 
-    private func syncAgents(_ list: Amux_AgentList, modelContext: ModelContext) {
-        let incoming = Set(list.agents.map { $0.agentID })
-        for proto in list.agents {
-            let id = proto.agentID
-            let descriptor = FetchDescriptor<Agent>(predicate: #Predicate { $0.agentId == id })
-            if let existing = try? modelContext.fetch(descriptor).first {
-                // Mark unread and update timestamp if there's new activity
-                if existing.lastOutputSummary != proto.lastOutputSummary
-                    || existing.toolUseCount != Int(proto.toolUseCount) {
-                    existing.hasUnread = true
-                    existing.lastEventTime = .now
-                }
-                existing.status = Int(proto.status.rawValue)
-                existing.worktree = proto.worktree
-                existing.branch = proto.branch
-                existing.currentPrompt = proto.currentPrompt
-                existing.workspaceId = proto.workspaceID
-                if !proto.sessionTitle.isEmpty { existing.sessionTitle = proto.sessionTitle }
-                existing.lastOutputSummary = proto.lastOutputSummary
-                existing.toolUseCount = Int(proto.toolUseCount)
-                // Sync available models (JSON-serialize the proto's repeated field for SwiftData storage).
+    private func syncAgent(_ proto: Amux_AgentInfo, modelContext: ModelContext) {
+        let id = proto.agentID
+        let descriptor = FetchDescriptor<Agent>(predicate: #Predicate { $0.agentId == id })
+        if let existing = try? modelContext.fetch(descriptor).first {
+            // Mark unread and update timestamp if there's new activity
+            if existing.lastOutputSummary != proto.lastOutputSummary
+                || existing.toolUseCount != Int(proto.toolUseCount) {
+                existing.hasUnread = true
+                existing.lastEventTime = .now
+            }
+            existing.status = Int(proto.status.rawValue)
+            existing.worktree = proto.worktree
+            existing.branch = proto.branch
+            existing.currentPrompt = proto.currentPrompt
+            existing.workspaceId = proto.workspaceID
+            if !proto.sessionTitle.isEmpty { existing.sessionTitle = proto.sessionTitle }
+            existing.lastOutputSummary = proto.lastOutputSummary
+            existing.toolUseCount = Int(proto.toolUseCount)
+            // Historical sessions publish an empty available_models list; only
+            // overwrite when the live agent actually provided one so the
+            // cached model list from a prior live publish survives.
+            if !proto.availableModels.isEmpty {
                 let models = proto.availableModels.map { AvailableModel(id: $0.id, displayName: $0.displayName) }
                 if let json = try? JSONEncoder().encode(models),
                    let str = String(data: json, encoding: .utf8) {
                     existing.availableModelsJSON = str
                 }
-                existing.currentModel = proto.currentModel.isEmpty ? nil : proto.currentModel
-            } else {
-                let newAgent = Agent(
-                    agentId: proto.agentID,
-                    agentType: Int(proto.agentType.rawValue),
-                    worktree: proto.worktree,
-                    branch: proto.branch,
-                    status: Int(proto.status.rawValue),
-                    startedAt: Date(timeIntervalSince1970: TimeInterval(proto.startedAt)),
-                    currentPrompt: proto.currentPrompt,
-                    workspaceId: proto.workspaceID
-                )
-                newAgent.lastEventTime = .now
-                newAgent.hasUnread = true
-                // Sync available models (JSON-serialize the proto's repeated field for SwiftData storage).
-                let models = proto.availableModels.map { AvailableModel(id: $0.id, displayName: $0.displayName) }
-                if let json = try? JSONEncoder().encode(models),
-                   let str = String(data: json, encoding: .utf8) {
-                    newAgent.availableModelsJSON = str
-                }
-                newAgent.currentModel = proto.currentModel.isEmpty ? nil : proto.currentModel
-                modelContext.insert(newAgent)
             }
+            existing.currentModel = proto.currentModel.isEmpty ? nil : proto.currentModel
+        } else {
+            let newAgent = Agent(
+                agentId: proto.agentID,
+                agentType: Int(proto.agentType.rawValue),
+                worktree: proto.worktree,
+                branch: proto.branch,
+                status: Int(proto.status.rawValue),
+                startedAt: Date(timeIntervalSince1970: TimeInterval(proto.startedAt)),
+                currentPrompt: proto.currentPrompt,
+                workspaceId: proto.workspaceID
+            )
+            newAgent.lastEventTime = .now
+            newAgent.hasUnread = true
+            let models = proto.availableModels.map { AvailableModel(id: $0.id, displayName: $0.displayName) }
+            if let json = try? JSONEncoder().encode(models),
+               let str = String(data: json, encoding: .utf8) {
+                newAgent.availableModelsJSON = str
+            }
+            newAgent.currentModel = proto.currentModel.isEmpty ? nil : proto.currentModel
+            modelContext.insert(newAgent)
         }
         try? modelContext.save()
+        agents = (try? modelContext.fetch(FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
+    }
+
+    private func removeAgent(agentId: String, modelContext: ModelContext) {
+        let descriptor = FetchDescriptor<Agent>(predicate: #Predicate { $0.agentId == agentId })
+        if let existing = try? modelContext.fetch(descriptor).first {
+            modelContext.delete(existing)
+            try? modelContext.save()
+        }
         agents = (try? modelContext.fetch(FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
     }
 
@@ -193,13 +217,13 @@ public final class SessionListViewModel {
         workspaces = fetched
     }
 
-    private func refreshCollabSessions(modelContext: ModelContext) {
-        collabSessions = (try? modelContext.fetch(FetchDescriptor<CollabSession>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
+    private func refreshSessions(modelContext: ModelContext) {
+        sessions = (try? modelContext.fetch(FetchDescriptor<Session>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
     }
 
-    /// Call this from views when collab sessions are known to have changed (e.g. after TeamclawService sync).
-    public func reloadCollabSessions(modelContext: ModelContext) {
-        collabSessions = (try? modelContext.fetch(FetchDescriptor<CollabSession>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
+    /// Call this from views when sessions are known to have changed (e.g. after TeamclawService sync).
+    public func reloadSessions(modelContext: ModelContext) {
+        sessions = (try? modelContext.fetch(FetchDescriptor<Session>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
     }
 
     public var filteredAgents: [Agent] {
@@ -213,9 +237,9 @@ public final class SessionListViewModel {
     // MARK: - Time Grouping
 
     public var groupedSessions: [SessionGroup] {
-        // Merge agents and collab sessions into one list
+        // Merge agents and shared sessions into one list
         var allItems: [SessionItem] = filteredAgents.map { .agent($0) }
-        for session in collabSessions {
+        for session in sessions {
             if searchText.isEmpty || session.title.lowercased().contains(searchText.lowercased()) {
                 allItems.append(.collab(session))
             }

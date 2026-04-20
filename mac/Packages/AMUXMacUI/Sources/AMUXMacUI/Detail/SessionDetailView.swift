@@ -4,7 +4,7 @@ import AMUXCore
 import AMUXSharedUI
 
 struct SessionDetailView: View {
-    let session: CollabSession
+    let session: Session
     let teamclawService: TeamclawService
     let actorId: String
     let mqtt: MQTTService?
@@ -81,27 +81,24 @@ struct SessionDetailView: View {
                 .help("Pin")
             }
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    print("TODO(v1.1): archive for session \(session.sessionId)")
-                } label: {
+                Button(action: {}) {
                     Label("Archive", systemImage: "archivebox")
                 }
+                .disabled(true)
                 .help("Archive")
             }
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    print("TODO(v1.1): add-member for session \(session.sessionId)")
-                } label: {
+                Button(action: {}) {
                     Label("Add member", systemImage: "person.badge.plus")
                 }
+                .disabled(true)
                 .help("Add member")
             }
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    print("TODO(v1.1): share for session \(session.sessionId)")
-                } label: {
+                Button(action: {}) {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
+                .disabled(true)
                 .help("Share")
             }
             if agentVM != nil {
@@ -150,7 +147,7 @@ struct SessionDetailView: View {
             mqtt: mqtt,
             deviceId: deviceId,
             peerId: peerId,
-            collabSession: session,
+            session: session,
             teamclawService: teamclawService
         )
         vm.start(modelContext: modelContext)
@@ -195,6 +192,11 @@ struct SessionDetailView: View {
                     .background(Color.secondary.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .padding(.horizontal, 16)
+            }
+            if vm.isActive {
+                AgentTypingIndicator()
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 4)
             }
         }
     }
@@ -261,5 +263,42 @@ struct SessionDetailView: View {
     private func modelLabel(for message: SessionMessage) -> String? {
         guard let modelId = message.model, !modelId.isEmpty else { return nil }
         return modelLookup[modelId] ?? modelId
+    }
+}
+
+private struct AgentTypingIndicator: View {
+    @State private var phase: Double = 0
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .fill(Color.secondary)
+                    .frame(width: 7, height: 7)
+                    .scaleEffect(dotScale(for: i))
+                    .opacity(dotOpacity(for: i))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                phase = 1
+            }
+        }
+    }
+
+    private func dotScale(for index: Int) -> Double {
+        let offset = Double(index) * 0.15
+        let value = sin((phase + offset) * .pi)
+        return 0.6 + 0.4 * value
+    }
+
+    private func dotOpacity(for index: Int) -> Double {
+        let offset = Double(index) * 0.15
+        let value = sin((phase + offset) * .pi)
+        return 0.4 + 0.6 * value
     }
 }

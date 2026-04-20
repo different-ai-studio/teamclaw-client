@@ -11,12 +11,6 @@ impl<'a> Publisher<'a> {
         Self { client }
     }
 
-    pub async fn publish_agent_list(&self, list: &amux::AgentList) -> Result<(), rumqttc::ClientError> {
-        self.client.client
-            .publish(self.client.topics.agents(), QoS::AtLeastOnce, true, list.encode_to_vec())
-            .await
-    }
-
     pub async fn publish_peer_list(&self, list: &amux::PeerList) -> Result<(), rumqttc::ClientError> {
         self.client.client
             .publish(self.client.topics.peers(), QoS::AtLeastOnce, true, list.encode_to_vec())
@@ -38,6 +32,14 @@ impl<'a> Publisher<'a> {
     pub async fn publish_agent_state(&self, agent_id: &str, info: &amux::AgentInfo) -> Result<(), rumqttc::ClientError> {
         self.client.client
             .publish(self.client.topics.agent_state(agent_id), QoS::AtLeastOnce, true, info.encode_to_vec())
+            .await
+    }
+
+    /// Publish an empty retained message on an agent's state topic so the broker
+    /// clears the retain. Used when a session is permanently deleted.
+    pub async fn clear_agent_state(&self, agent_id: &str) -> Result<(), rumqttc::ClientError> {
+        self.client.client
+            .publish(self.client.topics.agent_state(agent_id), QoS::AtLeastOnce, true, Vec::<u8>::new())
             .await
     }
 

@@ -49,11 +49,14 @@ Generated Swift files go to `ios/Proto/Generated/`. Always regenerate after edit
 
 ### MQTT Topic Structure
 ```
-amux/{deviceId}/agents                        # AgentList (retained)
+amux/{deviceId}/agent/{agentId}/state         # AgentInfo per session (retained)
 amux/{deviceId}/agent/{agentId}/events        # AcpEvent stream
 amux/{deviceId}/agent/{agentId}/commands      # Client commands
 amux/{deviceId}/status                        # DeviceStatus (LWT, retained)
 ```
+Sessions are fanned out to per-agent retained topics (not a single AgentList) so
+no publish exceeds the broker's 10 KB packet cap. Clients subscribe to the
+wildcard `amux/{deviceId}/agent/+/state` and aggregate locally.
 
 ### CLI Subcommands
 `init`, `start`, `invite {name}`, `members [list|remove]`, `test-spawn`, `test-client [watch|start-agent|announce|e2e]`
@@ -65,3 +68,15 @@ amux/{deviceId}/status                        # DeviceStatus (LWT, retained)
 - Daemon config lives at `~/.config/amux/daemon.toml`
 - Commit messages use conventional commits with scope: `feat(ios):`, `fix(daemon):`, etc.
 - Specs live in `docs/specs/`; plans in `docs/plans/`
+
+## macOS SwiftUI gotchas
+
+**NEVER attach `.modelContainer(...)` to a `.sheet` on macOS.** Doing so forces
+SwiftUI to rebuild the window scene, which silently drops the toolbar items
+from any `NavigationSplitView` column (column 2's `+ / edit / search` buttons
+vanish). If a sheet needs SwiftData rows, query them in the parent view and
+pass the plain array into the sheet as a parameter — do **not** use `@Query`
+inside the sheet and do **not** re-inject a modelContainer. Confirmed
+regression during the per-agent retained-state refactor (2026-04-20); see
+`MainWindowView.swift` → `NewSessionSheet(workspaces: ...)` for the working
+pattern.

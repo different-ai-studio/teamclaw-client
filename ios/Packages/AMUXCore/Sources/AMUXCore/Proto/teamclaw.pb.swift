@@ -142,7 +142,7 @@ public enum Teamclaw_MessageKind: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
-public enum Teamclaw_WorkItemStatus: SwiftProtobuf.Enum, Swift.CaseIterable {
+public enum Teamclaw_TaskStatus: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unknown // = 0
   case `open` // = 1
@@ -175,7 +175,7 @@ public enum Teamclaw_WorkItemStatus: SwiftProtobuf.Enum, Swift.CaseIterable {
   }
 
   // The compiler won't synthesize support with the UNRECOGNIZED case.
-  public static let allCases: [Teamclaw_WorkItemStatus] = [
+  public static let allCases: [Teamclaw_TaskStatus] = [
     .unknown,
     .open,
     .inProgress,
@@ -228,6 +228,12 @@ public struct Teamclaw_SessionInfo: Sendable {
   public var summary: String = String()
 
   public var primaryAgentID: String = String()
+
+  public var taskID: String = String()
+
+  public var lastMessagePreview: String = String()
+
+  public var lastMessageAt: Int64 = 0
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -318,12 +324,12 @@ public struct Teamclaw_Message: Sendable {
   public init() {}
 }
 
-public struct Teamclaw_WorkItem: Sendable {
+public struct Teamclaw_Task: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var workItemID: String = String()
+  public var taskID: String = String()
 
   public var sessionID: String = String()
 
@@ -331,7 +337,7 @@ public struct Teamclaw_WorkItem: Sendable {
 
   public var description_p: String = String()
 
-  public var status: Teamclaw_WorkItemStatus = .unknown
+  public var status: Teamclaw_TaskStatus = .unknown
 
   public var parentID: String = String()
 
@@ -357,7 +363,7 @@ public struct Teamclaw_Claim: Sendable {
 
   public var claimID: String = String()
 
-  public var workItemID: String = String()
+  public var taskID: String = String()
 
   public var actorID: String = String()
 
@@ -375,7 +381,7 @@ public struct Teamclaw_Submission: Sendable {
 
   public var submissionID: String = String()
 
-  public var workItemID: String = String()
+  public var taskID: String = String()
 
   public var actorID: String = String()
 
@@ -458,25 +464,25 @@ public struct Teamclaw_SessionMetaEnvelope: Sendable {
   fileprivate var _session: Teamclaw_SessionInfo? = nil
 }
 
-public struct Teamclaw_WorkItemEvent: Sendable {
+public struct Teamclaw_TaskEvent: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var event: Teamclaw_WorkItemEvent.OneOf_Event? = nil
+  public var event: Teamclaw_TaskEvent.OneOf_Event? = nil
 
-  public var created: Teamclaw_WorkItem {
+  public var created: Teamclaw_Task {
     get {
       if case .created(let v)? = event {return v}
-      return Teamclaw_WorkItem()
+      return Teamclaw_Task()
     }
     set {event = .created(newValue)}
   }
 
-  public var updated: Teamclaw_WorkItem {
+  public var updated: Teamclaw_Task {
     get {
       if case .updated(let v)? = event {return v}
-      return Teamclaw_WorkItem()
+      return Teamclaw_Task()
     }
     set {event = .updated(newValue)}
   }
@@ -500,8 +506,8 @@ public struct Teamclaw_WorkItemEvent: Sendable {
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Event: Equatable, Sendable {
-    case created(Teamclaw_WorkItem)
-    case updated(Teamclaw_WorkItem)
+    case created(Teamclaw_Task)
+    case updated(Teamclaw_Task)
     case claimed(Teamclaw_Claim)
     case submitted(Teamclaw_Submission)
 
@@ -624,36 +630,36 @@ public struct Teamclaw_RpcRequest: Sendable {
     set {method = .removeParticipant(newValue)}
   }
 
-  public var createWorkItem: Teamclaw_CreateWorkItemRequest {
+  public var createTask: Teamclaw_CreateTaskRequest {
     get {
-      if case .createWorkItem(let v)? = method {return v}
-      return Teamclaw_CreateWorkItemRequest()
+      if case .createTask(let v)? = method {return v}
+      return Teamclaw_CreateTaskRequest()
     }
-    set {method = .createWorkItem(newValue)}
+    set {method = .createTask(newValue)}
   }
 
-  public var claimWorkItem: Teamclaw_ClaimWorkItemRequest {
+  public var claimTask: Teamclaw_ClaimTaskRequest {
     get {
-      if case .claimWorkItem(let v)? = method {return v}
-      return Teamclaw_ClaimWorkItemRequest()
+      if case .claimTask(let v)? = method {return v}
+      return Teamclaw_ClaimTaskRequest()
     }
-    set {method = .claimWorkItem(newValue)}
+    set {method = .claimTask(newValue)}
   }
 
-  public var submitWorkItem: Teamclaw_SubmitWorkItemRequest {
+  public var submitTask: Teamclaw_SubmitTaskRequest {
     get {
-      if case .submitWorkItem(let v)? = method {return v}
-      return Teamclaw_SubmitWorkItemRequest()
+      if case .submitTask(let v)? = method {return v}
+      return Teamclaw_SubmitTaskRequest()
     }
-    set {method = .submitWorkItem(newValue)}
+    set {method = .submitTask(newValue)}
   }
 
-  public var updateWorkItem: Teamclaw_UpdateWorkItemRequest {
+  public var updateTask: Teamclaw_UpdateTaskRequest {
     get {
-      if case .updateWorkItem(let v)? = method {return v}
-      return Teamclaw_UpdateWorkItemRequest()
+      if case .updateTask(let v)? = method {return v}
+      return Teamclaw_UpdateTaskRequest()
     }
-    set {method = .updateWorkItem(newValue)}
+    set {method = .updateTask(newValue)}
   }
 
   public var registerSession: Teamclaw_RegisterSessionRequest {
@@ -664,6 +670,14 @@ public struct Teamclaw_RpcRequest: Sendable {
     set {method = .registerSession(newValue)}
   }
 
+  public var fetchSessionMessages: Teamclaw_FetchSessionMessagesRequest {
+    get {
+      if case .fetchSessionMessages(let v)? = method {return v}
+      return Teamclaw_FetchSessionMessagesRequest()
+    }
+    set {method = .fetchSessionMessages(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Method: Equatable, Sendable {
@@ -672,11 +686,12 @@ public struct Teamclaw_RpcRequest: Sendable {
     case fetchSession(Teamclaw_FetchSessionRequest)
     case addParticipant(Teamclaw_AddParticipantRequest)
     case removeParticipant(Teamclaw_RemoveParticipantRequest)
-    case createWorkItem(Teamclaw_CreateWorkItemRequest)
-    case claimWorkItem(Teamclaw_ClaimWorkItemRequest)
-    case submitWorkItem(Teamclaw_SubmitWorkItemRequest)
-    case updateWorkItem(Teamclaw_UpdateWorkItemRequest)
+    case createTask(Teamclaw_CreateTaskRequest)
+    case claimTask(Teamclaw_ClaimTaskRequest)
+    case submitTask(Teamclaw_SubmitTaskRequest)
+    case updateTask(Teamclaw_UpdateTaskRequest)
     case registerSession(Teamclaw_RegisterSessionRequest)
+    case fetchSessionMessages(Teamclaw_FetchSessionMessagesRequest)
 
   }
 
@@ -704,12 +719,12 @@ public struct Teamclaw_RpcResponse: Sendable {
     set {result = .sessionInfo(newValue)}
   }
 
-  public var workItem: Teamclaw_WorkItem {
+  public var task: Teamclaw_Task {
     get {
-      if case .workItem(let v)? = result {return v}
-      return Teamclaw_WorkItem()
+      if case .task(let v)? = result {return v}
+      return Teamclaw_Task()
     }
-    set {result = .workItem(newValue)}
+    set {result = .task(newValue)}
   }
 
   public var claim: Teamclaw_Claim {
@@ -728,13 +743,22 @@ public struct Teamclaw_RpcResponse: Sendable {
     set {result = .submission(newValue)}
   }
 
+  public var sessionMessagePage: Teamclaw_SessionMessagePage {
+    get {
+      if case .sessionMessagePage(let v)? = result {return v}
+      return Teamclaw_SessionMessagePage()
+    }
+    set {result = .sessionMessagePage(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Result: Equatable, Sendable {
     case sessionInfo(Teamclaw_SessionInfo)
-    case workItem(Teamclaw_WorkItem)
+    case task(Teamclaw_Task)
     case claim(Teamclaw_Claim)
     case submission(Teamclaw_Submission)
+    case sessionMessagePage(Teamclaw_SessionMessagePage)
 
   }
 
@@ -756,7 +780,11 @@ public struct Teamclaw_CreateSessionRequest: Sendable {
 
   public var inviteActorIds: [String] = []
 
-  public var workItemID: String = String()
+  public var taskID: String = String()
+
+  /// Canonical actor id of the creator. Prefer member_id for humans.
+  /// If empty, the daemon falls back to sender_device_id for backward compat.
+  public var senderActorID: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -792,6 +820,40 @@ public struct Teamclaw_FetchSessionRequest: Sendable {
   // methods supported on all messages.
 
   public var sessionID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_FetchSessionMessagesRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var sessionID: String = String()
+
+  public var beforeCreatedAt: Int64 = 0
+
+  public var pageSize: UInt32 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_SessionMessagePage: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var sessionID: String = String()
+
+  public var messages: [Teamclaw_Message] = []
+
+  public var hasMore_p: Bool = false
+
+  public var nextBeforeCreatedAt: Int64 = 0
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -835,7 +897,7 @@ public struct Teamclaw_RemoveParticipantRequest: Sendable {
   public init() {}
 }
 
-public struct Teamclaw_CreateWorkItemRequest: Sendable {
+public struct Teamclaw_CreateTaskRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -857,46 +919,54 @@ public struct Teamclaw_CreateWorkItemRequest: Sendable {
   public init() {}
 }
 
-public struct Teamclaw_ClaimWorkItemRequest: Sendable {
+public struct Teamclaw_ClaimTaskRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   public var sessionID: String = String()
 
-  public var workItemID: String = String()
+  public var taskID: String = String()
+
+  /// Canonical actor id of the claimant. Prefer member_id for humans.
+  /// If empty, the daemon falls back to sender_device_id for backward compat.
+  public var senderActorID: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 }
 
-public struct Teamclaw_SubmitWorkItemRequest: Sendable {
+public struct Teamclaw_SubmitTaskRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   public var sessionID: String = String()
 
-  public var workItemID: String = String()
+  public var taskID: String = String()
 
   public var content: String = String()
 
+  /// Canonical actor id of the submitter. Prefer member_id for humans.
+  /// If empty, the daemon falls back to sender_device_id for backward compat.
+  public var senderActorID: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 }
 
-public struct Teamclaw_UpdateWorkItemRequest: Sendable {
+public struct Teamclaw_UpdateTaskRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   public var sessionID: String = String()
 
-  public var workItemID: String = String()
+  public var taskID: String = String()
 
-  public var status: Teamclaw_WorkItemStatus = .unknown
+  public var status: Teamclaw_TaskStatus = .unknown
 
   public var title: String = String()
 
@@ -955,8 +1025,8 @@ extension Teamclaw_MessageKind: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0MESSAGE_KIND_UNKNOWN\0\u{1}TEXT\0\u{1}SYSTEM\0\u{1}WORK_EVENT\0")
 }
 
-extension Teamclaw_WorkItemStatus: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0WORK_ITEM_STATUS_UNKNOWN\0\u{1}OPEN\0\u{1}IN_PROGRESS\0\u{1}DONE\0")
+extension Teamclaw_TaskStatus: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TASK_STATUS_UNKNOWN\0\u{1}OPEN\0\u{1}IN_PROGRESS\0\u{1}DONE\0")
 }
 
 extension Teamclaw_Actor: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -1011,7 +1081,7 @@ extension Teamclaw_Actor: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
 
 extension Teamclaw_SessionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SessionInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}session_type\0\u{3}team_id\0\u{1}title\0\u{3}host_device_id\0\u{3}created_by\0\u{3}created_at\0\u{1}participants\0\u{1}summary\0\u{3}primary_agent_id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}session_type\0\u{3}team_id\0\u{1}title\0\u{3}host_device_id\0\u{3}created_by\0\u{3}created_at\0\u{1}participants\0\u{1}summary\0\u{3}primary_agent_id\0\u{3}task_id\0\u{3}last_message_preview\0\u{3}last_message_at\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1029,6 +1099,9 @@ extension Teamclaw_SessionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 8: try { try decoder.decodeRepeatedMessageField(value: &self.participants) }()
       case 9: try { try decoder.decodeSingularStringField(value: &self.summary) }()
       case 10: try { try decoder.decodeSingularStringField(value: &self.primaryAgentID) }()
+      case 11: try { try decoder.decodeSingularStringField(value: &self.taskID) }()
+      case 12: try { try decoder.decodeSingularStringField(value: &self.lastMessagePreview) }()
+      case 13: try { try decoder.decodeSingularInt64Field(value: &self.lastMessageAt) }()
       default: break
       }
     }
@@ -1065,6 +1138,15 @@ extension Teamclaw_SessionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if !self.primaryAgentID.isEmpty {
       try visitor.visitSingularStringField(value: self.primaryAgentID, fieldNumber: 10)
     }
+    if !self.taskID.isEmpty {
+      try visitor.visitSingularStringField(value: self.taskID, fieldNumber: 11)
+    }
+    if !self.lastMessagePreview.isEmpty {
+      try visitor.visitSingularStringField(value: self.lastMessagePreview, fieldNumber: 12)
+    }
+    if self.lastMessageAt != 0 {
+      try visitor.visitSingularInt64Field(value: self.lastMessageAt, fieldNumber: 13)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1079,6 +1161,9 @@ extension Teamclaw_SessionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.participants != rhs.participants {return false}
     if lhs.summary != rhs.summary {return false}
     if lhs.primaryAgentID != rhs.primaryAgentID {return false}
+    if lhs.taskID != rhs.taskID {return false}
+    if lhs.lastMessagePreview != rhs.lastMessagePreview {return false}
+    if lhs.lastMessageAt != rhs.lastMessageAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1294,9 +1379,9 @@ extension Teamclaw_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
   }
 }
 
-extension Teamclaw_WorkItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".WorkItem"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}work_item_id\0\u{3}session_id\0\u{1}title\0\u{1}description\0\u{1}status\0\u{3}parent_id\0\u{3}created_by\0\u{3}created_at\0\u{1}claims\0\u{1}submissions\0\u{1}archived\0")
+extension Teamclaw_Task: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Task"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}task_id\0\u{3}session_id\0\u{1}title\0\u{1}description\0\u{1}status\0\u{3}parent_id\0\u{3}created_by\0\u{3}created_at\0\u{1}claims\0\u{1}submissions\0\u{1}archived\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1304,7 +1389,7 @@ extension Teamclaw_WorkItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.workItemID) }()
+      case 1: try { try decoder.decodeSingularStringField(value: &self.taskID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.title) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
@@ -1321,8 +1406,8 @@ extension Teamclaw_WorkItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.workItemID.isEmpty {
-      try visitor.visitSingularStringField(value: self.workItemID, fieldNumber: 1)
+    if !self.taskID.isEmpty {
+      try visitor.visitSingularStringField(value: self.taskID, fieldNumber: 1)
     }
     if !self.sessionID.isEmpty {
       try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 2)
@@ -1357,8 +1442,8 @@ extension Teamclaw_WorkItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Teamclaw_WorkItem, rhs: Teamclaw_WorkItem) -> Bool {
-    if lhs.workItemID != rhs.workItemID {return false}
+  public static func ==(lhs: Teamclaw_Task, rhs: Teamclaw_Task) -> Bool {
+    if lhs.taskID != rhs.taskID {return false}
     if lhs.sessionID != rhs.sessionID {return false}
     if lhs.title != rhs.title {return false}
     if lhs.description_p != rhs.description_p {return false}
@@ -1376,7 +1461,7 @@ extension Teamclaw_WorkItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
 
 extension Teamclaw_Claim: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Claim"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}claim_id\0\u{3}work_item_id\0\u{3}actor_id\0\u{3}claimed_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}claim_id\0\u{3}task_id\0\u{3}actor_id\0\u{3}claimed_at\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1385,7 +1470,7 @@ extension Teamclaw_Claim: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.claimID) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.workItemID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.taskID) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.actorID) }()
       case 4: try { try decoder.decodeSingularInt64Field(value: &self.claimedAt) }()
       default: break
@@ -1397,8 +1482,8 @@ extension Teamclaw_Claim: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
     if !self.claimID.isEmpty {
       try visitor.visitSingularStringField(value: self.claimID, fieldNumber: 1)
     }
-    if !self.workItemID.isEmpty {
-      try visitor.visitSingularStringField(value: self.workItemID, fieldNumber: 2)
+    if !self.taskID.isEmpty {
+      try visitor.visitSingularStringField(value: self.taskID, fieldNumber: 2)
     }
     if !self.actorID.isEmpty {
       try visitor.visitSingularStringField(value: self.actorID, fieldNumber: 3)
@@ -1411,7 +1496,7 @@ extension Teamclaw_Claim: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
 
   public static func ==(lhs: Teamclaw_Claim, rhs: Teamclaw_Claim) -> Bool {
     if lhs.claimID != rhs.claimID {return false}
-    if lhs.workItemID != rhs.workItemID {return false}
+    if lhs.taskID != rhs.taskID {return false}
     if lhs.actorID != rhs.actorID {return false}
     if lhs.claimedAt != rhs.claimedAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
@@ -1421,7 +1506,7 @@ extension Teamclaw_Claim: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
 
 extension Teamclaw_Submission: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Submission"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}submission_id\0\u{3}work_item_id\0\u{3}actor_id\0\u{1}content\0\u{3}submitted_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}submission_id\0\u{3}task_id\0\u{3}actor_id\0\u{1}content\0\u{3}submitted_at\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1430,7 +1515,7 @@ extension Teamclaw_Submission: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.submissionID) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.workItemID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.taskID) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.actorID) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.content) }()
       case 5: try { try decoder.decodeSingularInt64Field(value: &self.submittedAt) }()
@@ -1443,8 +1528,8 @@ extension Teamclaw_Submission: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     if !self.submissionID.isEmpty {
       try visitor.visitSingularStringField(value: self.submissionID, fieldNumber: 1)
     }
-    if !self.workItemID.isEmpty {
-      try visitor.visitSingularStringField(value: self.workItemID, fieldNumber: 2)
+    if !self.taskID.isEmpty {
+      try visitor.visitSingularStringField(value: self.taskID, fieldNumber: 2)
     }
     if !self.actorID.isEmpty {
       try visitor.visitSingularStringField(value: self.actorID, fieldNumber: 3)
@@ -1460,7 +1545,7 @@ extension Teamclaw_Submission: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
   public static func ==(lhs: Teamclaw_Submission, rhs: Teamclaw_Submission) -> Bool {
     if lhs.submissionID != rhs.submissionID {return false}
-    if lhs.workItemID != rhs.workItemID {return false}
+    if lhs.taskID != rhs.taskID {return false}
     if lhs.actorID != rhs.actorID {return false}
     if lhs.content != rhs.content {return false}
     if lhs.submittedAt != rhs.submittedAt {return false}
@@ -1607,8 +1692,8 @@ extension Teamclaw_SessionMetaEnvelope: SwiftProtobuf.Message, SwiftProtobuf._Me
   }
 }
 
-extension Teamclaw_WorkItemEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".WorkItemEvent"
+extension Teamclaw_TaskEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".TaskEvent"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}created\0\u{1}updated\0\u{1}claimed\0\u{1}submitted\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1618,7 +1703,7 @@ extension Teamclaw_WorkItemEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageI
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try {
-        var v: Teamclaw_WorkItem?
+        var v: Teamclaw_Task?
         var hadOneofValue = false
         if let current = self.event {
           hadOneofValue = true
@@ -1631,7 +1716,7 @@ extension Teamclaw_WorkItemEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageI
         }
       }()
       case 2: try {
-        var v: Teamclaw_WorkItem?
+        var v: Teamclaw_Task?
         var hadOneofValue = false
         if let current = self.event {
           hadOneofValue = true
@@ -1701,7 +1786,7 @@ extension Teamclaw_WorkItemEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageI
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Teamclaw_WorkItemEvent, rhs: Teamclaw_WorkItemEvent) -> Bool {
+  public static func ==(lhs: Teamclaw_TaskEvent, rhs: Teamclaw_TaskEvent) -> Bool {
     if lhs.event != rhs.event {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -1849,7 +1934,7 @@ extension Teamclaw_TeamMemberList: SwiftProtobuf.Message, SwiftProtobuf._Message
 
 extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".RpcRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{3}sender_device_id\0\u{4}\u{8}create_session\0\u{3}join_session\0\u{3}fetch_session\0\u{3}add_participant\0\u{3}remove_participant\0\u{3}create_work_item\0\u{3}claim_work_item\0\u{3}submit_work_item\0\u{3}update_work_item\0\u{3}register_session\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{3}sender_device_id\0\u{4}\u{8}create_session\0\u{3}join_session\0\u{3}fetch_session\0\u{3}add_participant\0\u{3}remove_participant\0\u{3}create_task\0\u{3}claim_task\0\u{3}submit_task\0\u{3}update_task\0\u{3}register_session\0\u{3}fetch_session_messages\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1925,55 +2010,55 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
         }
       }()
       case 15: try {
-        var v: Teamclaw_CreateWorkItemRequest?
+        var v: Teamclaw_CreateTaskRequest?
         var hadOneofValue = false
         if let current = self.method {
           hadOneofValue = true
-          if case .createWorkItem(let m) = current {v = m}
+          if case .createTask(let m) = current {v = m}
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {
           if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.method = .createWorkItem(v)
+          self.method = .createTask(v)
         }
       }()
       case 16: try {
-        var v: Teamclaw_ClaimWorkItemRequest?
+        var v: Teamclaw_ClaimTaskRequest?
         var hadOneofValue = false
         if let current = self.method {
           hadOneofValue = true
-          if case .claimWorkItem(let m) = current {v = m}
+          if case .claimTask(let m) = current {v = m}
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {
           if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.method = .claimWorkItem(v)
+          self.method = .claimTask(v)
         }
       }()
       case 17: try {
-        var v: Teamclaw_SubmitWorkItemRequest?
+        var v: Teamclaw_SubmitTaskRequest?
         var hadOneofValue = false
         if let current = self.method {
           hadOneofValue = true
-          if case .submitWorkItem(let m) = current {v = m}
+          if case .submitTask(let m) = current {v = m}
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {
           if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.method = .submitWorkItem(v)
+          self.method = .submitTask(v)
         }
       }()
       case 18: try {
-        var v: Teamclaw_UpdateWorkItemRequest?
+        var v: Teamclaw_UpdateTaskRequest?
         var hadOneofValue = false
         if let current = self.method {
           hadOneofValue = true
-          if case .updateWorkItem(let m) = current {v = m}
+          if case .updateTask(let m) = current {v = m}
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {
           if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.method = .updateWorkItem(v)
+          self.method = .updateTask(v)
         }
       }()
       case 19: try {
@@ -1987,6 +2072,19 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
         if let v = v {
           if hadOneofValue {try decoder.handleConflictingOneOf()}
           self.method = .registerSession(v)
+        }
+      }()
+      case 20: try {
+        var v: Teamclaw_FetchSessionMessagesRequest?
+        var hadOneofValue = false
+        if let current = self.method {
+          hadOneofValue = true
+          if case .fetchSessionMessages(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.method = .fetchSessionMessages(v)
         }
       }()
       default: break
@@ -2026,25 +2124,29 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
       guard case .removeParticipant(let v)? = self.method else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 14)
     }()
-    case .createWorkItem?: try {
-      guard case .createWorkItem(let v)? = self.method else { preconditionFailure() }
+    case .createTask?: try {
+      guard case .createTask(let v)? = self.method else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 15)
     }()
-    case .claimWorkItem?: try {
-      guard case .claimWorkItem(let v)? = self.method else { preconditionFailure() }
+    case .claimTask?: try {
+      guard case .claimTask(let v)? = self.method else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 16)
     }()
-    case .submitWorkItem?: try {
-      guard case .submitWorkItem(let v)? = self.method else { preconditionFailure() }
+    case .submitTask?: try {
+      guard case .submitTask(let v)? = self.method else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 17)
     }()
-    case .updateWorkItem?: try {
-      guard case .updateWorkItem(let v)? = self.method else { preconditionFailure() }
+    case .updateTask?: try {
+      guard case .updateTask(let v)? = self.method else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 18)
     }()
     case .registerSession?: try {
       guard case .registerSession(let v)? = self.method else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 19)
+    }()
+    case .fetchSessionMessages?: try {
+      guard case .fetchSessionMessages(let v)? = self.method else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 20)
     }()
     case nil: break
     }
@@ -2062,7 +2164,7 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
 extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".RpcResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}success\0\u{1}error\0\u{4}\u{7}session_info\0\u{3}work_item\0\u{1}claim\0\u{1}submission\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}success\0\u{1}error\0\u{4}\u{7}session_info\0\u{1}task\0\u{1}claim\0\u{1}submission\0\u{3}session_message_page\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2087,16 +2189,16 @@ extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
         }
       }()
       case 11: try {
-        var v: Teamclaw_WorkItem?
+        var v: Teamclaw_Task?
         var hadOneofValue = false
         if let current = self.result {
           hadOneofValue = true
-          if case .workItem(let m) = current {v = m}
+          if case .task(let m) = current {v = m}
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {
           if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.result = .workItem(v)
+          self.result = .task(v)
         }
       }()
       case 12: try {
@@ -2125,6 +2227,19 @@ extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
           self.result = .submission(v)
         }
       }()
+      case 14: try {
+        var v: Teamclaw_SessionMessagePage?
+        var hadOneofValue = false
+        if let current = self.result {
+          hadOneofValue = true
+          if case .sessionMessagePage(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.result = .sessionMessagePage(v)
+        }
+      }()
       default: break
       }
     }
@@ -2149,8 +2264,8 @@ extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       guard case .sessionInfo(let v)? = self.result else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
     }()
-    case .workItem?: try {
-      guard case .workItem(let v)? = self.result else { preconditionFailure() }
+    case .task?: try {
+      guard case .task(let v)? = self.result else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
     }()
     case .claim?: try {
@@ -2160,6 +2275,10 @@ extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     case .submission?: try {
       guard case .submission(let v)? = self.result else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
+    }()
+    case .sessionMessagePage?: try {
+      guard case .sessionMessagePage(let v)? = self.result else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 14)
     }()
     case nil: break
     }
@@ -2178,7 +2297,7 @@ extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
 
 extension Teamclaw_CreateSessionRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateSessionRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_type\0\u{3}team_id\0\u{1}title\0\u{1}summary\0\u{3}invite_actor_ids\0\u{3}work_item_id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_type\0\u{3}team_id\0\u{1}title\0\u{1}summary\0\u{3}invite_actor_ids\0\u{3}task_id\0\u{3}sender_actor_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2191,7 +2310,8 @@ extension Teamclaw_CreateSessionRequest: SwiftProtobuf.Message, SwiftProtobuf._M
       case 3: try { try decoder.decodeSingularStringField(value: &self.title) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.summary) }()
       case 5: try { try decoder.decodeRepeatedStringField(value: &self.inviteActorIds) }()
-      case 6: try { try decoder.decodeSingularStringField(value: &self.workItemID) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.taskID) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.senderActorID) }()
       default: break
       }
     }
@@ -2213,8 +2333,11 @@ extension Teamclaw_CreateSessionRequest: SwiftProtobuf.Message, SwiftProtobuf._M
     if !self.inviteActorIds.isEmpty {
       try visitor.visitRepeatedStringField(value: self.inviteActorIds, fieldNumber: 5)
     }
-    if !self.workItemID.isEmpty {
-      try visitor.visitSingularStringField(value: self.workItemID, fieldNumber: 6)
+    if !self.taskID.isEmpty {
+      try visitor.visitSingularStringField(value: self.taskID, fieldNumber: 6)
+    }
+    if !self.senderActorID.isEmpty {
+      try visitor.visitSingularStringField(value: self.senderActorID, fieldNumber: 7)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -2225,7 +2348,8 @@ extension Teamclaw_CreateSessionRequest: SwiftProtobuf.Message, SwiftProtobuf._M
     if lhs.title != rhs.title {return false}
     if lhs.summary != rhs.summary {return false}
     if lhs.inviteActorIds != rhs.inviteActorIds {return false}
-    if lhs.workItemID != rhs.workItemID {return false}
+    if lhs.taskID != rhs.taskID {return false}
+    if lhs.senderActorID != rhs.senderActorID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2295,6 +2419,91 @@ extension Teamclaw_FetchSessionRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
 
   public static func ==(lhs: Teamclaw_FetchSessionRequest, rhs: Teamclaw_FetchSessionRequest) -> Bool {
     if lhs.sessionID != rhs.sessionID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_FetchSessionMessagesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".FetchSessionMessagesRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}before_created_at\0\u{3}page_size\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
+      case 2: try { try decoder.decodeSingularInt64Field(value: &self.beforeCreatedAt) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.pageSize) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.sessionID.isEmpty {
+      try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 1)
+    }
+    if self.beforeCreatedAt != 0 {
+      try visitor.visitSingularInt64Field(value: self.beforeCreatedAt, fieldNumber: 2)
+    }
+    if self.pageSize != 0 {
+      try visitor.visitSingularUInt32Field(value: self.pageSize, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_FetchSessionMessagesRequest, rhs: Teamclaw_FetchSessionMessagesRequest) -> Bool {
+    if lhs.sessionID != rhs.sessionID {return false}
+    if lhs.beforeCreatedAt != rhs.beforeCreatedAt {return false}
+    if lhs.pageSize != rhs.pageSize {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_SessionMessagePage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SessionMessagePage"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{1}messages\0\u{3}has_more\0\u{3}next_before_created_at\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.messages) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.hasMore_p) }()
+      case 4: try { try decoder.decodeSingularInt64Field(value: &self.nextBeforeCreatedAt) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.sessionID.isEmpty {
+      try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 1)
+    }
+    if !self.messages.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.messages, fieldNumber: 2)
+    }
+    if self.hasMore_p != false {
+      try visitor.visitSingularBoolField(value: self.hasMore_p, fieldNumber: 3)
+    }
+    if self.nextBeforeCreatedAt != 0 {
+      try visitor.visitSingularInt64Field(value: self.nextBeforeCreatedAt, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_SessionMessagePage, rhs: Teamclaw_SessionMessagePage) -> Bool {
+    if lhs.sessionID != rhs.sessionID {return false}
+    if lhs.messages != rhs.messages {return false}
+    if lhs.hasMore_p != rhs.hasMore_p {return false}
+    if lhs.nextBeforeCreatedAt != rhs.nextBeforeCreatedAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2374,8 +2583,8 @@ extension Teamclaw_RemoveParticipantRequest: SwiftProtobuf.Message, SwiftProtobu
   }
 }
 
-extension Teamclaw_CreateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".CreateWorkItemRequest"
+extension Teamclaw_CreateTaskRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CreateTaskRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{1}title\0\u{1}description\0\u{3}parent_id\0\u{3}sender_actor_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -2413,7 +2622,7 @@ extension Teamclaw_CreateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Teamclaw_CreateWorkItemRequest, rhs: Teamclaw_CreateWorkItemRequest) -> Bool {
+  public static func ==(lhs: Teamclaw_CreateTaskRequest, rhs: Teamclaw_CreateTaskRequest) -> Bool {
     if lhs.sessionID != rhs.sessionID {return false}
     if lhs.title != rhs.title {return false}
     if lhs.description_p != rhs.description_p {return false}
@@ -2424,9 +2633,9 @@ extension Teamclaw_CreateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Teamclaw_ClaimWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".ClaimWorkItemRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}work_item_id\0")
+extension Teamclaw_ClaimTaskRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ClaimTaskRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}task_id\0\u{3}sender_actor_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2435,7 +2644,8 @@ extension Teamclaw_ClaimWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._M
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.workItemID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.taskID) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.senderActorID) }()
       default: break
       }
     }
@@ -2445,23 +2655,27 @@ extension Teamclaw_ClaimWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._M
     if !self.sessionID.isEmpty {
       try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 1)
     }
-    if !self.workItemID.isEmpty {
-      try visitor.visitSingularStringField(value: self.workItemID, fieldNumber: 2)
+    if !self.taskID.isEmpty {
+      try visitor.visitSingularStringField(value: self.taskID, fieldNumber: 2)
+    }
+    if !self.senderActorID.isEmpty {
+      try visitor.visitSingularStringField(value: self.senderActorID, fieldNumber: 3)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Teamclaw_ClaimWorkItemRequest, rhs: Teamclaw_ClaimWorkItemRequest) -> Bool {
+  public static func ==(lhs: Teamclaw_ClaimTaskRequest, rhs: Teamclaw_ClaimTaskRequest) -> Bool {
     if lhs.sessionID != rhs.sessionID {return false}
-    if lhs.workItemID != rhs.workItemID {return false}
+    if lhs.taskID != rhs.taskID {return false}
+    if lhs.senderActorID != rhs.senderActorID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension Teamclaw_SubmitWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".SubmitWorkItemRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}work_item_id\0\u{1}content\0")
+extension Teamclaw_SubmitTaskRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SubmitTaskRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}task_id\0\u{1}content\0\u{3}sender_actor_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2470,8 +2684,9 @@ extension Teamclaw_SubmitWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.workItemID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.taskID) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.content) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.senderActorID) }()
       default: break
       }
     }
@@ -2481,27 +2696,31 @@ extension Teamclaw_SubmitWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
     if !self.sessionID.isEmpty {
       try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 1)
     }
-    if !self.workItemID.isEmpty {
-      try visitor.visitSingularStringField(value: self.workItemID, fieldNumber: 2)
+    if !self.taskID.isEmpty {
+      try visitor.visitSingularStringField(value: self.taskID, fieldNumber: 2)
     }
     if !self.content.isEmpty {
       try visitor.visitSingularStringField(value: self.content, fieldNumber: 3)
     }
+    if !self.senderActorID.isEmpty {
+      try visitor.visitSingularStringField(value: self.senderActorID, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Teamclaw_SubmitWorkItemRequest, rhs: Teamclaw_SubmitWorkItemRequest) -> Bool {
+  public static func ==(lhs: Teamclaw_SubmitTaskRequest, rhs: Teamclaw_SubmitTaskRequest) -> Bool {
     if lhs.sessionID != rhs.sessionID {return false}
-    if lhs.workItemID != rhs.workItemID {return false}
+    if lhs.taskID != rhs.taskID {return false}
     if lhs.content != rhs.content {return false}
+    if lhs.senderActorID != rhs.senderActorID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension Teamclaw_UpdateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".UpdateWorkItemRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}work_item_id\0\u{1}status\0\u{1}title\0\u{1}description\0\u{1}archived\0")
+extension Teamclaw_UpdateTaskRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".UpdateTaskRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}task_id\0\u{1}status\0\u{1}title\0\u{1}description\0\u{1}archived\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2510,7 +2729,7 @@ extension Teamclaw_UpdateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.workItemID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.taskID) }()
       case 3: try { try decoder.decodeSingularEnumField(value: &self.status) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.title) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
@@ -2528,8 +2747,8 @@ extension Teamclaw_UpdateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
     if !self.sessionID.isEmpty {
       try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 1)
     }
-    if !self.workItemID.isEmpty {
-      try visitor.visitSingularStringField(value: self.workItemID, fieldNumber: 2)
+    if !self.taskID.isEmpty {
+      try visitor.visitSingularStringField(value: self.taskID, fieldNumber: 2)
     }
     if self.status != .unknown {
       try visitor.visitSingularEnumField(value: self.status, fieldNumber: 3)
@@ -2546,9 +2765,9 @@ extension Teamclaw_UpdateWorkItemRequest: SwiftProtobuf.Message, SwiftProtobuf._
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Teamclaw_UpdateWorkItemRequest, rhs: Teamclaw_UpdateWorkItemRequest) -> Bool {
+  public static func ==(lhs: Teamclaw_UpdateTaskRequest, rhs: Teamclaw_UpdateTaskRequest) -> Bool {
     if lhs.sessionID != rhs.sessionID {return false}
-    if lhs.workItemID != rhs.workItemID {return false}
+    if lhs.taskID != rhs.taskID {return false}
     if lhs.status != rhs.status {return false}
     if lhs.title != rhs.title {return false}
     if lhs.description_p != rhs.description_p {return false}

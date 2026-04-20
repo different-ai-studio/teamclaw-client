@@ -8,14 +8,13 @@ struct AMUXMacApp: App {
     @State private var pairing = PairingManager(store: KeychainCredentialStore())
     @State private var detailTeamclaw = TeamclawService()
     @State private var shared = SharedConnection()
-    @AppStorage(AppAppearance.storageKey) private var appearanceRaw: String = AppAppearance.system.rawValue
     @State private var notificationsReady = false
 
     var body: some Scene {
         WindowGroup {
             RootView(pairing: pairing, teamclaw: detailTeamclaw)
                 .frame(minWidth: 1100, minHeight: 700)
-                .preferredColorScheme(currentAppearance.colorScheme)
+                .appAppearance()
                 .environment(shared)
                 .task {
                     guard !notificationsReady else { return }
@@ -33,9 +32,9 @@ struct AMUXMacApp: App {
             Agent.self,
             AgentEvent.self,
             Member.self,
-            CollabSession.self,
+            Session.self,
             SessionMessage.self,
-            WorkItem.self,
+            SessionTask.self,
             Workspace.self,
         ])
 
@@ -46,14 +45,19 @@ struct AMUXMacApp: App {
 
         MembersWindowScene(pairing: pairing)
             .environment(shared)
+            .modelContainer(for: [
+                Agent.self,
+                AgentEvent.self,
+                Member.self,
+                Session.self,
+                SessionMessage.self,
+                SessionTask.self,
+                Workspace.self,
+            ])
 
         InviteWindowScene(pairing: pairing)
             .environment(shared)
 
         SettingsScene(pairing: pairing)
-    }
-
-    private var currentAppearance: AppAppearance {
-        AppAppearance(rawValue: appearanceRaw) ?? .system
     }
 }

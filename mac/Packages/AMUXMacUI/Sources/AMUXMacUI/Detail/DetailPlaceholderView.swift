@@ -11,8 +11,9 @@ struct DetailPlaceholderView: View {
     let deviceId: String
     let peerId: String
 
-    @Query private var sessions: [CollabSession]
-    @Query private var tasks: [WorkItem]
+    @Query private var sessions: [Session]
+    @Query private var agents: [Agent]
+    @Query private var tasks: [SessionTask]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,15 +48,45 @@ struct DetailPlaceholderView: View {
         }
     }
 
-    private var selectedSession: CollabSession? {
-        guard let id = selectedSessionId else { return nil }
-        return sessions.first(where: { $0.sessionId == id })
+    private var selectedSession: Session? {
+        guard let rawId = selectedSessionId else { return nil }
+        let id = normalizedSelectionId(rawId)
+        if let real = sessions.first(where: { $0.sessionId == id }) {
+            return real
+        }
+        // Fall back to a display-only wrapper when the selection refers to a
+        // solo agent (one that never acquired a shared session). Not persisted
+        // — SessionDetailView only reads fields and routes through
+        // AgentDetailViewModel via `primaryAgentId`. This lets the detail view
+        // render the agent's event feed without requiring a real teamclaw
+        // session on the daemon. See 2026-04-20 Mac alignment with iOS.
+        if let agent = agents.first(where: { $0.agentId == id }) {
+            let stub = Session(
+                sessionId: agent.agentId,
+                mode: "solo",
+                title: agent.sessionTitle.isEmpty ? agent.currentPrompt : agent.sessionTitle,
+                createdAt: agent.startedAt,
+                lastMessageAt: agent.lastEventTime
+            )
+            stub.primaryAgentId = agent.agentId
+            return stub
+        }
+        return nil
     }
 
-    private var selectedTask: WorkItem? {
+    private func normalizedSelectionId(_ rawId: String) -> String {
+        if rawId.hasPrefix("collab:") {
+            return String(rawId.dropFirst("collab:".count))
+        }
+        if rawId.hasPrefix("agent:") {
+            return String(rawId.dropFirst("agent:".count))
+        }
+        return rawId
+    }
+
+    private var selectedTask: SessionTask? {
         guard let id = selectedTaskId else { return nil }
-        return tasks.first(where: { $0.workItemId == id })
+        return tasks.first(where: { $0.taskId == id })
     }
 
 }
-

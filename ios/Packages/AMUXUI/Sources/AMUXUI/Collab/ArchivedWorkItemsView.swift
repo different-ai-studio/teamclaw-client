@@ -2,15 +2,15 @@ import SwiftUI
 import SwiftData
 import AMUXCore
 
-struct ArchivedWorkItemsView: View {
+struct ArchivedTasksView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
     let teamclawService: TeamclawService?
 
-    @Query(filter: #Predicate<WorkItem> { $0.archived },
-           sort: \WorkItem.createdAt, order: .reverse)
-    private var archivedItems: [WorkItem]
+    @Query(filter: #Predicate<SessionTask> { $0.archived },
+           sort: \SessionTask.createdAt, order: .reverse)
+    private var archivedItems: [SessionTask]
 
     var body: some View {
         NavigationStack {
@@ -23,8 +23,8 @@ struct ArchivedWorkItemsView: View {
                     )
                 } else {
                     List {
-                        ForEach(archivedItems, id: \.workItemId) { item in
-                            WorkItemRow(item: item)
+                        ForEach(archivedItems, id: \.taskId) { item in
+                            TaskRow(item: item)
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button {
                                         unarchiveTapped(item)
@@ -51,11 +51,11 @@ struct ArchivedWorkItemsView: View {
         }
     }
 
-    private func unarchiveTapped(_ item: WorkItem) {
+    private func unarchiveTapped(_ item: SessionTask) {
         item.archived = false
         try? modelContext.save()
-        let id = item.workItemId
+        let id = item.taskId
         let sessionId = item.sessionId
-        Task { await teamclawService?.archiveWorkItem(workItemId: id, sessionId: sessionId, archived: false) }
+        Task { await teamclawService?.archiveTask(taskId: id, sessionId: sessionId, archived: false) }
     }
 }

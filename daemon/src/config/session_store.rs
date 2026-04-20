@@ -66,27 +66,32 @@ impl SessionStore {
     }
 
     pub fn to_proto_agent_list(&self) -> Vec<amux::AgentInfo> {
-        self.sessions
-            .iter()
-            .map(|s| amux::AgentInfo {
-                agent_id: s.session_id.clone(),
-                agent_type: s.agent_type,
-                worktree: s.worktree.clone(),
-                branch: String::new(),
-                status: s.status,
-                started_at: s.created_at,
-                current_prompt: s.last_prompt.clone(),
-                workspace_id: s.workspace_id.clone(),
-                session_title: String::new(),
-                last_output_summary: s.last_output_summary.clone(),
-                tool_use_count: s.tool_use_count,
-                // Historical (non-active) sessions have no live model state.
-                // Live agents are merged in by `DaemonServer::merged_agent_list`
-                // from `AgentManager::to_proto_agent_list`, which populates
-                // these fields from the running adapter.
-                available_models: vec![],
-                current_model: String::new(),
-            })
-            .collect()
+        self.sessions.iter().map(Self::session_to_info).collect()
+    }
+
+    pub fn to_proto_agent_info(&self, session_id: &str) -> Option<amux::AgentInfo> {
+        self.find_by_id(session_id).map(Self::session_to_info)
+    }
+
+    fn session_to_info(s: &StoredSession) -> amux::AgentInfo {
+        amux::AgentInfo {
+            agent_id: s.session_id.clone(),
+            agent_type: s.agent_type,
+            worktree: s.worktree.clone(),
+            branch: String::new(),
+            status: s.status,
+            started_at: s.created_at,
+            current_prompt: s.last_prompt.clone(),
+            workspace_id: s.workspace_id.clone(),
+            session_title: String::new(),
+            last_output_summary: s.last_output_summary.clone(),
+            tool_use_count: s.tool_use_count,
+            // Historical (non-active) sessions have no live model state.
+            // Live agents are merged in by `DaemonServer::merged_agent_list`
+            // from `AgentManager::to_proto_agent_list`, which populates
+            // these fields from the running adapter.
+            available_models: vec![],
+            current_model: String::new(),
+        }
     }
 }

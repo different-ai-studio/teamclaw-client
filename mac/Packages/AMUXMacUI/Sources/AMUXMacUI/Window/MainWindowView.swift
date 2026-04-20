@@ -8,6 +8,7 @@ public struct MainWindowView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SharedConnection.self) private var shared
     @SceneStorage("amux.mainWindow.sidebar") private var sidebarStorage: String = "function:sessions"
+    @SceneStorage("amux.mainWindow.activeFunction") private var activeFunctionStorage: String = "sessions"
     @SceneStorage("amux.mainWindow.selectedSession") private var selectedSessionId: String?
     @SceneStorage("amux.mainWindow.selectedTask") private var selectedTaskId: String?
     @SceneStorage("amux.mainWindow.archivedVisible") private var archivedVisible: Bool = false
@@ -17,6 +18,12 @@ public struct MainWindowView: View {
     @State private var members = MemberListViewModel()
     @State private var sessionList = SessionListViewModel()
     @State private var didStartServices = false
+    // Query workspaces here (in the main window scope) and pass them into the
+    // sheet as a plain array. Injecting a modelContainer on the sheet itself
+    // forced SwiftUI to rebuild the window scene, which dropped column 2's
+    // toolbar items; hoisting the query keeps the sheet free of
+    // @Query/modelContainer wiring.
+    @Query(sort: \Workspace.displayName) private var workspaces: [Workspace]
 
     private static let teamId = "teamclaw"
 
@@ -36,6 +43,9 @@ public struct MainWindowView: View {
     private static func parseSidebar(_ raw: String) -> SidebarItem? {
         if raw == "function:sessions" { return .function(.sessions) }
         if raw == "function:tasks" { return .function(.tasks) }
+        if raw.hasPrefix("workspace:") {
+            return .workspace(workspaceId: String(raw.dropFirst("workspace:".count)))
+        }
         if raw.hasPrefix("member:") {
             return .member(memberId: String(raw.dropFirst("member:".count)))
         }
@@ -47,7 +57,12 @@ public struct MainWindowView: View {
         case .function(.sessions), .none: "function:sessions"
         case .function(.tasks): "function:tasks"
         case .member(let id): "member:\(id)"
+        case .workspace(let id): "workspace:\(id)"
         }
+    }
+
+    private var activeFunction: SidebarFunction {
+        activeFunctionStorage == SidebarFunction.tasks.rawValue ? .tasks : .sessions
     }
 
     public var body: some View {
@@ -78,6 +93,7 @@ public struct MainWindowView: View {
                     mqtt: mqtt,
                     deviceId: pairing.deviceId,
                     peerId: peerId,
+                    workspaces: workspaces,
                     onSessionCreated: { agentId in
                         selectedSessionId = agentId
                     }
@@ -102,6 +118,7 @@ public struct MainWindowView: View {
             SidebarView(
                 selection: sidebarSelectionBinding,
                 members: members.members,
+                onlineMemberIds: members.onlineMemberIds,
                 mqtt: mqtt,
                 deviceId: pairing.deviceId,
                 peerId: peerId,
@@ -116,7 +133,12 @@ public struct MainWindowView: View {
     private var sidebarSelectionBinding: Binding<SidebarItem?> {
         Binding(
             get: { sidebarSelection },
-            set: { newValue in sidebarStorage = Self.encodeSidebar(newValue) }
+            set: { newValue in
+                sidebarStorage = Self.encodeSidebar(newValue)
+                if case .function(let function) = newValue {
+                    activeFunctionStorage = function.rawValue
+                }
+            }
         )
     }
 
@@ -134,19 +156,44 @@ public struct MainWindowView: View {
                     TaskListColumn(
                         selectedTaskId: $selectedTaskId,
                         teamclawService: teamclaw,
-                        archivedVisible: archivedVisible
+                        archivedVisible: archivedVisible,
+                        workspaceFilter: nil,
+                        workspaceName: nil
                     )
                 case .function(.sessions), .none:
                     SessionListColumn(
                         memberFilter: nil,
                         memberName: nil,
+                        workspaceFilter: nil,
+                        workspaceName: nil,
                         selectedSessionId: $selectedSessionId,
                         onNewSession: handleNewSession
                     )
+                case .workspace(let id):
+                    if activeFunction == .tasks {
+                        TaskListColumn(
+                            selectedTaskId: $selectedTaskId,
+                            teamclawService: teamclaw,
+                            archivedVisible: archivedVisible,
+                            workspaceFilter: id,
+                            workspaceName: workspaces.first(where: { $0.workspaceId == id })?.displayName
+                        )
+                    } else {
+                        SessionListColumn(
+                            memberFilter: nil,
+                            memberName: nil,
+                            workspaceFilter: id,
+                            workspaceName: workspaces.first(where: { $0.workspaceId == id })?.displayName,
+                            selectedSessionId: $selectedSessionId,
+                            onNewSession: handleNewSession
+                        )
+                    }
                 case .member(let id):
                     SessionListColumn(
                         memberFilter: id,
                         memberName: members.members.first(where: { $0.memberId == id })?.displayName,
+                        workspaceFilter: nil,
+                        workspaceName: nil,
                         selectedSessionId: $selectedSessionId,
                         onNewSession: handleNewSession
                     )
@@ -205,7 +252,7 @@ public struct MainWindowView: View {
             modelContext: modelContext
         )
         members.start(mqtt: service, deviceId: pairing.deviceId, modelContext: modelContext)
-        // Subscribe to amux/{deviceId}/agents and amux/{deviceId}/workspaces,
+        // Subscribe to amux/{deviceId}/agent/+/state and amux/{deviceId}/workspaces,
         // persisting Agent/Workspace rows to SwiftData. Matches iOS ContentView behavior.
         sessionList.start(mqtt: service, deviceId: pairing.deviceId, modelContext: modelContext)
     }

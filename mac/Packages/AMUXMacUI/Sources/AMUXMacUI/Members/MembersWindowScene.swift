@@ -13,6 +13,7 @@ public struct MembersWindowScene: Scene {
         Window("Members", id: "amux.members") {
             MembersWindowView(pairing: pairing)
                 .frame(minWidth: 480, minHeight: 540)
+                .appAppearance()
         }
         .keyboardShortcut("m", modifiers: [.command, .shift])
     }

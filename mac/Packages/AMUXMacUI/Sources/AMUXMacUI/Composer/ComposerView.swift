@@ -61,16 +61,25 @@ struct ComposerView: View {
                     .glassEffect(in: Capsule())
                     .help(voice.state == .recording ? "Stop recording (Esc to cancel)" : "Voice input")
 
-                    Button(action: send) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(canSend ? Color.white : .secondary)
-                            .frame(width: 30, height: 30)
-                            .background(canSend ? Color.accentColor : Color.secondary.opacity(0.2), in: Capsule())
+                    Button(action: primaryButtonTapped) {
+                        if isAgentActive {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Color.white)
+                                .frame(width: 30, height: 30)
+                                .background(Color.red, in: Capsule())
+                        } else {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(canSend ? Color.white : .secondary)
+                                .frame(width: 30, height: 30)
+                                .background(canSend ? Color.accentColor : Color.secondary.opacity(0.2), in: Capsule())
+                        }
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(!canSend)
+                    .disabled(!isAgentActive && !canSend)
+                    .help(isAgentActive ? "Stop agent" : "Send")
                 }
                 .padding(.horizontal, 14)
                 .padding(.bottom, 12)
@@ -95,6 +104,19 @@ struct ComposerView: View {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
     }
 
+    private var isAgentActive: Bool {
+        agentVM?.isActive == true
+    }
+
+    private func primaryButtonTapped() {
+        if isAgentActive {
+            guard let agentVM else { return }
+            Task { try? await agentVM.cancelTask() }
+        } else {
+            send()
+        }
+    }
+
     private func send() {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isSending else { return }
@@ -111,8 +133,8 @@ struct ComposerView: View {
                 try? await agentVM.sendPrompt(trimmed, modelId: model, modelContext: ctx)
             }
         } else {
-            // Collab-only session - broadcast a chat bubble via Teamclaw.
-            teamclawService.sendMessage(sessionId: sessionId, content: trimmed, actorId: actorId, modelId: model)
+            // Shared session - broadcast a chat bubble via Teamclaw.
+            teamclawService.sendMessage(sessionId: sessionId, content: trimmed, modelId: model)
             isSending = false
         }
     }

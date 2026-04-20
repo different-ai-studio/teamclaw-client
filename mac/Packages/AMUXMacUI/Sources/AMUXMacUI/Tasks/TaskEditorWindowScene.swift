@@ -30,6 +30,7 @@ private struct TaskEditorScene: View {
         TaskEditorView(input: input, teamclawService: teamclawService) {
             dismissWindow(id: "amux.taskEditor")
         }
-        .modelContainer(for: [WorkItem.self, Agent.self, CollabSession.self, SessionMessage.self, Member.self, AgentEvent.self, Workspace.self])
+        .modelContainer(for: [SessionTask.self, Agent.self, Session.self, SessionMessage.self, Member.self, AgentEvent.self, Workspace.self])
+        .appAppearance()
     }
 }

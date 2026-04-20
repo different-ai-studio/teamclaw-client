@@ -72,6 +72,45 @@ impl MessageStore {
         }
     }
 
+    /// Read a page of messages ordered oldest -> newest.
+    ///
+    /// When `before_created_at` is 0, returns the most recent `page_size`
+    /// messages. Otherwise returns the newest page of messages strictly older
+    /// than `before_created_at`.
+    pub fn page_before(&self, before_created_at: i64, page_size: u32) -> (Vec<&StoredMessage>, bool, i64) {
+        let page = page_size.max(1) as usize;
+
+        let end = if before_created_at == 0 {
+            self.messages.len()
+        } else {
+            self.messages
+                .iter()
+                .position(|m| m.created_at.timestamp() >= before_created_at)
+                .unwrap_or(self.messages.len())
+        };
+
+        if end == 0 {
+            return (vec![], false, before_created_at);
+        }
+
+        let start = end.saturating_sub(page);
+        let has_more = start > 0;
+        let slice = self.messages[start..end].iter().collect::<Vec<_>>();
+        let next_before_created_at = slice
+            .first()
+            .map(|m| m.created_at.timestamp())
+            .unwrap_or(before_created_at);
+
+        (slice, has_more, next_before_created_at)
+    }
+
+    pub fn latest_preview(&self) -> Option<(String, i64)> {
+        self.messages.last().map(|msg| {
+            let preview = msg.content.chars().take(140).collect::<String>();
+            (preview, msg.created_at.timestamp())
+        })
+    }
+
     pub fn to_proto(msg: &StoredMessage) -> teamclaw::Message {
         teamclaw::Message {
             message_id: msg.message_id.clone(),

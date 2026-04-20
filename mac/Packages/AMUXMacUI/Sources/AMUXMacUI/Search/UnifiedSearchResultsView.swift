@@ -7,15 +7,15 @@ struct UnifiedSearchResultsView: View {
     @Binding var selectedSessionId: String?
     @Binding var selectedTaskId: String?
 
-    @Query private var sessions: [CollabSession]
+    @Query private var sessions: [Session]
     @Query private var agents: [Agent]
     @Query private var messages: [SessionMessage]
-    @Query private var tasks: [WorkItem]
+    @Query private var tasks: [SessionTask]
 
     private var sessionHits: [SessionHit] {
         let collab: [SessionHit] = sessions.compactMap { s in
             guard s.title.localizedCaseInsensitiveContains(query) else { return nil }
-            return SessionHit(id: s.sessionId, title: s.title.isEmpty ? s.sessionId : s.title, subtitle: "collab")
+            return SessionHit(id: s.sessionId, title: s.title.isEmpty ? s.sessionId : s.title, subtitle: "session")
         }
         let agentHits: [SessionHit] = agents.compactMap { a in
             guard a.sessionTitle.localizedCaseInsensitiveContains(query) else { return nil }
@@ -32,10 +32,10 @@ struct UnifiedSearchResultsView: View {
         }
     }
 
-    private var taskHits: [WorkItem] {
+    private var taskHits: [SessionTask] {
         tasks.filter {
             $0.displayTitle.localizedCaseInsensitiveContains(query) ||
-            $0.itemDescription.localizedCaseInsensitiveContains(query)
+            $0.taskDescription.localizedCaseInsensitiveContains(query)
         }
     }
 
@@ -69,8 +69,8 @@ struct UnifiedSearchResultsView: View {
             }
             if !taskHits.isEmpty {
                 Section("Tasks") {
-                    ForEach(taskHits, id: \.workItemId) { task in
-                        Button { selectedTaskId = task.workItemId; selectedSessionId = nil } label: {
+                    ForEach(taskHits, id: \.taskId) { task in
+                        Button { selectedTaskId = task.taskId; selectedSessionId = nil } label: {
                             VStack(alignment: .leading) {
                                 Text(task.displayTitle)
                                 Text(task.statusLabel).font(.caption).foregroundStyle(.secondary)

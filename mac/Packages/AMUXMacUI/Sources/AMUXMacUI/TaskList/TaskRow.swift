@@ -2,7 +2,7 @@ import SwiftUI
 import AMUXCore
 
 struct TaskRow: View {
-    let workItem: WorkItem
+    let task: SessionTask
     let sessionTitle: String?
     let teamclawService: TeamclawService?
 
@@ -15,7 +15,7 @@ struct TaskRow: View {
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(workItem.title.isEmpty ? "(untitled)" : workItem.title)
+                Text(task.title.isEmpty ? "(untitled)" : task.title)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(2)
 
@@ -26,7 +26,7 @@ struct TaskRow: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     } else {
-                        Text(workItem.statusLabel)
+                        Text(task.statusLabel)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
@@ -41,11 +41,11 @@ struct TaskRow: View {
         .padding(.vertical, 6)
         .contextMenu {
             Button {
-                workItem.archived = true
+                task.archived = true
                 try? modelContext.save()
-                let id = workItem.workItemId
-                let sessionId = workItem.sessionId
-                Task { await teamclawService?.archiveWorkItem(workItemId: id, sessionId: sessionId, archived: true) }
+                let id = task.taskId
+                let sessionId = task.sessionId
+                Task { await teamclawService?.archiveTask(taskId: id, sessionId: sessionId, archived: true) }
             } label: {
                 Label("Archive", systemImage: "archivebox")
             }
@@ -54,7 +54,7 @@ struct TaskRow: View {
 
     @ViewBuilder
     private var statusIcon: some View {
-        switch workItem.status {
+        switch task.status {
         case "done":
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
@@ -73,6 +73,6 @@ struct TaskRow: View {
     private var timeLabel: String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: workItem.createdAt, relativeTo: .now)
+        return formatter.localizedString(for: task.createdAt, relativeTo: .now)
     }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SwiftData
 import AMUXCore
@@ -5,16 +6,17 @@ import AMUXCore
 struct SidebarView: View {
     @Binding var selection: SidebarItem?
     let members: [Member]
+    let onlineMemberIds: Set<String>
     let mqtt: MQTTService?
     let deviceId: String
     let peerId: String
     @Binding var archivedVisible: Bool
 
-    @Query(sort: \CollabSession.lastMessageAt, order: .reverse)
-    private var sessions: [CollabSession]
+    @Query(sort: \Session.lastMessageAt, order: .reverse)
+    private var sessions: [Session]
 
-    @Query(filter: #Predicate<WorkItem> { $0.status != "done" })
-    private var openTasks: [WorkItem]
+    @Query(filter: #Predicate<SessionTask> { $0.status != "done" })
+    private var openTasks: [SessionTask]
 
     @Query private var allMessages: [SessionMessage]
 
@@ -42,7 +44,13 @@ struct SidebarView: View {
             Section {
                 ForEach(workspaces, id: \.workspaceId) { workspace in
                     WorkspaceRow(workspace: workspace)
+                        .tag(SidebarItem.workspace(workspaceId: workspace.workspaceId))
                         .contextMenu {
+                            Button {
+                                openWorkspace(workspace)
+                            } label: {
+                                Label("Open in Finder", systemImage: "folder")
+                            }
                             if mqtt != nil {
                                 Button(role: .destructive) {
                                     removeWorkspace(workspace.workspaceId)
@@ -87,6 +95,7 @@ struct SidebarView: View {
                         ForEach(group.members) { member in
                             MemberRow(
                                 member: member,
+                                isOnline: onlineMemberIds.contains(member.memberId),
                                 sessionCount: MemberGrouping.coSessionCount(
                                     for: member,
                                     sessionSenders: sessionSenders
@@ -186,18 +195,40 @@ private struct WorkspaceRow: View {
             }
             Spacer(minLength: 0)
         }
+        .contentShape(Rectangle())
+        .help("Filter sessions and tasks for \(workspace.displayName)")
     }
+}
+
+private func openWorkspace(_ workspace: Workspace) {
+    guard !workspace.path.isEmpty else { return }
+    NSWorkspace.shared.open(URL(fileURLWithPath: workspace.path, isDirectory: true))
 }
 
 private struct MemberRow: View {
     let member: Member
+    let isOnline: Bool
     let sessionCount: Int
 
     var body: some View {
         HStack(spacing: 8) {
-            AvatarCircle(seed: member.memberId, initial: initial)
-                .frame(width: 18, height: 18)
-            Text(member.displayName)
+            ZStack(alignment: .bottomTrailing) {
+                AvatarCircle(seed: member.memberId, initial: initial)
+                    .frame(width: 18, height: 18)
+                Circle()
+                    .fill(isOnline ? Color.green : Color.secondary.opacity(0.55))
+                    .frame(width: 7, height: 7)
+                    .overlay(
+                        Circle()
+                            .stroke(Color(NSColor.controlBackgroundColor), lineWidth: 1)
+                    )
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(member.displayName)
+                Text(isOnline ? "Online" : "Offline")
+                    .font(.caption2)
+                    .foregroundStyle(isOnline ? .green : .secondary)
+            }
             Spacer()
             if sessionCount > 0 {
                 Text("\(sessionCount)")

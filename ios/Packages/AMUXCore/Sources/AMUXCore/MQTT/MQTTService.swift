@@ -25,7 +25,7 @@ public final class MQTTService: NSObject, @unchecked Sendable {
     /// the same thread → hang (see Sentry TEAMCLAW-IOS-2). A serial dispatch
     /// queue sidesteps the reentrance problem entirely: even if the closure
     /// is invoked on a thread currently waiting on the queue, the cleanup is
-    /// dispatched (`async`) and runs after the current work item completes.
+    /// dispatched (`async`) and runs after the current task completes.
     private let stateQueue = DispatchQueue(label: "com.amux.mqtt-service.state")
     private var continuations: [UUID: AsyncStream<MQTTIncoming>.Continuation] = [:]
     private var connectContinuation: CheckedContinuation<Void, Error>?

@@ -1,7 +1,7 @@
 use crate::proto::teamclaw::{self, RpcRequest, RpcResponse};
 use crate::teamclaw::{
-    MessageStore, RpcServer, StoredClaim, StoredCollabSession, StoredMessage, StoredParticipant,
-    StoredSubmission, StoredWorkItem, TeamclawSessionStore, TeamclawTopics, WorkItemStore,
+    MessageStore, RpcServer, StoredClaim, StoredMessage, StoredParticipant, StoredSession,
+    StoredSubmission, StoredTask, TaskStore, TeamclawSessionStore, TeamclawTopics,
 };
 use chrono::Utc;
 use rumqttc::{AsyncClient, QoS};
@@ -60,9 +60,9 @@ impl SessionManager {
             .subscribe(self.topics.sessions(), QoS::AtLeastOnce)
             .await?;
 
-        // Global work items topic
+        // Global tasks topic
         self.client
-            .subscribe(self.topics.workitems(), QoS::AtLeastOnce)
+            .subscribe(self.topics.tasks(), QoS::AtLeastOnce)
             .await?;
 
         // RPC: incoming requests for this device
@@ -95,10 +95,10 @@ impl SessionManager {
 
     /// Handle an incoming RPC request on topic with the given payload.
     ///
-    /// `host_primary_agent_id` is the agent_id this device should record as
-    /// the new session's primary agent if a CreateSession RPC arrives. The
-    /// caller (DaemonServer) computes this from `AgentManager` so that the
-    /// SessionManager doesn't need a back-reference into agent state.
+    /// `host_primary_agent_id` is intentionally ignored for session creation.
+    /// A session should only gain `primary_agent_id` once an agent actually
+    /// joins it, rather than inheriting whichever local agent happened to be
+    /// running when the session was created.
     pub async fn handle_rpc_request(
         &mut self,
         topic: &str,
@@ -122,6 +122,10 @@ impl SessionManager {
                 let r = r.clone();
                 self.handle_fetch_session(&req, r).await
             }
+            Some(teamclaw::rpc_request::Method::FetchSessionMessages(r)) => {
+                let r = r.clone();
+                self.handle_fetch_session_messages(&req, r).await
+            }
             Some(teamclaw::rpc_request::Method::JoinSession(r)) => {
                 let r = r.clone();
                 self.handle_join_session(&req, r).await
@@ -134,21 +138,21 @@ impl SessionManager {
                 let r = r.clone();
                 self.handle_remove_participant(&req, r).await
             }
-            Some(teamclaw::rpc_request::Method::CreateWorkItem(r)) => {
+            Some(teamclaw::rpc_request::Method::CreateTask(r)) => {
                 let r = r.clone();
-                self.handle_create_work_item(&req, r).await
+                self.handle_create_task(&req, r).await
             }
-            Some(teamclaw::rpc_request::Method::ClaimWorkItem(r)) => {
+            Some(teamclaw::rpc_request::Method::ClaimTask(r)) => {
                 let r = r.clone();
-                self.handle_claim_work_item(&req, r).await
+                self.handle_claim_task(&req, r).await
             }
-            Some(teamclaw::rpc_request::Method::SubmitWorkItem(r)) => {
+            Some(teamclaw::rpc_request::Method::SubmitTask(r)) => {
                 let r = r.clone();
-                self.handle_submit_work_item(&req, r).await
+                self.handle_submit_task(&req, r).await
             }
-            Some(teamclaw::rpc_request::Method::UpdateWorkItem(r)) => {
+            Some(teamclaw::rpc_request::Method::UpdateTask(r)) => {
                 let r = r.clone();
-                self.handle_update_work_item(&req, r).await
+                self.handle_update_task(&req, r).await
             }
             Some(teamclaw::rpc_request::Method::RegisterSession(r)) => {
                 let r = r.clone();
@@ -174,7 +178,7 @@ impl SessionManager {
         &mut self,
         req: &RpcRequest,
         r: teamclaw::CreateSessionRequest,
-        host_primary_agent_id: Option<String>,
+        _host_primary_agent_id: Option<String>,
     ) -> RpcResponse {
         let session_id = Uuid::new_v4().to_string();
         let session_type = match r.session_type {
@@ -182,17 +186,22 @@ impl SessionManager {
             _ => "collab",
         };
 
-        let session = StoredCollabSession {
+        let session = StoredSession {
             session_id: session_id.clone(),
             session_type: session_type.to_string(),
             team_id: r.team_id.clone(),
             title: r.title.clone(),
             host_device_id: self.device_id.clone(),
-            created_by: req.sender_device_id.clone(),
+            created_by: if !r.sender_actor_id.is_empty() {
+                r.sender_actor_id.clone()
+            } else {
+                req.sender_device_id.clone()
+            },
             created_at: Utc::now(),
             summary: r.summary.clone(),
+            task_id: r.task_id.clone(),
             participants: vec![],
-            primary_agent_id: host_primary_agent_id.unwrap_or_default(),
+            primary_agent_id: String::new(),
         };
 
         self.sessions.upsert(session);
@@ -299,6 +308,40 @@ impl SessionManager {
         }
     }
 
+    async fn handle_fetch_session_messages(
+        &self,
+        req: &RpcRequest,
+        r: teamclaw::FetchSessionMessagesRequest,
+    ) -> RpcResponse {
+        let store = match MessageStore::load(&self.config_dir, &r.session_id) {
+            Ok(store) => store,
+            Err(e) => {
+                return RpcResponse {
+                    request_id: req.request_id.clone(),
+                    success: false,
+                    error: e.to_string(),
+                    result: None,
+                };
+            }
+        };
+
+        let (messages, has_more, next_before_created_at) =
+            store.page_before(r.before_created_at, if r.page_size == 0 { 100 } else { r.page_size });
+        let page = teamclaw::SessionMessagePage {
+            session_id: r.session_id,
+            messages: messages.into_iter().map(MessageStore::to_proto).collect(),
+            has_more,
+            next_before_created_at,
+        };
+
+        RpcResponse {
+            request_id: req.request_id.clone(),
+            success: true,
+            error: String::new(),
+            result: Some(teamclaw::rpc_response::Result::SessionMessagePage(page)),
+        }
+    }
+
     async fn handle_join_session(
         &mut self,
         req: &RpcRequest,
@@ -334,6 +377,9 @@ impl SessionManager {
                 {
                     session.participants.push(stored_participant);
                 }
+                if participant_is_agent(participant.actor_type) && session.primary_agent_id.is_empty() {
+                    session.primary_agent_id = participant.actor_id.clone();
+                }
             }
             None => {
                 return RpcResponse {
@@ -350,6 +396,9 @@ impl SessionManager {
         }
         if let Err(e) = self.publish_session_meta(&r.session_id).await {
             warn!("handle_join_session: failed to publish session meta: {}", e);
+        }
+        if let Err(e) = self.publish_session_index().await {
+            warn!("handle_join_session: failed to publish session index: {}", e);
         }
 
         let session_info = self.sessions.to_proto_session_info(&r.session_id);
@@ -397,6 +446,9 @@ impl SessionManager {
                 {
                     session.participants.push(stored_participant);
                 }
+                if participant_is_agent(participant.actor_type) && session.primary_agent_id.is_empty() {
+                    session.primary_agent_id = participant.actor_id.clone();
+                }
             }
             None => {
                 return RpcResponse {
@@ -413,6 +465,9 @@ impl SessionManager {
         }
         if let Err(e) = self.publish_session_meta(&r.session_id).await {
             warn!("handle_add_participant: failed to publish session meta: {}", e);
+        }
+        if let Err(e) = self.publish_session_index().await {
+            warn!("handle_add_participant: failed to publish session index: {}", e);
         }
 
         let session_info = self.sessions.to_proto_session_info(&r.session_id);
@@ -451,6 +506,9 @@ impl SessionManager {
         if let Err(e) = self.publish_session_meta(&r.session_id).await {
             warn!("handle_remove_participant: failed to publish session meta: {}", e);
         }
+        if let Err(e) = self.publish_session_index().await {
+            warn!("handle_remove_participant: failed to publish session index: {}", e);
+        }
 
         let session_info = self.sessions.to_proto_session_info(&r.session_id);
         info!(session_id = %r.session_id, actor_id = %r.actor_id, "participant removed from session");
@@ -463,12 +521,12 @@ impl SessionManager {
         }
     }
 
-    async fn handle_create_work_item(
+    async fn handle_create_task(
         &mut self,
         req: &RpcRequest,
-        r: teamclaw::CreateWorkItemRequest,
+        r: teamclaw::CreateTaskRequest,
     ) -> RpcResponse {
-        let work_item_id = Uuid::new_v4().to_string();
+        let task_id = Uuid::new_v4().to_string();
         // Prefer the sender's actor/member id when the client supplies it.
         // Older clients that only set sender_device_id still work, they'll
         // just render as "Unknown" on the current UI.
@@ -477,8 +535,8 @@ impl SessionManager {
         } else {
             req.sender_device_id.clone()
         };
-        let stored_item = StoredWorkItem {
-            work_item_id: work_item_id.clone(),
+        let stored_item = StoredTask {
+            task_id: task_id.clone(),
             session_id: r.session_id.clone(),
             title: r.title.clone(),
             description: r.description.clone(),
@@ -491,10 +549,10 @@ impl SessionManager {
 
         let store_key = if r.session_id.is_empty() { "global" } else { &r.session_id };
 
-        let mut store = match WorkItemStore::load(&self.config_dir, store_key) {
+        let mut store = match TaskStore::load(&self.config_dir, store_key) {
             Ok(s) => s,
             Err(e) => {
-                warn!("handle_create_work_item: failed to load work item store: {}", e);
+                warn!("handle_create_task: failed to load task store: {}", e);
                 return RpcResponse {
                     request_id: req.request_id.clone(),
                     success: false,
@@ -507,22 +565,22 @@ impl SessionManager {
         store.add_item(stored_item);
 
         if let Err(e) = store.save(&self.config_dir, store_key) {
-            warn!("handle_create_work_item: failed to save work item store: {}", e);
+            warn!("handle_create_task: failed to save task store: {}", e);
         }
 
-        let work_item = store
-            .find_item(&work_item_id)
-            .map(|i| store.to_proto_work_item(i));
+        let task = store
+            .find_item(&task_id)
+            .map(|i| store.to_proto_task(i));
 
-        // Publish WorkItemEvent
-        if let Some(ref item) = work_item {
-            let event = teamclaw::WorkItemEvent {
-                event: Some(teamclaw::work_item_event::Event::Created(item.clone())),
+        // Publish TaskEvent
+        if let Some(ref item) = task {
+            let event = teamclaw::TaskEvent {
+                event: Some(teamclaw::task_event::Event::Created(item.clone())),
             };
             let topic = if r.session_id.is_empty() {
-                self.topics.workitems()
+                self.topics.tasks()
             } else {
-                self.topics.session_workitems(&r.session_id)
+                self.topics.session_tasks(&r.session_id)
             };
             let payload = event.encode_to_vec();
             if let Err(e) = self
@@ -530,26 +588,26 @@ impl SessionManager {
                 .publish(topic, QoS::AtLeastOnce, false, payload)
                 .await
             {
-                warn!("handle_create_work_item: failed to publish work item event: {}", e);
+                warn!("handle_create_task: failed to publish task event: {}", e);
             }
         }
 
-        info!(work_item_id = %work_item_id, session_id = %r.session_id, "work item created");
+        info!(task_id = %task_id, session_id = %r.session_id, "task created");
 
         RpcResponse {
             request_id: req.request_id.clone(),
             success: true,
             error: String::new(),
-            result: work_item.map(|wi| teamclaw::rpc_response::Result::WorkItem(wi)),
+            result: task.map(|t| teamclaw::rpc_response::Result::Task(t)),
         }
     }
 
-    async fn handle_claim_work_item(
+    async fn handle_claim_task(
         &mut self,
         req: &RpcRequest,
-        r: teamclaw::ClaimWorkItemRequest,
+        r: teamclaw::ClaimTaskRequest,
     ) -> RpcResponse {
-        let mut store = match WorkItemStore::load(&self.config_dir, &r.session_id) {
+        let mut store = match TaskStore::load(&self.config_dir, &r.session_id) {
             Ok(s) => s,
             Err(e) => {
                 return RpcResponse {
@@ -562,45 +620,50 @@ impl SessionManager {
         };
 
         let claim_id = Uuid::new_v4().to_string();
+        let actor_id = if !r.sender_actor_id.is_empty() {
+            r.sender_actor_id.clone()
+        } else {
+            req.sender_device_id.clone()
+        };
         let claim = StoredClaim {
             claim_id: claim_id.clone(),
-            work_item_id: r.work_item_id.clone(),
-            actor_id: req.sender_device_id.clone(),
+            task_id: r.task_id.clone(),
+            actor_id: actor_id.clone(),
             claimed_at: Utc::now(),
         };
 
         store.add_claim(claim);
 
         if let Err(e) = store.save(&self.config_dir, &r.session_id) {
-            warn!("handle_claim_work_item: failed to save work item store: {}", e);
+            warn!("handle_claim_task: failed to save task store: {}", e);
         }
 
         let proto_claim = teamclaw::Claim {
             claim_id: claim_id.clone(),
-            work_item_id: r.work_item_id.clone(),
-            actor_id: req.sender_device_id.clone(),
+            task_id: r.task_id.clone(),
+            actor_id: actor_id.clone(),
             claimed_at: Utc::now().timestamp(),
         };
 
-        // Publish WorkItemEvent
-        let event = teamclaw::WorkItemEvent {
-            event: Some(teamclaw::work_item_event::Event::Claimed(proto_claim.clone())),
+        // Publish TaskEvent
+        let event = teamclaw::TaskEvent {
+            event: Some(teamclaw::task_event::Event::Claimed(proto_claim.clone())),
         };
-        let topic = self.topics.session_workitems(&r.session_id);
+        let topic = self.topics.session_tasks(&r.session_id);
         let payload = event.encode_to_vec();
         if let Err(e) = self
             .client
             .publish(topic, QoS::AtLeastOnce, false, payload)
             .await
         {
-            warn!("handle_claim_work_item: failed to publish claim event: {}", e);
+            warn!("handle_claim_task: failed to publish claim event: {}", e);
         }
 
         info!(
             claim_id = %claim_id,
-            work_item_id = %r.work_item_id,
+            task_id = %r.task_id,
             session_id = %r.session_id,
-            "work item claimed"
+            "task claimed"
         );
 
         RpcResponse {
@@ -611,12 +674,12 @@ impl SessionManager {
         }
     }
 
-    async fn handle_submit_work_item(
+    async fn handle_submit_task(
         &mut self,
         req: &RpcRequest,
-        r: teamclaw::SubmitWorkItemRequest,
+        r: teamclaw::SubmitTaskRequest,
     ) -> RpcResponse {
-        let mut store = match WorkItemStore::load(&self.config_dir, &r.session_id) {
+        let mut store = match TaskStore::load(&self.config_dir, &r.session_id) {
             Ok(s) => s,
             Err(e) => {
                 return RpcResponse {
@@ -629,10 +692,15 @@ impl SessionManager {
         };
 
         let submission_id = Uuid::new_v4().to_string();
+        let actor_id = if !r.sender_actor_id.is_empty() {
+            r.sender_actor_id.clone()
+        } else {
+            req.sender_device_id.clone()
+        };
         let submission = StoredSubmission {
             submission_id: submission_id.clone(),
-            work_item_id: r.work_item_id.clone(),
-            actor_id: req.sender_device_id.clone(),
+            task_id: r.task_id.clone(),
+            actor_id: actor_id.clone(),
             content: r.content.clone(),
             submitted_at: Utc::now(),
         };
@@ -640,38 +708,38 @@ impl SessionManager {
         store.add_submission(submission);
 
         if let Err(e) = store.save(&self.config_dir, &r.session_id) {
-            warn!("handle_submit_work_item: failed to save work item store: {}", e);
+            warn!("handle_submit_task: failed to save task store: {}", e);
         }
 
         let proto_submission = teamclaw::Submission {
             submission_id: submission_id.clone(),
-            work_item_id: r.work_item_id.clone(),
-            actor_id: req.sender_device_id.clone(),
+            task_id: r.task_id.clone(),
+            actor_id: actor_id.clone(),
             content: r.content.clone(),
             submitted_at: Utc::now().timestamp(),
         };
 
-        // Publish WorkItemEvent
-        let event = teamclaw::WorkItemEvent {
-            event: Some(teamclaw::work_item_event::Event::Submitted(
+        // Publish TaskEvent
+        let event = teamclaw::TaskEvent {
+            event: Some(teamclaw::task_event::Event::Submitted(
                 proto_submission.clone(),
             )),
         };
-        let topic = self.topics.session_workitems(&r.session_id);
+        let topic = self.topics.session_tasks(&r.session_id);
         let payload = event.encode_to_vec();
         if let Err(e) = self
             .client
             .publish(topic, QoS::AtLeastOnce, false, payload)
             .await
         {
-            warn!("handle_submit_work_item: failed to publish submission event: {}", e);
+            warn!("handle_submit_task: failed to publish submission event: {}", e);
         }
 
         info!(
             submission_id = %submission_id,
-            work_item_id = %r.work_item_id,
+            task_id = %r.task_id,
             session_id = %r.session_id,
-            "work item submitted"
+            "task submitted"
         );
 
         RpcResponse {
@@ -682,14 +750,14 @@ impl SessionManager {
         }
     }
 
-    async fn handle_update_work_item(
+    async fn handle_update_task(
         &mut self,
         req: &RpcRequest,
-        r: teamclaw::UpdateWorkItemRequest,
+        r: teamclaw::UpdateTaskRequest,
     ) -> RpcResponse {
         let store_key = if r.session_id.is_empty() { "global" } else { &r.session_id };
 
-        let mut store = match WorkItemStore::load(&self.config_dir, store_key) {
+        let mut store = match TaskStore::load(&self.config_dir, store_key) {
             Ok(s) => s,
             Err(e) => {
                 return RpcResponse {
@@ -701,7 +769,7 @@ impl SessionManager {
             }
         };
 
-        match store.find_item_mut(&r.work_item_id) {
+        match store.find_item_mut(&r.task_id) {
             Some(item) => {
                 if !r.title.is_empty() {
                     item.title = r.title.clone();
@@ -711,7 +779,7 @@ impl SessionManager {
                 }
                 // Update status if non-zero (unknown is 0)
                 if r.status != 0 {
-                    item.status = work_item_status_to_string(r.status);
+                    item.status = task_status_to_string(r.status);
                 }
                 if let Some(v) = r.archived {
                     item.archived = v;
@@ -721,29 +789,29 @@ impl SessionManager {
                 return RpcResponse {
                     request_id: req.request_id.clone(),
                     success: false,
-                    error: format!("work item {} not found", r.work_item_id),
+                    error: format!("task {} not found", r.task_id),
                     result: None,
                 };
             }
         }
 
         if let Err(e) = store.save(&self.config_dir, store_key) {
-            warn!("handle_update_work_item: failed to save work item store: {}", e);
+            warn!("handle_update_task: failed to save task store: {}", e);
         }
 
-        let work_item = store
-            .find_item(&r.work_item_id)
-            .map(|i| store.to_proto_work_item(i));
+        let task = store
+            .find_item(&r.task_id)
+            .map(|i| store.to_proto_task(i));
 
-        // Publish WorkItemEvent
-        if let Some(ref item) = work_item {
-            let event = teamclaw::WorkItemEvent {
-                event: Some(teamclaw::work_item_event::Event::Updated(item.clone())),
+        // Publish TaskEvent
+        if let Some(ref item) = task {
+            let event = teamclaw::TaskEvent {
+                event: Some(teamclaw::task_event::Event::Updated(item.clone())),
             };
             let topic = if r.session_id.is_empty() {
-                self.topics.workitems()
+                self.topics.tasks()
             } else {
-                self.topics.session_workitems(&r.session_id)
+                self.topics.session_tasks(&r.session_id)
             };
             let payload = event.encode_to_vec();
             if let Err(e) = self
@@ -751,22 +819,22 @@ impl SessionManager {
                 .publish(topic, QoS::AtLeastOnce, false, payload)
                 .await
             {
-                warn!("handle_update_work_item: failed to publish update event: {}", e);
+                warn!("handle_update_task: failed to publish update event: {}", e);
             }
         }
 
         info!(
-            work_item_id = %r.work_item_id,
+            task_id = %r.task_id,
             session_id = %r.session_id,
             archived = ?r.archived,
-            "work item updated"
+            "task updated"
         );
 
         RpcResponse {
             request_id: req.request_id.clone(),
             success: true,
             error: String::new(),
-            result: work_item.map(|wi| teamclaw::rpc_response::Result::WorkItem(wi)),
+            result: task.map(|t| teamclaw::rpc_response::Result::Task(t)),
         }
     }
 
@@ -802,7 +870,7 @@ impl SessionManager {
                 x if x == teamclaw::SessionType::Control as i32 => "control",
                 _ => "collab",
             };
-            let stored = StoredCollabSession {
+            let stored = StoredSession {
                 session_id: entry.session_id.clone(),
                 session_type: session_type.to_string(),
                 team_id: self.team_id.clone(),
@@ -811,6 +879,7 @@ impl SessionManager {
                 created_by: req.sender_device_id.clone(),
                 created_at: Utc::now(),
                 summary: String::new(),
+                task_id: String::new(),
                 participants: vec![],
                 // primary_agent_id is host-local state; the team host stores
                 // a stub (empty) on RegisterSession and lets the host's own
@@ -840,7 +909,7 @@ impl SessionManager {
     // --- Public helpers ---
 
     /// Persist an incoming message for a session.
-    pub fn persist_message(
+    pub async fn persist_message(
         &self,
         session_id: &str,
         message: &teamclaw::Message,
@@ -861,6 +930,7 @@ impl SessionManager {
         let mut store = MessageStore::load(&self.config_dir, session_id)?;
         store.append(stored);
         store.save(&self.config_dir, session_id)?;
+        let _ = self.publish_session_index().await;
         Ok(())
     }
 
@@ -901,36 +971,36 @@ impl SessionManager {
             .collect()
     }
 
-    /// Returns the agent actor_ids that should be activated for a work item event.
+    /// Returns the agent actor_ids that should be activated for a task event.
     ///
     /// - Claimed → activate the claiming agent
-    /// - Updated → activate all agents that claimed the work item
+    /// - Updated → activate all agents that claimed the task
     /// - Submitted → activate other claimants (not the submitter)
     pub fn agents_to_activate_for_work_item(
         &self,
         session_id: &str,
-        event: &teamclaw::WorkItemEvent,
+        event: &teamclaw::TaskEvent,
     ) -> Vec<String> {
         match &event.event {
-            Some(teamclaw::work_item_event::Event::Claimed(claim)) => {
+            Some(teamclaw::task_event::Event::Claimed(claim)) => {
                 vec![claim.actor_id.clone()]
             }
-            Some(teamclaw::work_item_event::Event::Updated(work_item)) => {
-                // Activate all agents that claimed this work item
-                match WorkItemStore::load(&self.config_dir, session_id) {
+            Some(teamclaw::task_event::Event::Updated(task)) => {
+                // Activate all agents that claimed this task
+                match TaskStore::load(&self.config_dir, session_id) {
                     Ok(store) => store
-                        .claims_for_item(&work_item.work_item_id)
+                        .claims_for_task(&task.task_id)
                         .into_iter()
                         .map(|c| c.actor_id.clone())
                         .collect(),
                     Err(_) => vec![],
                 }
             }
-            Some(teamclaw::work_item_event::Event::Submitted(submission)) => {
+            Some(teamclaw::task_event::Event::Submitted(submission)) => {
                 // Activate other claimants (not the submitter)
-                match WorkItemStore::load(&self.config_dir, session_id) {
+                match TaskStore::load(&self.config_dir, session_id) {
                     Ok(store) => store
-                        .claims_for_item(&submission.work_item_id)
+                        .claims_for_task(&submission.task_id)
                         .into_iter()
                         .filter(|c| c.actor_id != submission.actor_id)
                         .map(|c| c.actor_id.clone())
@@ -938,7 +1008,7 @@ impl SessionManager {
                     Err(_) => vec![],
                 }
             }
-            Some(teamclaw::work_item_event::Event::Created(_)) | None => vec![],
+            Some(teamclaw::task_event::Event::Created(_)) | None => vec![],
         }
     }
 
@@ -988,13 +1058,19 @@ impl SessionManager {
 
     /// Publish the session's metadata as a retained message.
     async fn publish_session_meta(&self, session_id: &str) -> crate::error::Result<()> {
-        let session_info = match self.sessions.to_proto_session_info(session_id) {
+        let mut session_info = match self.sessions.to_proto_session_info(session_id) {
             Some(info) => info,
             None => {
                 warn!("publish_session_meta: session {} not found", session_id);
                 return Ok(());
             }
         };
+        if let Ok(store) = MessageStore::load(&self.config_dir, session_id) {
+            if let Some((preview, at)) = store.latest_preview() {
+                session_info.last_message_preview = preview;
+                session_info.last_message_at = at;
+            }
+        }
 
         let envelope = teamclaw::SessionMetaEnvelope {
             session: Some(session_info),
@@ -1009,7 +1085,23 @@ impl SessionManager {
 
     /// Publish the team's session index as a retained message.
     async fn publish_session_index(&self) -> crate::error::Result<()> {
-        let index = self.sessions.to_proto_index();
+        let sessions = self.sessions.sessions.iter().map(|s| {
+            let (last_message_preview, last_message_at) = MessageStore::load(&self.config_dir, &s.session_id)
+                .ok()
+                .and_then(|store| store.latest_preview())
+                .unwrap_or_else(|| (String::new(), 0));
+            teamclaw::SessionIndexEntry {
+                session_id: s.session_id.clone(),
+                session_type: session_type_to_proto(&s.session_type) as i32,
+                title: s.title.clone(),
+                host_device_id: s.host_device_id.clone(),
+                created_at: s.created_at.timestamp(),
+                participant_count: s.participants.len() as i32,
+                last_message_preview,
+                last_message_at,
+            }
+        }).collect();
+        let index = teamclaw::SessionIndex { sessions };
         let topic = self.topics.sessions();
         let payload = index.encode_to_vec();
         self.client
@@ -1027,7 +1119,7 @@ impl SessionManager {
             .subscribe(self.topics.session_meta(session_id), QoS::AtLeastOnce)
             .await?;
         self.client
-            .subscribe(self.topics.session_workitems(session_id), QoS::AtLeastOnce)
+            .subscribe(self.topics.session_tasks(session_id), QoS::AtLeastOnce)
             .await?;
         self.client
             .subscribe(self.topics.session_presence(session_id), QoS::AtLeastOnce)
@@ -1048,6 +1140,19 @@ fn actor_type_to_string(actor_type: i32) -> String {
     .to_string()
 }
 
+fn participant_is_agent(actor_type: i32) -> bool {
+    actor_type == teamclaw::ActorType::PersonalAgent as i32
+        || actor_type == teamclaw::ActorType::RoleAgent as i32
+}
+
+fn session_type_to_proto(s: &str) -> teamclaw::SessionType {
+    match s {
+        "control" => teamclaw::SessionType::Control,
+        "collab" => teamclaw::SessionType::Collab,
+        _ => teamclaw::SessionType::Unknown,
+    }
+}
+
 fn message_kind_to_string(kind: i32) -> String {
     match kind {
         x if x == teamclaw::MessageKind::Text as i32 => "text",
@@ -1058,11 +1163,11 @@ fn message_kind_to_string(kind: i32) -> String {
     .to_string()
 }
 
-fn work_item_status_to_string(status: i32) -> String {
+fn task_status_to_string(status: i32) -> String {
     match status {
-        x if x == teamclaw::WorkItemStatus::Open as i32 => "open",
-        x if x == teamclaw::WorkItemStatus::InProgress as i32 => "in_progress",
-        x if x == teamclaw::WorkItemStatus::Done as i32 => "done",
+        x if x == teamclaw::TaskStatus::Open as i32 => "open",
+        x if x == teamclaw::TaskStatus::InProgress as i32 => "in_progress",
+        x if x == teamclaw::TaskStatus::Done as i32 => "done",
         _ => "unknown",
     }
     .to_string()
@@ -1071,7 +1176,7 @@ fn work_item_status_to_string(status: i32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::teamclaw::{StoredClaim, StoredCollabSession, StoredParticipant, WorkItemStore};
+    use crate::teamclaw::{StoredClaim, StoredParticipant, StoredSession, TaskStore};
     use chrono::Utc;
     use std::path::Path;
     use tempfile::TempDir;
@@ -1092,8 +1197,8 @@ mod tests {
         .unwrap()
     }
 
-    fn make_session(id: &str) -> StoredCollabSession {
-        StoredCollabSession {
+    fn make_session(id: &str) -> StoredSession {
+        StoredSession {
             session_id: id.to_string(),
             session_type: "collab".to_string(),
             team_id: "team1".to_string(),
@@ -1236,12 +1341,12 @@ mod tests {
 
         let claim = teamclaw::Claim {
             claim_id: "c1".to_string(),
-            work_item_id: "w1".to_string(),
+            task_id: "w1".to_string(),
             actor_id: "agent1".to_string(),
             claimed_at: Utc::now().timestamp(),
         };
-        let event = teamclaw::WorkItemEvent {
-            event: Some(teamclaw::work_item_event::Event::Claimed(claim)),
+        let event = teamclaw::TaskEvent {
+            event: Some(teamclaw::task_event::Event::Claimed(claim)),
         };
 
         let result = sm.agents_to_activate_for_work_item("s1", &event);
@@ -1253,29 +1358,29 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let sm = dummy_session_manager(tmp.path());
 
-        // Set up WorkItemStore on disk with two claims for "w1"
-        let mut store = WorkItemStore::default();
+        // Set up TaskStore on disk with two claims for "w1"
+        let mut store = TaskStore::default();
         store.claims.push(StoredClaim {
             claim_id: "c1".to_string(),
-            work_item_id: "w1".to_string(),
+            task_id: "w1".to_string(),
             actor_id: "agent1".to_string(),
             claimed_at: Utc::now(),
         });
         store.claims.push(StoredClaim {
             claim_id: "c2".to_string(),
-            work_item_id: "w1".to_string(),
+            task_id: "w1".to_string(),
             actor_id: "agent2".to_string(),
             claimed_at: Utc::now(),
         });
         store.save(tmp.path(), "s1").unwrap();
 
-        let work_item = teamclaw::WorkItem {
-            work_item_id: "w1".to_string(),
+        let work_item = teamclaw::Task {
+            task_id: "w1".to_string(),
             session_id: "s1".to_string(),
             ..Default::default()
         };
-        let event = teamclaw::WorkItemEvent {
-            event: Some(teamclaw::work_item_event::Event::Updated(work_item)),
+        let event = teamclaw::TaskEvent {
+            event: Some(teamclaw::task_event::Event::Updated(work_item)),
         };
 
         let mut result = sm.agents_to_activate_for_work_item("s1", &event);
@@ -1289,16 +1394,16 @@ mod tests {
         let sm = dummy_session_manager(tmp.path());
 
         // agent1 and agent2 claimed w1; agent1 submits — only agent2 should be notified
-        let mut store = WorkItemStore::default();
+        let mut store = TaskStore::default();
         store.claims.push(StoredClaim {
             claim_id: "c1".to_string(),
-            work_item_id: "w1".to_string(),
+            task_id: "w1".to_string(),
             actor_id: "agent1".to_string(),
             claimed_at: Utc::now(),
         });
         store.claims.push(StoredClaim {
             claim_id: "c2".to_string(),
-            work_item_id: "w1".to_string(),
+            task_id: "w1".to_string(),
             actor_id: "agent2".to_string(),
             claimed_at: Utc::now(),
         });
@@ -1306,13 +1411,13 @@ mod tests {
 
         let submission = teamclaw::Submission {
             submission_id: "sub1".to_string(),
-            work_item_id: "w1".to_string(),
+            task_id: "w1".to_string(),
             actor_id: "agent1".to_string(), // submitter
             content: "done".to_string(),
             submitted_at: Utc::now().timestamp(),
         };
-        let event = teamclaw::WorkItemEvent {
-            event: Some(teamclaw::work_item_event::Event::Submitted(submission)),
+        let event = teamclaw::TaskEvent {
+            event: Some(teamclaw::task_event::Event::Submitted(submission)),
         };
 
         let result = sm.agents_to_activate_for_work_item("s1", &event);
@@ -1324,13 +1429,13 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let sm = dummy_session_manager(tmp.path());
 
-        let work_item = teamclaw::WorkItem {
-            work_item_id: "w1".to_string(),
+        let work_item = teamclaw::Task {
+            task_id: "w1".to_string(),
             session_id: "s1".to_string(),
             ..Default::default()
         };
-        let event = teamclaw::WorkItemEvent {
-            event: Some(teamclaw::work_item_event::Event::Created(work_item)),
+        let event = teamclaw::TaskEvent {
+            event: Some(teamclaw::task_event::Event::Created(work_item)),
         };
 
         let result = sm.agents_to_activate_for_work_item("s1", &event);

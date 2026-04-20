@@ -23,8 +23,8 @@ enum MessageKind {
   WORK_EVENT = 3;
 }
 
-enum WorkItemStatus {
-  WORK_ITEM_STATUS_UNKNOWN = 0;
+enum TaskStatus {
+  TASK_STATUS_UNKNOWN = 0;
   OPEN = 1;
   IN_PROGRESS = 2;
   DONE = 3;
@@ -51,6 +51,9 @@ message SessionInfo {
   repeated Participant participants = 8;
   string summary = 9;
   string primary_agent_id = 10;
+  string task_id = 11;
+  string last_message_preview = 12;
+  int64 last_message_at = 13;
 }
 
 message Participant {
@@ -87,12 +90,12 @@ message Message {
   string model = 9;
 }
 
-message WorkItem {
-  string work_item_id = 1;
+message Task {
+  string task_id = 1;
   string session_id = 2;
   string title = 3;
   string description = 4;
-  WorkItemStatus status = 5;
+  TaskStatus status = 5;
   string parent_id = 6;
   string created_by = 7;
   int64 created_at = 8;
@@ -103,14 +106,14 @@ message WorkItem {
 
 message Claim {
   string claim_id = 1;
-  string work_item_id = 2;
+  string task_id = 2;
   string actor_id = 3;
   int64 claimed_at = 4;
 }
 
 message Submission {
   string submission_id = 1;
-  string work_item_id = 2;
+  string task_id = 2;
   string actor_id = 3;
   string content = 4;
   int64 submitted_at = 5;
@@ -138,10 +141,10 @@ message SessionMetaEnvelope {
   SessionInfo session = 1;
 }
 
-message WorkItemEvent {
+message TaskEvent {
   oneof event {
-    WorkItem created = 1;
-    WorkItem updated = 2;
+    Task created = 1;
+    Task updated = 2;
     Claim claimed = 3;
     Submission submitted = 4;
   }
@@ -177,11 +180,12 @@ message RpcRequest {
     FetchSessionRequest fetch_session = 12;
     AddParticipantRequest add_participant = 13;
     RemoveParticipantRequest remove_participant = 14;
-    CreateWorkItemRequest create_work_item = 15;
-    ClaimWorkItemRequest claim_work_item = 16;
-    SubmitWorkItemRequest submit_work_item = 17;
-    UpdateWorkItemRequest update_work_item = 18;
+    CreateTaskRequest create_task = 15;
+    ClaimTaskRequest claim_task = 16;
+    SubmitTaskRequest submit_task = 17;
+    UpdateTaskRequest update_task = 18;
     RegisterSessionRequest register_session = 19;
+    FetchSessionMessagesRequest fetch_session_messages = 20;
   }
 }
 
@@ -191,9 +195,10 @@ message RpcResponse {
   string error = 3;
   oneof result {
     SessionInfo session_info = 10;
-    WorkItem work_item = 11;
+    Task task = 11;
     Claim claim = 12;
     Submission submission = 13;
+    SessionMessagePage session_message_page = 14;
   }
 }
 
@@ -203,7 +208,10 @@ message CreateSessionRequest {
   string title = 3;
   string summary = 4;
   repeated string invite_actor_ids = 5;
-  string work_item_id = 6;
+  string task_id = 6;
+  // Canonical actor id of the creator. Prefer member_id for humans.
+  // If empty, the daemon falls back to sender_device_id for backward compat.
+  string sender_actor_id = 7;
 }
 
 message JoinSessionRequest {
@@ -213,6 +221,19 @@ message JoinSessionRequest {
 
 message FetchSessionRequest {
   string session_id = 1;
+}
+
+message FetchSessionMessagesRequest {
+  string session_id = 1;
+  int64 before_created_at = 2;
+  uint32 page_size = 3;
+}
+
+message SessionMessagePage {
+  string session_id = 1;
+  repeated Message messages = 2;
+  bool has_more = 3;
+  int64 next_before_created_at = 4;
 }
 
 message AddParticipantRequest {
@@ -225,7 +246,7 @@ message RemoveParticipantRequest {
   string actor_id = 2;
 }
 
-message CreateWorkItemRequest {
+message CreateTaskRequest {
   string session_id = 1;
   string title = 2;
   string description = 3;
@@ -235,21 +256,27 @@ message CreateWorkItemRequest {
   string sender_actor_id = 5;
 }
 
-message ClaimWorkItemRequest {
+message ClaimTaskRequest {
   string session_id = 1;
-  string work_item_id = 2;
+  string task_id = 2;
+  // Canonical actor id of the claimant. Prefer member_id for humans.
+  // If empty, the daemon falls back to sender_device_id for backward compat.
+  string sender_actor_id = 3;
 }
 
-message SubmitWorkItemRequest {
+message SubmitTaskRequest {
   string session_id = 1;
-  string work_item_id = 2;
+  string task_id = 2;
   string content = 3;
+  // Canonical actor id of the submitter. Prefer member_id for humans.
+  // If empty, the daemon falls back to sender_device_id for backward compat.
+  string sender_actor_id = 4;
 }
 
-message UpdateWorkItemRequest {
+message UpdateTaskRequest {
   string session_id = 1;
-  string work_item_id = 2;
-  WorkItemStatus status = 3;
+  string task_id = 2;
+  TaskStatus status = 3;
   string title = 4;
   string description = 5;
   optional bool archived = 6;

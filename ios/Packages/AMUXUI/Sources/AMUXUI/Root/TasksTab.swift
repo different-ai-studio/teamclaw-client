@@ -29,10 +29,10 @@ public struct TasksTab: View {
 
     public var body: some View {
         NavigationStack(path: $navigationPath) {
-            WorkItemListView(pairing: pairing,
-                             connectionMonitor: connectionMonitor,
-                             teamclawService: teamclawService,
-                             showCreate: $showCreate)
+            TaskListView(pairing: pairing,
+                         connectionMonitor: connectionMonitor,
+                         teamclawService: teamclawService,
+                         showCreate: $showCreate)
                 .navigationTitle("Tasks")
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {
@@ -57,9 +57,9 @@ public struct TasksTab: View {
                 }
                 .navigationDestination(for: String.self) { id in
                     if id.hasPrefix("task:") {
-                        let workItemId = String(id.dropFirst("task:".count))
-                        let descriptor = FetchDescriptor<WorkItem>(
-                            predicate: #Predicate { $0.workItemId == workItemId }
+                        let taskId = String(id.dropFirst("task:".count))
+                        let descriptor = FetchDescriptor<SessionTask>(
+                            predicate: #Predicate { $0.taskId == taskId }
                         )
                         if let item = (try? modelContext.fetch(descriptor))?.first {
                             TaskDetailView(item: item,
@@ -74,17 +74,17 @@ public struct TasksTab: View {
                         }
                     } else if id.hasPrefix("collab:") {
                         let sessionId = String(id.dropFirst("collab:".count))
-                        let descriptor = FetchDescriptor<CollabSession>(
+                        let descriptor = FetchDescriptor<Session>(
                             predicate: #Predicate { $0.sessionId == sessionId }
                         )
                         if let session = (try? modelContext.fetch(descriptor))?.first {
-                            AgentDetailView(collabSession: session, mqtt: mqtt,
+                            AgentDetailView(session: session, mqtt: mqtt,
                                             deviceId: pairing.deviceId,
                                             peerId: "ios-\(pairing.authToken.prefix(6))",
                                             teamclawService: teamclawService,
                                             navigationPath: $navigationPath)
                         } else {
-                            Text("Collab session not found")
+                            Text("Session not found")
                         }
                     } else if let agent = sessionViewModel.agents.first(where: { $0.agentId == id }) {
                         AgentDetailView(agent: agent, mqtt: mqtt,

@@ -3,7 +3,7 @@ import SwiftData
 import AMUXCore
 
 public struct InviteSheet: View {
-    let session: CollabSession
+    let session: Session
     let teamclawService: TeamclawService
     let teamId: String
     let deviceId: String
@@ -13,7 +13,7 @@ public struct InviteSheet: View {
     @State private var members: [Member] = []
     @State private var selectedIds: Set<String> = []
 
-    public init(session: CollabSession, teamclawService: TeamclawService, teamId: String, deviceId: String) {
+    public init(session: Session, teamclawService: TeamclawService, teamId: String, deviceId: String) {
         self.session = session
         self.teamclawService = teamclawService
         self.teamId = teamId

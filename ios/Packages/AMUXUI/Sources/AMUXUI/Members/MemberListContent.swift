@@ -2,6 +2,8 @@ import SwiftUI
 import SwiftData
 import AMUXCore
 
+#if os(iOS)
+
 // MARK: - MemberListContent
 
 /// Browse-mode member list body. No NavigationStack; parent provides it.
@@ -42,6 +44,13 @@ public struct MemberListContent: View {
         .task { viewModel.start(mqtt: mqtt, deviceId: deviceId, modelContext: modelContext) }
     }
 }
+#else
+struct MemberListContent: View {
+    var body: some View {
+        ContentUnavailableView("Members", systemImage: "person.2")
+    }
+}
+#endif
 
 // MARK: - MemberRow
 
@@ -92,14 +101,14 @@ private struct MemberDetailView: View {
     let memberViewModel: MemberListViewModel
 
     @Query private var allMessages: [SessionMessage]
-    @Query(sort: \CollabSession.lastMessageAt, order: .reverse)
-    private var allSessions: [CollabSession]
+    @Query(sort: \Session.lastMessageAt, order: .reverse)
+    private var allSessions: [Session]
 
     @State private var showNewSession = false
 
     private var isOnline: Bool { memberViewModel.isOnline(member) }
 
-    private var memberSessions: [CollabSession] {
+    private var memberSessions: [Session] {
         let sessionIds = Set(
             allMessages
                 .filter { $0.senderActorId == member.memberId }
@@ -163,7 +172,7 @@ private struct MemberDetailView: View {
                         .foregroundStyle(.primary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("New collab session")
+                .accessibilityLabel("New session")
             }
         }
         .sheet(isPresented: $showNewSession) {

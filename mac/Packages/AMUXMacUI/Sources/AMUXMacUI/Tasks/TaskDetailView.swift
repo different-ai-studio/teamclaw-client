@@ -6,7 +6,7 @@ import AMUXCore
 /// (status change, description, linked session, creator info) in a
 /// mouse-first layout with an Edit button that opens TaskEditorWindow.
 struct TaskDetailView: View {
-    let item: WorkItem
+    let item: SessionTask
     let teamclawService: TeamclawService
     let mqtt: MQTTService?
     let deviceId: String
@@ -17,7 +17,7 @@ struct TaskDetailView: View {
     @Environment(\.openWindow) private var openWindow
     @Query private var members: [Member]
     @Query private var agents: [Agent]
-    @Query private var collabSessions: [CollabSession]
+    @Query private var sessions: [Session]
 
     static func statusDisplay(for raw: String) -> String {
         switch raw {
@@ -40,7 +40,7 @@ struct TaskDetailView: View {
                 header
                 Divider()
                 statusSection
-                if !item.itemDescription.isEmpty { descriptionSection }
+                if !item.taskDescription.isEmpty { descriptionSection }
                 if !item.sessionId.isEmpty { linkedSessionSection }
                 metadataSection
                 Spacer(minLength: 40)
@@ -54,7 +54,7 @@ struct TaskDetailView: View {
                 Button {
                     openWindow(
                         id: "amux.taskEditor",
-                        value: TaskEditorInput(workItemId: item.workItemId)
+                        value: TaskEditorInput(taskId: item.taskId)
                     )
                 } label: {
                     Label("Edit", systemImage: "pencil")
@@ -88,7 +88,7 @@ struct TaskDetailView: View {
     private var descriptionSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Description").font(.headline)
-            Text(item.itemDescription)
+            Text(item.taskDescription)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -121,12 +121,12 @@ struct TaskDetailView: View {
                     .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
-            } else if let collab = collabSessions.first(where: { $0.sessionId == item.sessionId }) {
+            } else if let session = sessions.first(where: { $0.sessionId == item.sessionId }) {
                 Button {
-                    selectedSessionId = collab.sessionId
+                    selectedSessionId = session.sessionId
                 } label: {
                     HStack {
-                        Text(collab.title.isEmpty ? collab.sessionId : collab.title)
+                        Text(session.title.isEmpty ? session.sessionId : session.title)
                         Spacer()
                         Image(systemName: "chevron.right").foregroundStyle(.tertiary)
                     }
@@ -164,8 +164,8 @@ struct TaskDetailView: View {
         guard item.status != newValue else { return }
         item.status = newValue
         try? modelContext.save()
-        let id = item.workItemId
+        let id = item.taskId
         let sid = item.sessionId
-        Task { await teamclawService.updateWorkItemStatus(workItemId: id, sessionId: sid, status: newValue) }
+        Task { await teamclawService.updateTaskStatus(taskId: id, sessionId: sid, status: newValue) }
     }
 }

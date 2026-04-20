@@ -3,10 +3,10 @@ import SwiftData
 import AMUXCore
 
 /// Pushable task detail. Rendered via TasksTab's navigationDestination.
-/// Takes the WorkItem directly (SwiftData @Model observability re-renders
+/// Takes the task model directly (SwiftData @Model observability re-renders
 /// this view when the daemon broadcast reconciles state).
 public struct TaskDetailView: View {
-    let item: WorkItem
+    let item: SessionTask
     let sessionViewModel: SessionListViewModel
     let teamclawService: TeamclawService?
     let mqtt: MQTTService
@@ -26,7 +26,7 @@ public struct TaskDetailView: View {
         return "Unknown"
     }
 
-    public init(item: WorkItem,
+    public init(item: SessionTask,
                 sessionViewModel: SessionListViewModel,
                 teamclawService: TeamclawService?,
                 mqtt: MQTTService,
@@ -59,9 +59,9 @@ public struct TaskDetailView: View {
                 .padding(.vertical, 4)
             }
 
-            if !item.itemDescription.isEmpty {
+            if !item.taskDescription.isEmpty {
                 Section("Description") {
-                    Text(item.itemDescription)
+                    Text(item.taskDescription)
                         .font(.body)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -100,8 +100,9 @@ public struct TaskDetailView: View {
                 mqtt: mqtt,
                 deviceId: deviceId,
                 peerId: peerId,
+                teamclawService: teamclawService,
                 viewModel: sessionViewModel,
-                preselectedWorkItemId: item.workItemId,
+                preselectedTaskId: item.taskId,
                 onSessionCreated: { sessionKey in
                     showNewSession = false
                     navigationPath.append(sessionKey)
@@ -136,9 +137,9 @@ public struct TaskDetailView: View {
         // Optimistic — SwiftData @Model re-renders this view immediately.
         item.status = newValue
         try? modelContext.save()
-        let id = item.workItemId
+        let id = item.taskId
         let sessionId = item.sessionId
-        Task { await teamclawService?.updateWorkItemStatus(workItemId: id, sessionId: sessionId, status: newValue) }
+        Task { await teamclawService?.updateTaskStatus(taskId: id, sessionId: sessionId, status: newValue) }
     }
 
     // MARK: - Related session row
@@ -165,13 +166,13 @@ public struct TaskDetailView: View {
                 }
             }
             .buttonStyle(.plain)
-        } else if let collab = sessionViewModel.collabSessions.first(where: { $0.sessionId == item.sessionId }) {
+        } else if let session = sessionViewModel.sessions.first(where: { $0.sessionId == item.sessionId }) {
             Button {
-                navigationPath.append("collab:\(collab.sessionId)")
+                navigationPath.append("collab:\(session.sessionId)")
             } label: {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(collab.title.isEmpty ? collab.sessionId : collab.title)
+                        Text(session.title.isEmpty ? session.sessionId : session.title)
                             .font(.body)
                             .foregroundStyle(.primary)
                         Text("Tap to open")

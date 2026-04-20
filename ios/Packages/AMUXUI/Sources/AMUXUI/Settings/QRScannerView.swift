@@ -1,6 +1,8 @@
 import SwiftUI
 import AVFoundation
 
+#if os(iOS)
+
 /// Minimal QR-code scanner backed by AVCaptureSession. Calls `onScanned`
 /// once when a code is detected (scanning stops after the first match).
 /// `onCancel` is invoked when the user taps Cancel.
@@ -180,3 +182,20 @@ private final class QRCaptureViewController: UIViewController, @preconcurrency A
         onScanned?(value)
     }
 }
+#else
+struct QRScannerView: View {
+    let onScanned: (String) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "qrcode.viewfinder")
+                .font(.system(size: 40))
+            Text("QR scanning is only available on iOS.")
+                .font(.headline)
+            Button("Close", action: onCancel)
+        }
+        .padding(24)
+    }
+}
+#endif

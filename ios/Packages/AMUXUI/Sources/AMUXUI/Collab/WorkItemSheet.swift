@@ -3,7 +3,9 @@ import SwiftData
 import AMUXCore
 import PhotosUI
 
-public struct WorkItemSheet: View {
+#if os(iOS)
+
+public struct TaskSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let pairing: PairingManager
@@ -20,10 +22,10 @@ public struct WorkItemSheet: View {
 
     public var body: some View {
         NavigationStack {
-            WorkItemListView(pairing: pairing,
-                             connectionMonitor: connectionMonitor,
-                             teamclawService: teamclawService,
-                             showCreate: $showCreate)
+            TaskListView(pairing: pairing,
+                         connectionMonitor: connectionMonitor,
+                         teamclawService: teamclawService,
+                         showCreate: $showCreate)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button { showCreate = true } label: {
@@ -41,7 +43,7 @@ public struct WorkItemSheet: View {
     }
 }
 
-// MARK: - CreateWorkItemSheet
+// MARK: - CreateTaskSheet
 
 private struct AttachedImage: Identifiable {
     let id = UUID()
@@ -64,7 +66,7 @@ private func downscaleForChip(_ image: UIImage) -> UIImage {
     }
 }
 
-struct CreateWorkItemSheet: View {
+struct CreateTaskSheet: View {
     @Environment(\.dismiss) private var dismiss
     let teamclawService: TeamclawService?
     let onCreated: () -> Void
@@ -274,7 +276,7 @@ struct CreateWorkItemSheet: View {
         }
         isSending = true
         Task {
-            let ok = await teamclawService?.createWorkItem(description: finalDesc) ?? false
+            let ok = await teamclawService?.createTask(description: finalDesc) ?? false
             isSending = false
             if ok {
                 onCreated()
@@ -284,10 +286,10 @@ struct CreateWorkItemSheet: View {
     }
 }
 
-// MARK: - WorkItemRow
+// MARK: - TaskRow
 
-struct WorkItemRow: View {
-    let item: WorkItem
+struct TaskRow: View {
+    let item: SessionTask
     var creatorName: String? = nil
 
     var body: some View {
@@ -324,3 +326,30 @@ struct WorkItemRow: View {
         .padding(.vertical, 2)
     }
 }
+#else
+public struct TaskSheet: View {
+    public init(pairing: PairingManager, connectionMonitor: ConnectionMonitor, teamclawService: TeamclawService? = nil) {}
+
+    public var body: some View {
+        ContentUnavailableView("Tasks", systemImage: "checklist")
+    }
+}
+
+struct CreateTaskSheet: View {
+    let teamclawService: TeamclawService?
+    let onCreated: () -> Void
+
+    var body: some View {
+        ContentUnavailableView("New Task", systemImage: "plus")
+    }
+}
+
+struct TaskRow: View {
+    let item: SessionTask
+    var creatorName: String? = nil
+
+    var body: some View {
+        Text(item.displayTitle)
+    }
+}
+#endif

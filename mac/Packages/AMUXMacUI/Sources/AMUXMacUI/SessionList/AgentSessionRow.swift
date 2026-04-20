@@ -1,48 +1,45 @@
 import SwiftUI
 import AMUXCore
 
-struct SessionRow: View {
-    let session: Session
-    let primaryAgent: Agent?
+/// Session list row for a solo Agent (one not bound to any shared session).
+/// Structure mirrors `SessionRow` so the two cases look visually consistent
+/// when both appear in the same list.
+struct AgentSessionRow: View {
+    let agent: Agent
     let workspaceName: String
 
     @State private var breathe = false
 
-    private var isRunning: Bool { primaryAgent?.status == 2 }
-    private var isUnread: Bool { primaryAgent?.hasUnread ?? false }
+    private var isRunning: Bool { agent.status == 2 }
+    private var isUnread: Bool { agent.hasUnread }
 
     private var displayTitle: String {
-        if !session.title.isEmpty { return session.title }
-        if let agent = primaryAgent, !agent.sessionTitle.isEmpty { return agent.sessionTitle }
+        if !agent.sessionTitle.isEmpty { return agent.sessionTitle }
+        if !agent.currentPrompt.isEmpty { return agent.currentPrompt }
         return "Untitled Session"
     }
 
     private var preview: String {
-        if !session.lastMessagePreview.isEmpty { return session.lastMessagePreview }
-        return primaryAgent?.currentPrompt ?? ""
+        // If the title already surfaces the prompt, suppress it from the
+        // preview row to avoid the same text appearing twice stacked.
+        if displayTitle == agent.currentPrompt { return "" }
+        return agent.currentPrompt
     }
 
-    private var avatarSeed: String { session.sessionId }
-
     private var avatarInitial: String {
-        if let agent = primaryAgent {
-            let name = agent.worktree.isEmpty ? agent.agentId : agent.worktree
-            let lastComponent = name.split(separator: "/").last.map(String.init) ?? name
-            return String(lastComponent.prefix(1)).uppercased()
-        }
-        let trimmed = session.title.trimmingCharacters(in: .whitespaces)
-        return trimmed.first.map { String($0).uppercased() } ?? "?"
+        let name = agent.worktree.isEmpty ? agent.agentId : agent.worktree
+        let lastComponent = name.split(separator: "/").last.map(String.init) ?? name
+        return String(lastComponent.prefix(1)).uppercased()
     }
 
     private var avatarColor: Color {
         let colors: [Color] = [.blue, .purple, .orange, .green, .pink, .teal, .indigo, .mint]
-        let hash = avatarSeed.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
+        let hash = agent.agentId.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
         return colors[abs(hash) % colors.count]
     }
 
     private var agentLogoName: String? {
-        guard let type = primaryAgent?.agentType else { return nil }
-        switch type {
+        switch agent.agentType {
         case 1: return "ClaudeLogo"
         case 2: return "OpenCodeLogo"
         case 3: return "CodexLogo"
@@ -50,9 +47,7 @@ struct SessionRow: View {
         }
     }
 
-    private var rowDate: Date {
-        session.lastMessageAt ?? session.createdAt
-    }
+    private var rowDate: Date { agent.lastEventTime ?? agent.startedAt }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -70,22 +65,13 @@ struct SessionRow: View {
                     .onAppear { breathe = true }
 
                 ZStack {
-                    if primaryAgent == nil {
-                        Circle()
-                            .fill(Color.indigo.gradient)
-                            .frame(width: 40, height: 40)
-                        Image(systemName: "person.2.fill")
-                            .font(.system(size: 16))
-                            .foregroundStyle(.white)
-                    } else {
-                        Circle()
-                            .fill(avatarColor.gradient)
-                            .frame(width: 40, height: 40)
-                        Text(avatarInitial)
-                            .font(.callout)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.white)
-                    }
+                    Circle()
+                        .fill(avatarColor.gradient)
+                        .frame(width: 40, height: 40)
+                    Text(avatarInitial)
+                        .font(.callout)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.white)
                 }
             }
 
@@ -109,7 +95,7 @@ struct SessionRow: View {
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 14, height: 14)
                     } else {
-                        Image(systemName: "person.2")
+                        Image(systemName: "cpu")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -119,10 +105,6 @@ struct SessionRow: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                    } else if primaryAgent == nil {
-                        Text("\(session.participantCount)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
                     }
 
                     Spacer(minLength: 0)
@@ -135,16 +117,5 @@ struct SessionRow: View {
             }
         }
         .padding(.vertical, 4)
-    }
-
-    static func formatTime(_ date: Date) -> String {
-        let seconds = Int(-date.timeIntervalSinceNow)
-        if seconds < 60 { return "Just now" }
-        if seconds < 3600 { return "\(seconds / 60)m" }
-        if seconds < 86400 { return "\(seconds / 3600)h" }
-        if seconds < 604800 { return "\(seconds / 86400)d" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MM/dd"
-        return formatter.string(from: date)
     }
 }

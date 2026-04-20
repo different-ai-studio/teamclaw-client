@@ -20,7 +20,7 @@ pub enum IncomingMessage {
         session_id: String,
         payload: Vec<u8>,
     },
-    TeamclawWorkItemEvent {
+    TeamclawTaskEvent {
         session_id: String,
         payload: Vec<u8>,
     },
@@ -37,7 +37,7 @@ pub fn parse_incoming(publish: &Publish) -> Option<IncomingMessage> {
                 payload: publish.payload.to_vec(),
             });
         }
-        // teamclaw/{team_id}/session/{session_id}/messages  or  /workitems
+        // teamclaw/{team_id}/session/{session_id}/messages  or  /tasks
         let parts: Vec<&str> = topic.split('/').collect();
         if parts.len() == 5 && parts[2] == "session" {
             let session_id = parts[3].to_string();
@@ -48,8 +48,8 @@ pub fn parse_incoming(publish: &Publish) -> Option<IncomingMessage> {
                         payload: publish.payload.to_vec(),
                     });
                 }
-                "workitems" => {
-                    return Some(IncomingMessage::TeamclawWorkItemEvent {
+                "tasks" => {
+                    return Some(IncomingMessage::TeamclawTaskEvent {
                         session_id,
                         payload: publish.payload.to_vec(),
                     });

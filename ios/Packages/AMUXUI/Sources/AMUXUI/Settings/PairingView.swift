@@ -1,6 +1,8 @@
 import SwiftUI
 import AMUXCore
 
+#if os(iOS)
+
 public struct PairingView: View {
     let pairing: PairingManager
     @State private var manualLink = ""
@@ -96,3 +98,41 @@ public struct PairingView: View {
         }
     }
 }
+#else
+public struct PairingView: View {
+    let pairing: PairingManager
+    @State private var manualLink = ""
+    @State private var errorMessage: String?
+
+    public init(pairing: PairingManager) { self.pairing = pairing }
+
+    public var body: some View {
+        VStack(spacing: 16) {
+            Text("Connect to AMUX Daemon")
+                .font(.title2.bold())
+            TextField("amux://join?broker=...&device=...&token=...", text: $manualLink)
+                .textFieldStyle(.roundedBorder)
+            Button("Connect") { connect(with: manualLink) }
+                .disabled(manualLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            if let errorMessage {
+                Text(errorMessage).font(.caption).foregroundStyle(.red)
+            }
+        }
+        .padding(24)
+    }
+
+    private func connect(with raw: String) {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed) else {
+            errorMessage = "Invalid URL"
+            return
+        }
+        do {
+            try pairing.pair(from: url)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+#endif

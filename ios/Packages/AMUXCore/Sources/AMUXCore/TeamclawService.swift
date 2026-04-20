@@ -5,7 +5,7 @@ import SwiftData
 @Observable
 @MainActor
 public final class TeamclawService {
-    public var sessions: [CollabSession] = []
+    public var sessions: [Session] = []
     public var isConnected = false
 
     private var mqtt: MQTTService?
@@ -18,7 +18,13 @@ public final class TeamclawService {
     /// PeerList arrives; used as `sender_actor_id` on outgoing RPCs so the
     /// daemon records the creator as a member rather than a device.
     public private(set) var localMemberId: String = ""
+    public private(set) var localDisplayName: String = ""
     private var listenerTask: Task<Void, Never>?
+    private var modelContainer: ModelContainer?
+
+    public var currentHumanActorId: String? {
+        localMemberId.isEmpty ? nil : localMemberId
+    }
 
     public init() {}
 
@@ -39,10 +45,11 @@ public final class TeamclawService {
         listenerTask?.cancel()
 
         let container = modelContext.container
+        self.modelContainer = container
         let ctx = ModelContext(container)
 
         // Load cached sessions immediately
-        sessions = (try? ctx.fetch(FetchDescriptor<CollabSession>(
+        sessions = (try? ctx.fetch(FetchDescriptor<Session>(
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         ))) ?? []
 
@@ -64,9 +71,13 @@ public final class TeamclawService {
             // Subscribe to core teamclaw topics
             try? await mqtt.subscribe("teamclaw/\(teamId)/sessions")
             try? await mqtt.subscribe("teamclaw/\(teamId)/members")
+            // Subscribe to the legacy peer-scoped invite topic first so older
+            // senders still reach us until all clients publish member-scoped
+            // invite targets. Once we resolve localMemberId from PeerList we
+            // additionally subscribe to the canonical member-scoped topic.
             try? await mqtt.subscribe("teamclaw/\(teamId)/user/\(peerId)/invites")
             try? await mqtt.subscribe("teamclaw/\(teamId)/rpc/\(deviceId)/+/res")
-            try? await mqtt.subscribe("teamclaw/\(teamId)/workitems")
+            try? await mqtt.subscribe("teamclaw/\(teamId)/tasks")
             // amux-side peer list — used to resolve our local member id.
             try? await mqtt.subscribe("amux/\(deviceId)/peers")
 
@@ -95,9 +106,18 @@ public final class TeamclawService {
 
         if topic == "amux/\(deviceId)/peers" {
             if let list = try? Amux_PeerList(serializedBytes: incoming.payload) {
-                if let mine = list.peers.first(where: { $0.peerID == peerId }),
-                   !mine.memberID.isEmpty {
-                    localMemberId = mine.memberID
+                if let mine = list.peers.first(where: { $0.peerID == peerId }) {
+                    if !mine.memberID.isEmpty, mine.memberID != localMemberId {
+                        localMemberId = mine.memberID
+                        if let mqtt {
+                            Task {
+                                try? await mqtt.subscribe("teamclaw/\(teamId)/user/\(mine.memberID)/invites")
+                            }
+                        }
+                    }
+                    if !mine.displayName.isEmpty {
+                        localDisplayName = mine.displayName
+                    }
                 }
             }
             return
@@ -123,21 +143,21 @@ public final class TeamclawService {
             return
         }
 
-        if topic == "teamclaw/\(teamId)/workitems" {
-            guard let event = try? Teamclaw_WorkItemEvent(serializedBytes: incoming.payload) else {
-                print("[TeamclawService] failed to decode WorkItemEvent from global topic")
+        if topic == "teamclaw/\(teamId)/tasks" {
+            guard let event = try? Teamclaw_TaskEvent(serializedBytes: incoming.payload) else {
+                print("[TeamclawService] failed to decode TaskEvent from global topic")
                 return
             }
-            syncWorkItemEvent(event, modelContext: modelContext)
+            syncTaskEvent(event, modelContext: modelContext)
             return
         }
 
-        if topic.contains("/session/") && topic.hasSuffix("/workitems") {
-            guard let event = try? Teamclaw_WorkItemEvent(serializedBytes: incoming.payload) else {
-                print("[TeamclawService] failed to decode WorkItemEvent from topic: \(topic)")
+        if topic.contains("/session/") && topic.hasSuffix("/tasks") {
+            guard let event = try? Teamclaw_TaskEvent(serializedBytes: incoming.payload) else {
+                print("[TeamclawService] failed to decode TaskEvent from topic: \(topic)")
                 return
             }
-            syncWorkItemEvent(event, modelContext: modelContext)
+            syncTaskEvent(event, modelContext: modelContext)
             return
         }
 
@@ -169,7 +189,7 @@ public final class TeamclawService {
     private func syncSessionIndex(_ index: Teamclaw_SessionIndex, modelContext: ModelContext) {
         for entry in index.sessions {
             let id = entry.sessionID
-            let descriptor = FetchDescriptor<CollabSession>(
+            let descriptor = FetchDescriptor<Session>(
                 predicate: #Predicate { $0.sessionId == id }
             )
             if let existing = (try? modelContext.fetch(descriptor))?.first {
@@ -186,7 +206,7 @@ public final class TeamclawService {
                 case .collab: sessionTypeStr = "collab"
                 default: sessionTypeStr = "collab"
                 }
-                existing.sessionType = sessionTypeStr
+                existing.mode = sessionTypeStr
             } else {
                 let sessionTypeStr: String
                 switch entry.sessionType {
@@ -194,9 +214,9 @@ public final class TeamclawService {
                 case .collab: sessionTypeStr = "collab"
                 default: sessionTypeStr = "collab"
                 }
-                let session = CollabSession(
+                let session = Session(
                     sessionId: entry.sessionID,
-                    sessionType: sessionTypeStr,
+                    mode: sessionTypeStr,
                     teamId: teamId,
                     title: entry.title,
                     hostDeviceId: entry.hostDeviceID,
@@ -211,7 +231,7 @@ public final class TeamclawService {
             }
         }
         try? modelContext.save()
-        sessions = (try? modelContext.fetch(FetchDescriptor<CollabSession>(
+        sessions = (try? modelContext.fetch(FetchDescriptor<Session>(
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         ))) ?? []
     }
@@ -220,11 +240,11 @@ public final class TeamclawService {
         let sessionId = proto.sessionID
         guard !sessionId.isEmpty else { return }
 
-        let descriptor = FetchDescriptor<CollabSession>(
+        let descriptor = FetchDescriptor<Session>(
             predicate: #Predicate { $0.sessionId == sessionId }
         )
         guard let existing = (try? modelContext.fetch(descriptor))?.first else {
-            // No local CollabSession yet — the SessionIndex sync path will create one
+            // No local Session yet — the SessionIndex sync path will create one
             // when the retained /sessions message arrives. Avoid speculative inserts
             // to prevent duplicates; syncSessionMeta will be re-triggered on the
             // next retained delivery or can be applied once the session exists.
@@ -234,6 +254,11 @@ public final class TeamclawService {
         existing.primaryAgentId = proto.primaryAgentID.isEmpty ? nil : proto.primaryAgentID
         if !proto.title.isEmpty { existing.title = proto.title }
         if !proto.summary.isEmpty { existing.summary = proto.summary }
+        if !proto.taskID.isEmpty { existing.taskId = proto.taskID }
+        if !proto.lastMessagePreview.isEmpty { existing.lastMessagePreview = proto.lastMessagePreview }
+        if proto.lastMessageAt > 0 {
+            existing.lastMessageAt = Date(timeIntervalSince1970: TimeInterval(proto.lastMessageAt))
+        }
         try? modelContext.save()
     }
 
@@ -269,6 +294,17 @@ public final class TeamclawService {
         )
         sessionMessage.model = message.model.isEmpty ? nil : message.model
         modelContext.insert(sessionMessage)
+
+        let messageSessionId = message.sessionID
+        let sessionDescriptor = FetchDescriptor<Session>(
+            predicate: #Predicate { $0.sessionId == messageSessionId }
+        )
+        if let session = (try? modelContext.fetch(sessionDescriptor))?.first {
+            session.lastMessagePreview = String(message.content.prefix(140))
+            session.lastMessageAt = message.createdAt > 0
+                ? Date(timeIntervalSince1970: TimeInterval(message.createdAt))
+                : .now
+        }
         try? modelContext.save()
     }
 
@@ -278,11 +314,16 @@ public final class TeamclawService {
         let sid = invite.sessionID
         subscribeToSession(sid)
 
+        guard let actorId = canonicalHumanActorId(for: invite) else {
+            print("[TeamclawService] refusing to join invite before canonical human actor id resolves")
+            return
+        }
+
         // Send JoinSessionRequest RPC to session host
         var participant = Teamclaw_Participant()
-        participant.actorID = peerId
+        participant.actorID = actorId
         participant.actorType = .human
-        participant.displayName = peerId
+        participant.displayName = canonicalHumanDisplayName(fallbackActorId: actorId)
         participant.joinedAt = Int64(Date().timeIntervalSince1970)
 
         var joinReq = Teamclaw_JoinSessionRequest()
@@ -302,18 +343,17 @@ public final class TeamclawService {
         }
     }
 
-    private func syncWorkItemEvent(_ event: Teamclaw_WorkItemEvent, modelContext: ModelContext) {
-        let workItem: Teamclaw_WorkItem
+    private func syncTaskEvent(_ event: Teamclaw_TaskEvent, modelContext: ModelContext) {
+        let task: Teamclaw_Task
         switch event.event {
         case .created(let item):
-            workItem = item
+            task = item
         case .updated(let item):
-            workItem = item
+            task = item
         case .claimed(let claim):
-            // Update work item status to in_progress on claim
-            let claimItemId = claim.workItemID
-            let claimDesc = FetchDescriptor<WorkItem>(
-                predicate: #Predicate { $0.workItemId == claimItemId }
+            let claimItemId = claim.taskID
+            let claimDesc = FetchDescriptor<SessionTask>(
+                predicate: #Predicate { $0.taskId == claimItemId }
             )
             if let existing = (try? modelContext.fetch(claimDesc))?.first {
                 if existing.status == "open" {
@@ -323,10 +363,9 @@ public final class TeamclawService {
             }
             return
         case .submitted(let sub):
-            // Mark work item as done when submission received
-            let subItemId = sub.workItemID
-            let subDesc = FetchDescriptor<WorkItem>(
-                predicate: #Predicate { $0.workItemId == subItemId }
+            let subItemId = sub.taskID
+            let subDesc = FetchDescriptor<SessionTask>(
+                predicate: #Predicate { $0.taskId == subItemId }
             )
             if let existing = (try? modelContext.fetch(subDesc))?.first {
                 existing.status = "done"
@@ -337,13 +376,13 @@ public final class TeamclawService {
             return
         }
 
-        let itemId = workItem.workItemID
-        let descriptor = FetchDescriptor<WorkItem>(
-            predicate: #Predicate { $0.workItemId == itemId }
+        let itemId = task.taskID
+        let descriptor = FetchDescriptor<SessionTask>(
+            predicate: #Predicate { $0.taskId == itemId }
         )
 
         let statusStr: String
-        switch workItem.status {
+        switch task.status {
         case .open: statusStr = "open"
         case .inProgress: statusStr = "in_progress"
         case .done: statusStr = "done"
@@ -351,24 +390,24 @@ public final class TeamclawService {
         }
 
         if let existing = (try? modelContext.fetch(descriptor))?.first {
-            existing.title = workItem.title
-            existing.itemDescription = workItem.description_p
+            existing.title = task.title
+            existing.taskDescription = task.description_p
             existing.status = statusStr
-            existing.parentId = workItem.parentID
-            existing.archived = workItem.archived
+            existing.parentTaskId = task.parentID
+            existing.archived = task.archived
         } else {
-            let item = WorkItem(
-                workItemId: workItem.workItemID,
-                sessionId: workItem.sessionID,
-                title: workItem.title,
-                itemDescription: workItem.description_p,
+            let item = SessionTask(
+                taskId: task.taskID,
+                sessionId: task.sessionID,
+                title: task.title,
+                taskDescription: task.description_p,
                 status: statusStr,
-                parentId: workItem.parentID,
-                createdBy: workItem.createdBy,
-                createdAt: workItem.createdAt > 0
-                    ? Date(timeIntervalSince1970: TimeInterval(workItem.createdAt))
+                parentTaskId: task.parentID,
+                createdBy: task.createdBy,
+                createdAt: task.createdAt > 0
+                    ? Date(timeIntervalSince1970: TimeInterval(task.createdAt))
                     : .now,
-                archived: workItem.archived
+                archived: task.archived
             )
             modelContext.insert(item)
         }
@@ -377,14 +416,18 @@ public final class TeamclawService {
 
     // MARK: - Outbound
 
-    /// Send a text message to a collab session.
+    /// Send a text message to a shared session.
     ///
     /// - Parameter modelId: Optional model identifier the user picked in the composer.
     ///   Forwarded via ``Teamclaw_Message/model`` and proxied to the agent's session by
     ///   the daemon's collab→agent dispatch path, which calls `send_set_model` before
     ///   `send_prompt` when the model differs from the agent's current model.
-    public func sendMessage(sessionId: String, content: String, actorId: String, modelId: String? = nil) {
+    public func sendMessage(sessionId: String, content: String, modelId: String? = nil) {
         guard let mqtt else { return }
+        guard let actorId = currentHumanActorId else {
+            print("[TeamclawService] refusing to send session message before localMemberId resolves")
+            return
+        }
         var message = Teamclaw_Message()
         message.messageID = UUID().uuidString
         message.sessionID = sessionId
@@ -410,7 +453,29 @@ public final class TeamclawService {
         }
     }
 
-    public func createWorkItem(description: String) async -> Bool {
+    public func makeCreateSessionRequest(
+        teamId: String,
+        title: String,
+        summary: String,
+        inviteActorIds: [String] = [],
+        taskId: String = ""
+    ) -> Teamclaw_CreateSessionRequest {
+        var createReq = Teamclaw_CreateSessionRequest()
+        createReq.sessionType = .collab
+        createReq.teamID = teamId
+        createReq.title = title
+        createReq.summary = summary
+        createReq.inviteActorIds = inviteActorIds
+        if !taskId.isEmpty {
+            createReq.taskID = taskId
+        }
+        if let actorId = currentHumanActorId {
+            createReq.senderActorID = actorId
+        }
+        return createReq
+    }
+
+    public func createTask(description: String) async -> Bool {
         guard let mqtt else { return false }
 
         let title: String
@@ -425,16 +490,18 @@ public final class TeamclawService {
             }
         }
 
-        var createReq = Teamclaw_CreateWorkItemRequest()
+        var createReq = Teamclaw_CreateTaskRequest()
         createReq.sessionID = ""
         createReq.title = title
         createReq.description_p = description
-        createReq.senderActorID = localMemberId
+        if let actorId = currentHumanActorId {
+            createReq.senderActorID = actorId
+        }
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
         rpcReq.senderDeviceID = deviceId
-        rpcReq.method = .createWorkItem(createReq)
+        rpcReq.method = .createTask(createReq)
 
         let requestId = rpcReq.requestID
         let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(requestId)/req"
@@ -456,65 +523,65 @@ public final class TeamclawService {
         return false
     }
 
-    /// Toggles the archived flag on a work item. Sends an `UpdateWorkItem` RPC
+    /// Toggles the archived flag on a task. Sends an `UpdateTask` RPC
     /// with only `archived` set (other fields left empty / sentinel).
     /// Does not wait for the RPC response — the authoritative state arrives
-    /// via the `WorkItemEvent.updated` broadcast and flows through
-    /// `syncWorkItemEvent`. The call site typically flips `archived` on the
+    /// via the `TaskEvent.updated` broadcast and flows through
+    /// `syncTaskEvent`. The call site typically flips `archived` on the
     /// SwiftData model first for optimistic UI; if the RPC fails, the next
     /// broadcast will reinstate the prior value.
-    public func archiveWorkItem(workItemId: String, sessionId: String, archived: Bool) async {
+    public func archiveTask(taskId: String, sessionId: String, archived: Bool) async {
         guard let mqtt else { return }
 
-        var update = Teamclaw_UpdateWorkItemRequest()
+        var update = Teamclaw_UpdateTaskRequest()
         update.sessionID = sessionId
-        update.workItemID = workItemId
+        update.taskID = taskId
         update.archived = archived   // SwiftProtobuf: setting also flips hasArchived=true
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
         rpcReq.senderDeviceID = deviceId
-        rpcReq.method = .updateWorkItem(update)
+        rpcReq.method = .updateTask(update)
 
         let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
 
-    /// Updates a work item's status via `UpdateWorkItem` RPC. Mirrors
-    /// `archiveWorkItem` — fire-and-forget; authoritative state arrives
-    /// via `WorkItemEvent.updated` broadcast and flows through
-    /// `syncWorkItemEvent`. The call site typically flips `status` on the
+    /// Updates a task's status via `UpdateTask` RPC. Mirrors
+    /// `archiveTask` — fire-and-forget; authoritative state arrives
+    /// via `TaskEvent.updated` broadcast and flows through
+    /// `syncTaskEvent`. The call site typically flips `status` on the
     /// SwiftData model first for optimistic UI; if the RPC fails, the next
     /// broadcast will reinstate the prior value.
     ///
     /// - Parameter status: one of `"open"`, `"in_progress"`, `"done"`.
     ///   Any other value is sent as `.unknown` (which SwiftProtobuf skips,
     ///   producing a no-op update on the daemon side).
-    public func updateWorkItemStatus(workItemId: String, sessionId: String, status: String) async {
+    public func updateTaskStatus(taskId: String, sessionId: String, status: String) async {
         guard let mqtt else { return }
 
-        var update = Teamclaw_UpdateWorkItemRequest()
+        var update = Teamclaw_UpdateTaskRequest()
         update.sessionID = sessionId
-        update.workItemID = workItemId
+        update.taskID = taskId
         update.status = protoStatus(from: status)
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
         rpcReq.senderDeviceID = deviceId
-        rpcReq.method = .updateWorkItem(update)
+        rpcReq.method = .updateTask(update)
 
         let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
 
-    /// Patches any combination of title, description, and status on a work
+    /// Patches any combination of title, description, and status on a task.
     /// item. Title / description are sent as empty strings when `nil` is
     /// passed (SwiftProtobuf treats empty strings as "unset" on the
     /// daemon side). Status omitted when `nil`. Fire-and-forget.
-    public func updateWorkItem(
-        workItemId: String,
+    public func updateTask(
+        taskId: String,
         sessionId: String,
         title: String? = nil,
         description: String? = nil,
@@ -522,9 +589,9 @@ public final class TeamclawService {
     ) async {
         guard let mqtt else { return }
 
-        var update = Teamclaw_UpdateWorkItemRequest()
+        var update = Teamclaw_UpdateTaskRequest()
         update.sessionID = sessionId
-        update.workItemID = workItemId
+        update.taskID = taskId
         if let title { update.title = title }
         if let description { update.description_p = description }
         if let status { update.status = protoStatus(from: status) }
@@ -532,18 +599,18 @@ public final class TeamclawService {
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
         rpcReq.senderDeviceID = deviceId
-        rpcReq.method = .updateWorkItem(update)
+        rpcReq.method = .updateTask(update)
 
         let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
 
-    /// Maps the SwiftData `WorkItem.status` string domain to the protobuf
-    /// `WorkItemStatus` enum. Unknown inputs map to `.unknown` — defensive
+    /// Maps the SwiftData `Task.status` string domain to the protobuf
+    /// `TaskStatus` enum. Unknown inputs map to `.unknown` — defensive
     /// against future status values landing in the model before this mapper
     /// is updated.
-    private func protoStatus(from status: String) -> Teamclaw_WorkItemStatus {
+    private func protoStatus(from status: String) -> Teamclaw_TaskStatus {
         switch status {
         case "open": return .open
         case "in_progress": return .inProgress
@@ -558,8 +625,72 @@ public final class TeamclawService {
         Task {
             try? await mqtt.subscribe("\(base)/messages")
             try? await mqtt.subscribe("\(base)/meta")
-            try? await mqtt.subscribe("\(base)/workitems")
+            try? await mqtt.subscribe("\(base)/tasks")
             try? await mqtt.subscribe("\(base)/presence")
+            await fetchRecentMessages(sessionId: sessionId)
         }
+    }
+
+    public func fetchRecentMessages(sessionId: String, beforeCreatedAt: Int64 = 0, pageSize: UInt32 = 100) async {
+        guard let mqtt,
+              let modelContainer else { return }
+
+        let ctx = ModelContext(modelContainer)
+        let descriptor = FetchDescriptor<Session>(
+            predicate: #Predicate { $0.sessionId == sessionId }
+        )
+        guard let session = (try? ctx.fetch(descriptor))?.first else { return }
+
+        var req = Teamclaw_FetchSessionMessagesRequest()
+        req.sessionID = sessionId
+        req.beforeCreatedAt = beforeCreatedAt
+        req.pageSize = pageSize
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .fetchSessionMessages(req)
+
+        let topic = "teamclaw/\(teamId)/rpc/\(session.hostDeviceId)/\(rpcReq.requestID)/req"
+        guard let data = try? rpcReq.serializedData() else { return }
+        try? await mqtt.publish(topic: topic, payload: data, retain: false)
+
+        let stream = mqtt.messages()
+        let deadline = Date().addingTimeInterval(10)
+        for await msg in stream {
+            if Date() > deadline { break }
+            guard msg.topic.contains("/rpc/"), msg.topic.hasSuffix("/res"),
+                  let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
+                  response.requestID == rpcReq.requestID,
+                  response.success,
+                  case .sessionMessagePage(let page) = response.result else {
+                continue
+            }
+
+            for message in page.messages {
+                syncMessage(message, modelContext: ctx)
+            }
+            break
+        }
+    }
+
+    private func canonicalHumanActorId(for invite: Teamclaw_Invite) -> String? {
+        if let actorId = currentHumanActorId {
+            return actorId
+        }
+        if !invite.invitedActorID.isEmpty {
+            return invite.invitedActorID
+        }
+        return nil
+    }
+
+    private func canonicalHumanDisplayName(fallbackActorId: String) -> String {
+        if !localDisplayName.isEmpty {
+            return localDisplayName
+        }
+        if let actorId = currentHumanActorId, actorId == fallbackActorId {
+            return actorId
+        }
+        return fallbackActorId
     }
 }

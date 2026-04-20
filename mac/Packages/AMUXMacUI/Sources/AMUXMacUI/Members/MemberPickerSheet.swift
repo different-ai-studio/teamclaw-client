@@ -6,7 +6,7 @@ import AMUXCore
 //
 // macOS-flavored analog of the iOS MemberListView selection mode. Presented
 // as a modal sheet that lets the user multi-select Members to invite into a
-// collab session. Unlike the iOS view this is selection-only — browsing and
+// shared session. Unlike the iOS view this is selection-only — browsing and
 // invite flows live elsewhere on macOS.
 //
 // We reuse AMUXCore's MemberListViewModel so the member list stays in sync

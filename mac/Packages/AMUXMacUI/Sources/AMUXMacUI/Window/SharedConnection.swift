@@ -22,12 +22,15 @@ import AMUXCore
 public final class SharedConnection {
     public private(set) var mqtt: MQTTService?
     public private(set) var monitor: ConnectionMonitor?
-    public let peerId: String
+    /// Peer identifier sent in every PeerAnnounce. Derived from the first six
+    /// characters of the auth token so the daemon's token-prefix fallback
+    /// (`AuthManager.find_role_by_token_prefix`) can recover this peer's role
+    /// after a daemon restart — same convention iOS uses. Empty until the
+    /// first `connectIfNeeded` run, so don't read this before pairing is set.
+    public private(set) var peerId: String = ""
     private var connecting = false
 
-    public init() {
-        self.peerId = "mac-\(UUID().uuidString.prefix(6))"
-    }
+    public init() {}
 
     /// Establishes the MQTT session if not already connected. Safe to call
     /// repeatedly; concurrent callers are coalesced via the `connecting` flag.
@@ -35,6 +38,10 @@ public final class SharedConnection {
         guard mqtt == nil, !connecting, pairing.isPaired else { return }
         connecting = true
         defer { connecting = false }
+
+        if peerId.isEmpty {
+            peerId = "mac-\(pairing.authToken.prefix(6))"
+        }
 
         let service = MQTTService()
         do {

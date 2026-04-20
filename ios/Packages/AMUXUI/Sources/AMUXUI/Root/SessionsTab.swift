@@ -64,17 +64,17 @@ public struct SessionsTab: View {
             .navigationDestination(for: String.self) { id in
                 if id.hasPrefix("collab:") {
                     let sessionId = String(id.dropFirst("collab:".count))
-                    let descriptor = FetchDescriptor<CollabSession>(
+                    let descriptor = FetchDescriptor<Session>(
                         predicate: #Predicate { $0.sessionId == sessionId }
                     )
                     if let session = (try? modelContext.fetch(descriptor))?.first {
-                        AgentDetailView(collabSession: session, mqtt: mqtt,
+                        AgentDetailView(session: session, mqtt: mqtt,
                                         deviceId: pairing.deviceId,
                                         peerId: "ios-\(pairing.authToken.prefix(6))",
                                         teamclawService: teamclawService,
                                         navigationPath: $navigationPath)
                     } else {
-                        Text("Collab session not found")
+                        Text("Session not found")
                     }
                 } else if let agent = viewModel.agents.first(where: { $0.agentId == id }) {
                     AgentDetailView(agent: agent, mqtt: mqtt,
@@ -95,6 +95,7 @@ public struct SessionsTab: View {
             .sheet(isPresented: $showNewSession) {
                 NewSessionSheet(mqtt: mqtt, deviceId: pairing.deviceId,
                                peerId: "ios-\(pairing.authToken.prefix(6))",
+                               teamclawService: teamclawService,
                                viewModel: viewModel) { agentId in
                     navigationPath.append(agentId)
                 }
@@ -104,7 +105,7 @@ public struct SessionsTab: View {
                 viewModel.start(mqtt: mqtt, deviceId: pairing.deviceId, modelContext: modelContext)
             }
             .onChange(of: teamclawService?.sessions.count) {
-                viewModel.reloadCollabSessions(modelContext: modelContext)
+                viewModel.reloadSessions(modelContext: modelContext)
             }
         }
     }

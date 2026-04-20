@@ -2,34 +2,34 @@ import Foundation
 import SwiftData
 
 @Model
-public final class WorkItem {
-    @Attribute(.unique) public var workItemId: String
+public final class SessionTask {
+    @Attribute(.unique) public var taskId: String
     public var sessionId: String
     public var title: String
-    public var itemDescription: String  // "description" is reserved in some contexts
+    public var taskDescription: String
     public var status: String           // "open", "in_progress", "done"
-    public var parentId: String
+    public var parentTaskId: String
     public var createdBy: String
     public var createdAt: Date
     public var archived: Bool
 
     public init(
-        workItemId: String,
+        taskId: String,
         sessionId: String = "",
         title: String = "",
-        itemDescription: String = "",
+        taskDescription: String = "",
         status: String = "open",
-        parentId: String = "",
+        parentTaskId: String = "",
         createdBy: String = "",
         createdAt: Date = .now,
         archived: Bool = false
     ) {
-        self.workItemId = workItemId
+        self.taskId = taskId
         self.sessionId = sessionId
         self.title = title
-        self.itemDescription = itemDescription
+        self.taskDescription = taskDescription
         self.status = status
-        self.parentId = parentId
+        self.parentTaskId = parentTaskId
         self.createdBy = createdBy
         self.createdAt = createdAt
         self.archived = archived
@@ -37,7 +37,7 @@ public final class WorkItem {
 
     public var displayTitle: String {
         if !title.isEmpty { return title }
-        let desc = itemDescription
+        let desc = taskDescription
         if desc.count <= 50 { return desc }
         let prefix = desc.prefix(50)
         if let lastSpace = prefix.lastIndex(of: " ") {
@@ -49,7 +49,6 @@ public final class WorkItem {
     public var isOpen: Bool { status == "open" }
     public var isInProgress: Bool { status == "in_progress" }
     public var isDone: Bool { status == "done" }
-
     public var statusLabel: String {
         switch status {
         case "open": return "Open"

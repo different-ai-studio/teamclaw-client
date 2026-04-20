@@ -3,14 +3,14 @@ import SwiftData
 import AMUXCore
 
 /// Editor sheet hosted by `TaskEditorWindowScene`. Handles both "new task"
-/// (input.workItemId == nil) and "edit existing" modes.
+/// (`input.taskId == nil`) and "edit existing" modes.
 struct TaskEditorView: View {
     let input: TaskEditorInput
     let teamclawService: TeamclawService
     let onDone: () -> Void
 
     @Environment(\.modelContext) private var modelContext
-    @Query private var allItems: [WorkItem]
+    @Query private var allItems: [SessionTask]
 
     @State private var title: String = ""
     @State private var descriptionText: String = ""
@@ -20,11 +20,11 @@ struct TaskEditorView: View {
     @State private var isDirty = false
     @State private var showDiscardAlert = false
 
-    private var isNew: Bool { input.workItemId == nil }
+    private var isNew: Bool { input.taskId == nil }
 
-    private var editingItem: WorkItem? {
-        guard let id = input.workItemId else { return nil }
-        return allItems.first(where: { $0.workItemId == id })
+    private var editingItem: SessionTask? {
+        guard let id = input.taskId else { return nil }
+        return allItems.first(where: { $0.taskId == id })
     }
 
     var body: some View {
@@ -70,7 +70,7 @@ struct TaskEditorView: View {
     private func hydrate() {
         guard let item = editingItem else { return }
         title = item.title
-        descriptionText = item.itemDescription
+        descriptionText = item.taskDescription
         status = item.status.isEmpty ? "open" : item.status
         isDirty = false
     }
@@ -83,17 +83,17 @@ struct TaskEditorView: View {
 
         if let existing = editingItem {
             existing.title = trimmedTitle
-            existing.itemDescription = descriptionText
+            existing.taskDescription = descriptionText
             existing.status = status
             try? modelContext.save()
-            let id = existing.workItemId
+            let id = existing.taskId
             let sid = existing.sessionId
             let newTitle = trimmedTitle
             let newDescription = descriptionText
             let desiredStatus = status
             Task {
-                await teamclawService.updateWorkItem(
-                    workItemId: id,
+                await teamclawService.updateTask(
+                    taskId: id,
                     sessionId: sid,
                     title: newTitle,
                     description: newDescription,
@@ -104,7 +104,7 @@ struct TaskEditorView: View {
         } else {
             let payload = descriptionText.isEmpty ? trimmedTitle : "\(trimmedTitle)\n\n\(descriptionText)"
             Task {
-                let ok = await teamclawService.createWorkItem(description: payload)
+                let ok = await teamclawService.createTask(description: payload)
                 await MainActor.run {
                     isBusy = false
                     if ok { onDone() } else { errorMessage = "Failed to create task. Check daemon connection." }

@@ -33,10 +33,10 @@ public struct AgentDetailView: View {
         self._navigationPath = navigationPath
     }
 
-    public init(collabSession: CollabSession, mqtt: MQTTService, deviceId: String, peerId: String,
+    public init(session: Session, mqtt: MQTTService, deviceId: String, peerId: String,
                 teamclawService: TeamclawService?, navigationPath: Binding<[String]>) {
         _viewModel = State(initialValue: AgentDetailViewModel(
-            agent: nil, mqtt: mqtt, deviceId: deviceId, peerId: peerId, collabSession: collabSession, teamclawService: teamclawService))
+            agent: nil, mqtt: mqtt, deviceId: deviceId, peerId: peerId, session: session, teamclawService: teamclawService))
         self.allAgentIds = []
         self._navigationPath = navigationPath
     }
@@ -684,4 +684,3 @@ private struct RecordButton: View {
         .animation(.easeInOut(duration: 0.2), value: isRecording)
     }
 }
-
