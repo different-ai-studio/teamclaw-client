@@ -12,6 +12,9 @@ packages:
     path: Packages/AMUXMacUI
   AMUXSharedUI:
     path: ../ios/Packages/AMUXSharedUI
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa
+    from: "8.0.0"
 
 targets:
   AMUXMac:
@@ -23,6 +26,8 @@ targets:
       - package: AMUXCore
       - package: AMUXMacUI
       - package: AMUXSharedUI
+      - package: Sentry
+        product: Sentry
     info:
       path: AMUXMacApp/Info.plist
       properties:

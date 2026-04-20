@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import AMUXCore
 import AMUXMacUI
+import Sentry
 
 @main
 struct AMUXMacApp: App {
@@ -12,10 +13,23 @@ struct AMUXMacApp: App {
     let modelContainer: ModelContainer
 
     init() {
+        SentrySDK.start { options in
+            options.dsn = "https://7551f3236520b84b27ec473a1d7c1480@o60909.ingest.us.sentry.io/4511233545011200"
+            options.tracesSampleRate = 0.2
+            options.enableAutoPerformanceTracing = true
+            options.enableSwizzling = true
+            #if DEBUG
+            options.debug = true
+            options.environment = "development"
+            #else
+            options.environment = "production"
+            #endif
+        }
+
         do {
             modelContainer = try AMUXModelContainerFactory.make()
         } catch {
-            fatalError("Failed to initialise ModelContainer: \\(error)")
+            fatalError("Failed to initialise ModelContainer: \(error)")
         }
     }
 
