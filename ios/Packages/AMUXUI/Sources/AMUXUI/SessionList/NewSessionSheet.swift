@@ -512,8 +512,9 @@ public struct NewSessionSheet: View {
     }
 
     private func persistSession(_ info: Teamclaw_SessionInfo) -> Session {
+        let sessionID = info.sessionID
         let fetch = FetchDescriptor<Session>(
-            predicate: #Predicate { $0.sessionId == info.sessionID }
+            predicate: #Predicate { $0.sessionId == sessionID }
         )
 
         let session = (try? modelContext.fetch(fetch))?.first ?? {
