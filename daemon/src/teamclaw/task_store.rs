@@ -18,6 +18,8 @@ pub struct TaskStore {
 pub struct StoredTask {
     pub task_id: String,
     pub session_id: String,
+    #[serde(default)]
+    pub workspace_id: String,
     pub title: String,
     pub description: String,
     pub status: String,
@@ -152,6 +154,7 @@ impl TaskStore {
             claims,
             submissions,
             archived: item.archived,
+            workspace_id: item.workspace_id.clone(),
         }
     }
 }
@@ -175,6 +178,7 @@ mod tests {
         StoredTask {
             task_id: id.to_string(),
             session_id: session_id.to_string(),
+            workspace_id: String::new(),
             title: format!("Item {}", id),
             description: "desc".to_string(),
             status: "open".to_string(),

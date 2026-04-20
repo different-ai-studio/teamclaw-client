@@ -102,6 +102,7 @@ message Task {
   repeated Claim claims = 9;
   repeated Submission submissions = 10;
   bool archived = 11;
+  string workspace_id = 12;
 }
 
 message Claim {
@@ -254,6 +255,7 @@ message CreateTaskRequest {
   // Member id of the actor creating this task. Used by the daemon as
   // `created_by`; if empty, the daemon falls back to sender_device_id.
   string sender_actor_id = 5;
+  string workspace_id = 6;
 }
 
 message ClaimTaskRequest {

@@ -351,6 +351,8 @@ public struct Teamclaw_Task: Sendable {
 
   public var archived: Bool = false
 
+  public var workspaceID: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -914,6 +916,8 @@ public struct Teamclaw_CreateTaskRequest: Sendable {
   /// `created_by`; if empty, the daemon falls back to sender_device_id.
   public var senderActorID: String = String()
 
+  public var workspaceID: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1381,7 +1385,7 @@ extension Teamclaw_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
 extension Teamclaw_Task: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Task"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}task_id\0\u{3}session_id\0\u{1}title\0\u{1}description\0\u{1}status\0\u{3}parent_id\0\u{3}created_by\0\u{3}created_at\0\u{1}claims\0\u{1}submissions\0\u{1}archived\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}task_id\0\u{3}session_id\0\u{1}title\0\u{1}description\0\u{1}status\0\u{3}parent_id\0\u{3}created_by\0\u{3}created_at\0\u{1}claims\0\u{1}submissions\0\u{1}archived\0\u{3}workspace_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1400,6 +1404,7 @@ extension Teamclaw_Task: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
       case 9: try { try decoder.decodeRepeatedMessageField(value: &self.claims) }()
       case 10: try { try decoder.decodeRepeatedMessageField(value: &self.submissions) }()
       case 11: try { try decoder.decodeSingularBoolField(value: &self.archived) }()
+      case 12: try { try decoder.decodeSingularStringField(value: &self.workspaceID) }()
       default: break
       }
     }
@@ -1439,6 +1444,9 @@ extension Teamclaw_Task: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
     if self.archived != false {
       try visitor.visitSingularBoolField(value: self.archived, fieldNumber: 11)
     }
+    if !self.workspaceID.isEmpty {
+      try visitor.visitSingularStringField(value: self.workspaceID, fieldNumber: 12)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1454,6 +1462,7 @@ extension Teamclaw_Task: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
     if lhs.claims != rhs.claims {return false}
     if lhs.submissions != rhs.submissions {return false}
     if lhs.archived != rhs.archived {return false}
+    if lhs.workspaceID != rhs.workspaceID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2585,7 +2594,7 @@ extension Teamclaw_RemoveParticipantRequest: SwiftProtobuf.Message, SwiftProtobu
 
 extension Teamclaw_CreateTaskRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateTaskRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{1}title\0\u{1}description\0\u{3}parent_id\0\u{3}sender_actor_id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{1}title\0\u{1}description\0\u{3}parent_id\0\u{3}sender_actor_id\0\u{3}workspace_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2598,6 +2607,7 @@ extension Teamclaw_CreateTaskRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
       case 3: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.parentID) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self.senderActorID) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.workspaceID) }()
       default: break
       }
     }
@@ -2619,6 +2629,9 @@ extension Teamclaw_CreateTaskRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
     if !self.senderActorID.isEmpty {
       try visitor.visitSingularStringField(value: self.senderActorID, fieldNumber: 5)
     }
+    if !self.workspaceID.isEmpty {
+      try visitor.visitSingularStringField(value: self.workspaceID, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2628,6 +2641,7 @@ extension Teamclaw_CreateTaskRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
     if lhs.description_p != rhs.description_p {return false}
     if lhs.parentID != rhs.parentID {return false}
     if lhs.senderActorID != rhs.senderActorID {return false}
+    if lhs.workspaceID != rhs.workspaceID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -71,8 +71,11 @@ struct CreateTaskSheet: View {
     let teamclawService: TeamclawService?
     let onCreated: () -> Void
 
+    @Query(sort: \Workspace.displayName) private var workspaces: [Workspace]
+
     @State private var text = ""
     @State private var isSending = false
+    @State private var selectedWorkspaceId: String = ""
     @FocusState private var isFocused: Bool
 
     @State private var voiceRecorder = VoiceRecorder(contextualStrings: [
@@ -92,6 +95,7 @@ struct CreateTaskSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                workspaceRow
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $text)
                         .focused($isFocused)
@@ -183,7 +187,12 @@ struct CreateTaskSheet: View {
                     .buttonStyle(.plain)
                 }
             }
-            .onAppear { isFocused = true }
+            .onAppear {
+                isFocused = true
+                if selectedWorkspaceId.isEmpty, workspaces.count == 1 {
+                    selectedWorkspaceId = workspaces[0].workspaceId
+                }
+            }
             .onChange(of: photoPickerItems) { _, newItems in
                 Task {
                     // Load all selections into a local buffer, then append
@@ -204,6 +213,52 @@ struct CreateTaskSheet: View {
                 }
             }
         }
+    }
+
+    private var workspaceRow: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text("Workspace")
+                .foregroundStyle(.secondary)
+            Spacer()
+            Menu {
+                Button {
+                    selectedWorkspaceId = ""
+                } label: {
+                    Label("None", systemImage: selectedWorkspaceId.isEmpty ? "checkmark" : "circle")
+                }
+                if !workspaces.isEmpty {
+                    Divider()
+                    ForEach(workspaces, id: \.workspaceId) { workspace in
+                        Button {
+                            selectedWorkspaceId = workspace.workspaceId
+                        } label: {
+                            Label(
+                                workspace.displayName,
+                                systemImage: selectedWorkspaceId == workspace.workspaceId ? "checkmark" : "circle"
+                            )
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(selectedWorkspaceLabel)
+                        .font(.body)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption)
+                }
+                .foregroundStyle(selectedWorkspaceId.isEmpty ? .secondary : .primary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private var selectedWorkspaceLabel: String {
+        guard let workspace = workspaces.first(where: { $0.workspaceId == selectedWorkspaceId }) else {
+            return "None"
+        }
+        return workspace.displayName
     }
 
     private func imageChip(_ chip: AttachedImage) -> some View {
@@ -276,7 +331,10 @@ struct CreateTaskSheet: View {
         }
         isSending = true
         Task {
-            let ok = await teamclawService?.createTask(description: finalDesc) ?? false
+            let ok = await teamclawService?.createTask(
+                description: finalDesc,
+                workspaceId: selectedWorkspaceId
+            ) ?? false
             isSending = false
             if ok {
                 onCreated()

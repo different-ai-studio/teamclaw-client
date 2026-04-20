@@ -5,6 +5,7 @@ import SwiftData
 public final class SessionTask {
     @Attribute(.unique) public var taskId: String
     public var sessionId: String
+    public var workspaceId: String
     public var title: String
     public var taskDescription: String
     public var status: String           // "open", "in_progress", "done"
@@ -16,6 +17,7 @@ public final class SessionTask {
     public init(
         taskId: String,
         sessionId: String = "",
+        workspaceId: String = "",
         title: String = "",
         taskDescription: String = "",
         status: String = "open",
@@ -26,6 +28,7 @@ public final class SessionTask {
     ) {
         self.taskId = taskId
         self.sessionId = sessionId
+        self.workspaceId = workspaceId
         self.title = title
         self.taskDescription = taskDescription
         self.status = status

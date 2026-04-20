@@ -395,10 +395,12 @@ public final class TeamclawService {
             existing.status = statusStr
             existing.parentTaskId = task.parentID
             existing.archived = task.archived
+            existing.workspaceId = task.workspaceID
         } else {
             let item = SessionTask(
                 taskId: task.taskID,
                 sessionId: task.sessionID,
+                workspaceId: task.workspaceID,
                 title: task.title,
                 taskDescription: task.description_p,
                 status: statusStr,
@@ -475,7 +477,7 @@ public final class TeamclawService {
         return createReq
     }
 
-    public func createTask(description: String) async -> Bool {
+    public func createTask(description: String, workspaceId: String = "") async -> Bool {
         guard let mqtt else { return false }
 
         let title: String
@@ -494,6 +496,9 @@ public final class TeamclawService {
         createReq.sessionID = ""
         createReq.title = title
         createReq.description_p = description
+        if !workspaceId.isEmpty {
+            createReq.workspaceID = workspaceId
+        }
         if let actorId = currentHumanActorId {
             createReq.senderActorID = actorId
         }
@@ -505,11 +510,11 @@ public final class TeamclawService {
 
         let requestId = rpcReq.requestID
         let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(requestId)/req"
+        let stream = mqtt.messages()
 
         guard let data = try? rpcReq.serializedData() else { return false }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
 
-        let stream = mqtt.messages()
         let deadline = Date().addingTimeInterval(10)
         for await msg in stream {
             if Date() > deadline { break }

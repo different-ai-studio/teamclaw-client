@@ -67,7 +67,10 @@ struct TaskListColumn: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    openWindow(id: "amux.taskEditor", value: TaskEditorInput())
+                    openWindow(
+                        id: "amux.taskEditor",
+                        value: TaskEditorInput(presetWorkspaceId: workspaceFilter)
+                    )
                 } label: {
                     Label("New Task", systemImage: "plus")
                 }
@@ -86,6 +89,9 @@ struct TaskListColumn: View {
         let sessionLookup = Dictionary(uniqueKeysWithValues: allSessions.map { ($0.sessionId, $0) })
         let agentLookup = Dictionary(uniqueKeysWithValues: allAgents.map { ($0.agentId, $0) })
         return tasks.filter { task in
+            if task.workspaceId == workspaceFilter {
+                return true
+            }
             guard let session = sessionLookup[task.sessionId],
                   let agentId = session.primaryAgentId,
                   let agent = agentLookup[agentId] else {

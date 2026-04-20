@@ -107,10 +107,22 @@ public struct NewSessionSheet: View {
             }
             if selectedTaskId == nil, let preselectedTaskId {
                 selectedTaskId = preselectedTaskId
+                if let task = tasks.first(where: { $0.taskId == preselectedTaskId }),
+                   !task.workspaceId.isEmpty {
+                    selectedWorkspaceId = task.workspaceId
+                }
             }
             if collaborators.isEmpty, !preselectedCollaborators.isEmpty {
                 collaborators = preselectedCollaborators
             }
+        }
+        .onChange(of: selectedTaskId) { _, newTaskId in
+            guard let newTaskId,
+                  let task = tasks.first(where: { $0.taskId == newTaskId }),
+                  !task.workspaceId.isEmpty else {
+                return
+            }
+            selectedWorkspaceId = task.workspaceId
         }
     }
 

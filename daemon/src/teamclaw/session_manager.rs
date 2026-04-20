@@ -538,6 +538,7 @@ impl SessionManager {
         let stored_item = StoredTask {
             task_id: task_id.clone(),
             session_id: r.session_id.clone(),
+            workspace_id: r.workspace_id.clone(),
             title: r.title.clone(),
             description: r.description.clone(),
             status: "open".to_string(),

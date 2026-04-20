@@ -11,10 +11,12 @@ struct TaskEditorView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Query private var allItems: [SessionTask]
+    @Query(sort: \Workspace.displayName) private var workspaces: [Workspace]
 
     @State private var title: String = ""
     @State private var descriptionText: String = ""
     @State private var status: String = "open"
+    @State private var selectedWorkspaceId: String = ""
     @State private var isBusy = false
     @State private var errorMessage: String?
     @State private var isDirty = false
@@ -36,6 +38,14 @@ struct TaskEditorView: View {
                 TextField("Description", text: $descriptionText, axis: .vertical)
                     .lineLimit(4...8)
                     .onChange(of: descriptionText) { _, _ in isDirty = true }
+                Picker("Workspace", selection: $selectedWorkspaceId) {
+                    Text("None").tag("")
+                    ForEach(workspaces, id: \.workspaceId) { workspace in
+                        Text(workspace.displayName).tag(workspace.workspaceId)
+                    }
+                }
+                .disabled(!isNew)
+                .onChange(of: selectedWorkspaceId) { _, _ in isDirty = true }
                 Picker("Status", selection: $status) {
                     Text("Open").tag("open")
                     Text("In Progress").tag("in_progress")
@@ -68,10 +78,17 @@ struct TaskEditorView: View {
     }
 
     private func hydrate() {
-        guard let item = editingItem else { return }
-        title = item.title
-        descriptionText = item.taskDescription
-        status = item.status.isEmpty ? "open" : item.status
+        if let item = editingItem {
+            title = item.title
+            descriptionText = item.taskDescription
+            status = item.status.isEmpty ? "open" : item.status
+            selectedWorkspaceId = item.workspaceId
+            isDirty = false
+            return
+        }
+        if selectedWorkspaceId.isEmpty {
+            selectedWorkspaceId = input.presetWorkspaceId ?? ""
+        }
         isDirty = false
     }
 
@@ -104,7 +121,10 @@ struct TaskEditorView: View {
         } else {
             let payload = descriptionText.isEmpty ? trimmedTitle : "\(trimmedTitle)\n\n\(descriptionText)"
             Task {
-                let ok = await teamclawService.createTask(description: payload)
+                let ok = await teamclawService.createTask(
+                    description: payload,
+                    workspaceId: selectedWorkspaceId
+                )
                 await MainActor.run {
                     isBusy = false
                     if ok { onDone() } else { errorMessage = "Failed to create task. Check daemon connection." }
