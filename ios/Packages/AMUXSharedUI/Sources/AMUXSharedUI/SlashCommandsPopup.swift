@@ -7,11 +7,16 @@ import AMUXCore
 ///
 /// Stateless: the parent owns `candidates` and the `onTap` handler that
 /// inserts `/<name> ` into the composer.
-struct SlashCommandsPopup: View {
+public struct SlashCommandsPopup: View {
     let candidates: [SlashCommand]
     let onTap: (SlashCommand) -> Void
 
-    var body: some View {
+    public init(candidates: [SlashCommand], onTap: @escaping (SlashCommand) -> Void) {
+        self.candidates = candidates
+        self.onTap = onTap
+    }
+
+    public var body: some View {
         ScrollView {
             VStack(spacing: 0) {
                 ForEach(candidates) { cmd in

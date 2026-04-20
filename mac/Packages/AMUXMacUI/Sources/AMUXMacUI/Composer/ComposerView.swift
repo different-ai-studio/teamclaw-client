@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
+import AMUXSharedUI
 
 struct ComposerView: View {
     let teamclawService: TeamclawService
@@ -19,6 +20,8 @@ struct ComposerView: View {
     @State private var voice = VoiceRecorder()
     @State private var selectedModelId: String?
     @FocusState private var inputFocused: Bool
+    @State private var slashCandidates: [SlashCommand] = []
+    @State private var showSlashPopup: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,6 +35,15 @@ struct ComposerView: View {
                     .padding(.horizontal, 14)
                     .padding(.top, 12)
                     .onSubmit { send() }
+                    .onChange(of: text) { _, newValue in
+                        updateSlashCandidates(from: newValue)
+                    }
+                    .popover(isPresented: $showSlashPopup, arrowEdge: .top) {
+                        SlashCommandsPopup(candidates: slashCandidates) { cmd in
+                            insertCommand(cmd)
+                        }
+                        .padding(6)
+                    }
 
                 HStack(spacing: 8) {
                     ModelPicker(agent: agent, selectedModelId: $selectedModelId)
@@ -101,5 +113,28 @@ struct ComposerView: View {
 
     private func micTapped() {
         voice.toggle()
+    }
+
+    private func updateSlashCandidates(from text: String) {
+        guard let prefix = Self.slashPrefix(in: text) else {
+            slashCandidates = []
+            showSlashPopup = false
+            return
+        }
+        let all = agentVM?.availableCommands ?? []
+        slashCandidates = prefix.isEmpty ? all : all.filter { $0.name.hasPrefix(prefix) }
+        showSlashPopup = !slashCandidates.isEmpty
+    }
+
+    private static func slashPrefix(in text: String) -> String? {
+        guard text.hasPrefix("/") else { return nil }
+        let body = text.dropFirst()
+        if body.contains(" ") { return nil }   // space closes the popup
+        return String(body)
+    }
+
+    private func insertCommand(_ cmd: SlashCommand) {
+        text = "/\(cmd.name) "
+        showSlashPopup = false
     }
 }
