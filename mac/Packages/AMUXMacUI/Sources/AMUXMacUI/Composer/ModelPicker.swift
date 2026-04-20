@@ -32,9 +32,9 @@ struct ModelPicker: View {
                             .font(.system(size: 9))
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 12)
                     .padding(.vertical, 5)
-                    .background(Color.secondary.opacity(0.18), in: RoundedRectangle(cornerRadius: 8))
+                    .glassEffect(in: Capsule())
                     .foregroundStyle(.primary)
                 }
                 .menuStyle(.borderlessButton)

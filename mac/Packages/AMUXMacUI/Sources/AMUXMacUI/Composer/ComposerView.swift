@@ -32,8 +32,9 @@ struct ComposerView: View {
                     .focused($inputFocused)
                     .lineLimit(1...12)
                     .font(.system(size: 14))
-                    .padding(.horizontal, 14)
-                    .padding(.top, 12)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .glassEffect(in: Capsule())
                     .onSubmit { send() }
                     .onChange(of: text) { _, newValue in
                         updateSlashCandidates(from: newValue)
@@ -44,23 +45,28 @@ struct ComposerView: View {
                         }
                         .padding(6)
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 10)
 
                 HStack(spacing: 8) {
                     ModelPicker(agent: agent, selectedModelId: $selectedModelId)
                     Spacer()
                     Button(action: micTapped) {
                         Image(systemName: voice.state == .recording ? "mic.fill" : "mic")
-                            .font(.system(size: 16))
+                            .font(.system(size: 14))
                             .foregroundStyle(voice.state == .recording ? .red : .primary)
-                            .frame(width: 28, height: 28)
+                            .frame(width: 30, height: 30)
                     }
                     .buttonStyle(.plain)
+                    .glassEffect(in: Capsule())
                     .help(voice.state == .recording ? "Stop recording (Esc to cancel)" : "Voice input")
 
                     Button(action: send) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 26))
-                            .foregroundStyle(canSend ? Color.accentColor : .secondary)
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(canSend ? Color.white : .secondary)
+                            .frame(width: 30, height: 30)
+                            .background(canSend ? Color.accentColor : Color.secondary.opacity(0.2), in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.return, modifiers: .command)

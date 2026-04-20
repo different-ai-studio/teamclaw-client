@@ -20,7 +20,7 @@ struct TaskListColumn: View {
     var body: some View {
         let sortedTasks = allTasks.sorted(by: TaskListColumn.compare)
 
-        Group {
+        VStack(spacing: 0) {
             if sortedTasks.isEmpty && (!archivedVisible || archivedTasks.isEmpty) {
                 ContentUnavailableView("No tasks yet", systemImage: "checkmark.circle")
             } else {
@@ -59,6 +59,7 @@ struct TaskListColumn: View {
                 .listStyle(.inset)
             }
         }
+        .navigationTitle("Tasks")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -66,6 +67,7 @@ struct TaskListColumn: View {
                 } label: {
                     Label("New Task", systemImage: "plus")
                 }
+                .help("New Task")
             }
         }
     }

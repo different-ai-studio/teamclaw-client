@@ -49,9 +49,6 @@ struct SessionDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            toolbarRow
-            Divider()
-
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     if let vm = agentVM, primaryAgent != nil {
@@ -71,6 +68,60 @@ struct SessionDetailView: View {
                 agent: primaryAgent,
                 agentVM: agentVM
             )
+        }
+        .navigationTitle(session.title.isEmpty ? "Session" : session.title)
+        .searchable(text: $searchText, placement: .toolbar, prompt: "Search messages")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    isPinned.toggle()
+                } label: {
+                    Label("Pin", systemImage: isPinned ? "pin.fill" : "pin")
+                }
+                .help("Pin")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    print("TODO(v1.1): archive for session \(session.sessionId)")
+                } label: {
+                    Label("Archive", systemImage: "archivebox")
+                }
+                .help("Archive")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    print("TODO(v1.1): add-member for session \(session.sessionId)")
+                } label: {
+                    Label("Add member", systemImage: "person.badge.plus")
+                }
+                .help("Add member")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    print("TODO(v1.1): share for session \(session.sessionId)")
+                } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+                .help("Share")
+            }
+            if agentVM != nil {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        guard let vm = agentVM, !vm.isSyncing else { return }
+                        let ctx = modelContext
+                        Task { try? await vm.requestIncrementalSync(modelContext: ctx) }
+                    } label: {
+                        Label(
+                            (agentVM?.isSyncing == true) ? "Syncing history…" : "Sync history",
+                            systemImage: (agentVM?.isSyncing == true)
+                                ? "arrow.triangle.2.circlepath.circle.fill"
+                                : "arrow.triangle.2.circlepath"
+                        )
+                    }
+                    .disabled(agentVM?.isSyncing == true)
+                    .help((agentVM?.isSyncing == true) ? "Syncing history…" : "Sync history")
+                }
+            }
         }
         .task(id: session.sessionId) {
             teamclawService.subscribeToSession(session.sessionId)
@@ -165,116 +216,6 @@ struct SessionDetailView: View {
             }
             .padding(.bottom, 22)
         }
-    }
-
-    // MARK: - Header: status + metadata + toolbar + search (single row, matches column 2 height)
-
-    private var toolbarRow: some View {
-        HStack(alignment: .center, spacing: 6) {
-            if let agent = primaryAgent {
-                AgentStatusPill(agent: agent)
-            }
-
-            Spacer(minLength: 8)
-
-            if let logo = agentLogoName {
-                Image(logo, bundle: .module)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 14, height: 14)
-            }
-
-            if let workspaceName {
-                Text(workspaceName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-
-            Text(SessionDetailView.formatTime(lastUpdated))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-
-            HStack(spacing: 0) {
-                iconButton(systemImage: isPinned ? "pin.fill" : "pin", highlighted: isPinned, help: "Pin") {
-                    isPinned.toggle()
-                }
-
-                iconButton(systemImage: "archivebox", help: "Archive") {
-                    print("TODO(v1.1): archive for session \(session.sessionId)")
-                }
-
-                iconButton(systemImage: "person.badge.plus", help: "Add member") {
-                    print("TODO(v1.1): add-member for session \(session.sessionId)")
-                }
-
-                iconButton(systemImage: "square.and.arrow.up", help: "Share") {
-                    print("TODO(v1.1): share for session \(session.sessionId)")
-                }
-
-                // Agent-only: trigger a paginated history sync so the feed
-                // can catch up on events emitted before the app was running.
-                if agentVM != nil {
-                    iconButton(
-                        systemImage: (agentVM?.isSyncing == true)
-                            ? "arrow.triangle.2.circlepath.circle.fill"
-                            : "arrow.triangle.2.circlepath",
-                        highlighted: agentVM?.isSyncing == true,
-                        help: (agentVM?.isSyncing == true) ? "Syncing history…" : "Sync history"
-                    ) {
-                        guard let vm = agentVM, !vm.isSyncing else { return }
-                        let ctx = modelContext
-                        Task { try? await vm.requestIncrementalSync(modelContext: ctx) }
-                    }
-                }
-            }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 2)
-            .glassEffect(in: Capsule())
-
-            searchField
-                .frame(width: 160)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 28)
-        .padding(.bottom, 4)
-    }
-
-    private func iconButton(systemImage: String, highlighted: Bool = false, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(highlighted ? Color.accentColor : .primary)
-                .frame(width: 26, height: 26)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            TextField("Search messages", text: $searchText)
-                .textFieldStyle(.plain)
-                .font(.subheadline)
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .glassEffect(in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     // Mirrors SessionRow.formatTime — duplicated here to keep the header

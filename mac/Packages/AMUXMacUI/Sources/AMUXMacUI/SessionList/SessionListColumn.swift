@@ -49,21 +49,14 @@ struct SessionListColumn: View {
             return allowed.contains(session.sessionId)
         }
         if !searchText.isEmpty {
-            let q = searchText.lowercased()
             list = list.filter { session in
-                if session.title.lowercased().contains(q) { return true }
+                if session.title.localizedCaseInsensitiveContains(searchText) { return true }
                 if let agent = primaryAgent(for: session),
-                   agent.sessionTitle.lowercased().contains(q) { return true }
+                   agent.sessionTitle.localizedCaseInsensitiveContains(searchText) { return true }
                 return false
             }
         }
         return list
-    }
-
-    private var unreadCount: Int {
-        visibleSessions.reduce(0) { acc, session in
-            acc + ((primaryAgent(for: session)?.hasUnread ?? false) ? 1 : 0)
-        }
     }
 
     private var headerTitle: String {
@@ -72,15 +65,12 @@ struct SessionListColumn: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-
             if isSearchActive {
                 searchField
                     .padding(.horizontal, 12)
+                    .padding(.top, 6)
                     .padding(.bottom, 8)
             }
-
-            Divider()
 
             if visibleSessions.isEmpty {
                 ContentUnavailableView(
@@ -116,55 +106,36 @@ struct SessionListColumn: View {
                 .listStyle(.inset)
             }
         }
-    }
-
-    private var header: some View {
-        HStack(spacing: 6) {
-            Text(headerTitle)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-            Text("\(unreadCount) unread")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 0) {
-                iconButton(systemImage: "plus") {
+        .navigationTitle(headerTitle)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
                     onNewSession()
+                } label: {
+                    Label("New Session", systemImage: "plus")
                 }
-                iconButton(systemImage: isEditing ? "checkmark.circle.fill" : "checkmark.circle",
-                           highlighted: isEditing) {
+                .help("New Session")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
                     isEditing.toggle()
+                } label: {
+                    Label("Edit", systemImage: isEditing ? "checkmark.circle.fill" : "checkmark.circle")
                 }
-                iconButton(systemImage: "magnifyingglass",
-                           highlighted: isSearchActive) {
+                .help("Edit")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isSearchActive.toggle()
                         if !isSearchActive { searchText = "" }
                     }
+                } label: {
+                    Label("Search", systemImage: "magnifyingglass")
                 }
+                .help("Search")
             }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 2)
-            .glassEffect(in: Capsule())
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 28)
-        .padding(.bottom, 4)
-    }
-
-    private func iconButton(systemImage: String, highlighted: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(highlighted ? Color.accentColor : .primary)
-                .frame(width: 26, height: 26)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 
     private var searchField: some View {
@@ -185,9 +156,9 @@ struct SessionListColumn: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .glassEffect(in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .glassEffect(in: Capsule())
     }
 
     private func buildSessionSenders() -> [String: Set<String>] {

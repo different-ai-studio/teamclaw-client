@@ -58,7 +58,6 @@ public struct MainWindowView: View {
         } detail: {
             detail
         }
-        .searchable(text: $searchText, placement: .toolbar, prompt: "Search")
         .navigationSplitViewStyle(.balanced)
         .overlay(alignment: .top) {
             ConnectionBanner(
@@ -72,8 +71,6 @@ public struct MainWindowView: View {
             )
             .allowsHitTesting(shared.mqtt?.connectionState == .disconnected)
         }
-        .navigationTitle("")
-        .toolbar(removing: .title)
         .toolbarBackground(.hidden, for: .windowToolbar)
         .sheet(isPresented: $showNewSession) {
             if let mqtt {
@@ -156,7 +153,6 @@ public struct MainWindowView: View {
                 }
             }
         }
-        .ignoresSafeArea(.container, edges: .top)
         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
     }
 
@@ -174,7 +170,6 @@ public struct MainWindowView: View {
             deviceId: pairing.deviceId,
             peerId: peerId
         )
-        .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 360)
         .task { await connectIfNeeded() }
     }
