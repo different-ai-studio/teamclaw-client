@@ -5,6 +5,7 @@ struct AccountPreferencesView: View {
     let pairing: PairingManager
     @State private var unpairConfirm = false
     @State private var unpairError: String?
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Form {
@@ -27,6 +28,11 @@ struct AccountPreferencesView: View {
             }
 
             if pairing.isPaired {
+                Section("Invites") {
+                    Button("Show Invite QR for a New Member\u{2026}") {
+                        openWindow(id: "amux.invite", value: InviteIntent.newMember(role: "member"))
+                    }
+                }
                 Section {
                     Button("Unpair this Device", role: .destructive) {
                         unpairConfirm = true
@@ -41,7 +47,7 @@ struct AccountPreferencesView: View {
         }
         .formStyle(.grouped)
         .padding(20)
-        .frame(width: 460, height: 360)
+        .frame(width: 460, height: 400)
         .confirmationDialog(
             "Unpair this Mac?",
             isPresented: $unpairConfirm
