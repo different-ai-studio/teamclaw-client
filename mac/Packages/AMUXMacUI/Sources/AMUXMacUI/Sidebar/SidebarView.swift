@@ -21,6 +21,7 @@ struct SidebarView: View {
     private var workspaces: [Workspace]
 
     @State private var showAddWorkspace = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         List(selection: $selection) {
@@ -74,7 +75,7 @@ struct SidebarView: View {
                 }
             }
 
-            Section("Members") {
+            Section {
                 ForEach(MemberGrouping.grouped(members)) { group in
                     DisclosureGroup {
                         ForEach(group.members) { member in
@@ -90,6 +91,20 @@ struct SidebarView: View {
                     } label: {
                         Label(group.department, systemImage: "folder")
                     }
+                }
+            } header: {
+                HStack {
+                    Text("Members")
+                    Spacer()
+                    Button {
+                        openWindow(id: "amux.members")
+                    } label: {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open members window")
                 }
             }
         }

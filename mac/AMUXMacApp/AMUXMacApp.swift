@@ -44,6 +44,12 @@ struct AMUXMacApp: App {
 
         TaskEditorWindowScene(teamclawService: detailTeamclaw)
 
+        MembersWindowScene(pairing: pairing)
+            .environment(shared)
+
+        InviteWindowScene(pairing: pairing)
+            .environment(shared)
+
         SettingsScene(pairing: pairing)
     }
 
