@@ -67,7 +67,8 @@ struct TaskListColumn: View {
                 } label: {
                     Label("New Task", systemImage: "plus")
                 }
-                .help("New Task")
+                .keyboardShortcut("n", modifiers: .command)
+                .help("New Task (⌘N)")
             }
         }
     }

@@ -70,7 +70,7 @@ struct NewSessionSheet: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
         }
-        .frame(minWidth: 520, idealWidth: 560, minHeight: 360, idealHeight: 420)
+        .frame(minWidth: 600, idealWidth: 640, minHeight: 380, idealHeight: 440)
         .background(Color(NSColor.windowBackgroundColor))
         .allowsHitTesting(!isSending)
         .sheet(isPresented: $showMemberPicker) {
@@ -98,20 +98,15 @@ struct NewSessionSheet: View {
                 .font(.title2)
                 .fontWeight(.bold)
             Spacer()
-            Button { dismiss() } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 24, height: 24)
-                    .background(Color.secondary.opacity(0.12), in: Circle())
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.escape, modifiers: [])
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
         .padding(.bottom, 12)
+        .background {
+            Button("", action: { dismiss() })
+                .keyboardShortcut(.cancelAction)
+                .hidden()
+        }
     }
 
     // MARK: - Workspace & Agent Type

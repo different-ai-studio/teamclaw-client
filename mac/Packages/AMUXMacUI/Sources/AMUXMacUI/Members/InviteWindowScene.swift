@@ -38,7 +38,6 @@ private struct InviteWindowView: View {
             Text("Invite a new member").font(.title3.weight(.semibold))
 
             TextField("Display name (e.g. Alex)", text: $displayName)
-                .textFieldStyle(.roundedBorder)
 
             if let inviteURL {
                 VStack(alignment: .center, spacing: 12) {

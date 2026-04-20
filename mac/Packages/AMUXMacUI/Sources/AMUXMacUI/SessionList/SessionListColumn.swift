@@ -114,7 +114,8 @@ struct SessionListColumn: View {
                 } label: {
                     Label("New Session", systemImage: "plus")
                 }
-                .help("New Session")
+                .keyboardShortcut("n", modifiers: .command)
+                .help("New Session (⌘N)")
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -133,7 +134,8 @@ struct SessionListColumn: View {
                 } label: {
                     Label("Search", systemImage: "magnifyingglass")
                 }
-                .help("Search")
+                .keyboardShortcut("f", modifiers: .command)
+                .help("Search (⌘F)")
             }
         }
     }

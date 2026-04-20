@@ -261,7 +261,6 @@ private struct AddWorkspacePopover: View {
                 .font(.headline)
 
             TextField("Directory path (e.g. /Users/me/project)", text: $newPath)
-                .textFieldStyle(.roundedBorder)
                 .focused($isPathFocused)
                 .onSubmit { addWorkspace() }
                 .frame(minWidth: 320)
