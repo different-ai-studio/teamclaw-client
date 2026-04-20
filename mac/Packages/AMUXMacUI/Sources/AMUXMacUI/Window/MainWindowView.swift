@@ -10,6 +10,7 @@ public struct MainWindowView: View {
     @SceneStorage("amux.mainWindow.selectedSession") private var selectedSessionId: String?
     @SceneStorage("amux.mainWindow.selectedTask") private var selectedTaskId: String?
     @State private var showNewSession = false
+    @State private var searchText: String = ""
     let teamclaw: TeamclawService
     @State private var members = MemberListViewModel()
     @State private var sessionList = SessionListViewModel()
@@ -55,6 +56,7 @@ public struct MainWindowView: View {
         } detail: {
             detail
         }
+        .searchable(text: $searchText, placement: .toolbar, prompt: "Search")
         .navigationSplitViewStyle(.balanced)
         .navigationTitle("")
         .toolbar(removing: .title)
@@ -108,23 +110,31 @@ public struct MainWindowView: View {
 
     private var list: some View {
         Group {
-            switch sidebarSelection {
-            case .function(.tasks):
-                TaskListColumn(selectedTaskId: $selectedTaskId, teamclawService: teamclaw)
-            case .function(.sessions), .none:
-                SessionListColumn(
-                    memberFilter: nil,
-                    memberName: nil,
+            if !searchText.isEmpty {
+                UnifiedSearchResultsView(
+                    query: searchText,
                     selectedSessionId: $selectedSessionId,
-                    onNewSession: handleNewSession
+                    selectedTaskId: $selectedTaskId
                 )
-            case .member(let id):
-                SessionListColumn(
-                    memberFilter: id,
-                    memberName: members.members.first(where: { $0.memberId == id })?.displayName,
-                    selectedSessionId: $selectedSessionId,
-                    onNewSession: handleNewSession
-                )
+            } else {
+                switch sidebarSelection {
+                case .function(.tasks):
+                    TaskListColumn(selectedTaskId: $selectedTaskId, teamclawService: teamclaw)
+                case .function(.sessions), .none:
+                    SessionListColumn(
+                        memberFilter: nil,
+                        memberName: nil,
+                        selectedSessionId: $selectedSessionId,
+                        onNewSession: handleNewSession
+                    )
+                case .member(let id):
+                    SessionListColumn(
+                        memberFilter: id,
+                        memberName: members.members.first(where: { $0.memberId == id })?.displayName,
+                        selectedSessionId: $selectedSessionId,
+                        onNewSession: handleNewSession
+                    )
+                }
             }
         }
         .ignoresSafeArea(.container, edges: .top)
