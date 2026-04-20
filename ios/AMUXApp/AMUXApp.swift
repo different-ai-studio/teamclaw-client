@@ -29,13 +29,7 @@ struct AMUXApp: App {
         // back to destructive migration on a field-shape change. See
         // AMUXSchema.swift for the upgrade checklist when models evolve.
         do {
-            let schema = Schema(versionedSchema: AMUXSchemaV1.self)
-            let config = ModelConfiguration(schema: schema)
-            modelContainer = try ModelContainer(
-                for: schema,
-                migrationPlan: AMUXMigrationPlan.self,
-                configurations: config
-            )
+            modelContainer = try AMUXModelContainerFactory.make()
         } catch {
             fatalError("Failed to initialise ModelContainer: \(error)")
         }

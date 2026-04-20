@@ -43,9 +43,11 @@ jobs:
 
       - name: Install iOS platform
         run: |
+          set -euo pipefail
           echo "Ensuring iOS platform is installed..."
-          xcodebuild -downloadPlatform iOS || true
-          xcodebuild -showsdks | grep -i iphoneos
+          xcodebuild -downloadPlatform iOS
+          xcodebuild -showsdks
+          xcodebuild -showsdks | grep -qi iphoneos
 
       - name: Build and upload to TestFlight
         run: bundle exec fastlane beta

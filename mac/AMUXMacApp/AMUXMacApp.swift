@@ -9,6 +9,15 @@ struct AMUXMacApp: App {
     @State private var detailTeamclaw = TeamclawService()
     @State private var shared = SharedConnection()
     @State private var notificationsReady = false
+    let modelContainer: ModelContainer
+
+    init() {
+        do {
+            modelContainer = try AMUXModelContainerFactory.make()
+        } catch {
+            fatalError("Failed to initialise ModelContainer: \\(error)")
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -28,35 +37,22 @@ struct AMUXMacApp: App {
         }
         .windowResizability(.contentMinSize)
         .windowStyle(.hiddenTitleBar)
-        .modelContainer(for: [
-            Agent.self,
-            AgentEvent.self,
-            Member.self,
-            Session.self,
-            SessionMessage.self,
-            SessionTask.self,
-            Workspace.self,
-        ])
+        .modelContainer(modelContainer)
 
         DetailWindowScene(pairing: pairing, teamclawService: detailTeamclaw)
             .environment(shared)
+            .modelContainer(modelContainer)
 
         TaskEditorWindowScene(teamclawService: detailTeamclaw)
+            .modelContainer(modelContainer)
 
         MembersWindowScene(pairing: pairing)
             .environment(shared)
-            .modelContainer(for: [
-                Agent.self,
-                AgentEvent.self,
-                Member.self,
-                Session.self,
-                SessionMessage.self,
-                SessionTask.self,
-                Workspace.self,
-            ])
+            .modelContainer(modelContainer)
 
         InviteWindowScene(pairing: pairing)
             .environment(shared)
+            .modelContainer(modelContainer)
 
         SettingsScene(pairing: pairing)
     }
