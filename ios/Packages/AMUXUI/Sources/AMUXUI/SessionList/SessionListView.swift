@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
+import AMUXSharedUI
 
 // MARK: - SessionListView (NetNewsWire-style)
 
@@ -41,18 +42,13 @@ public struct SessionListView: View {
         NavigationStack(path: $navigationPath) {
             VStack(spacing: 0) {
                 // Connection banner
-                if mqtt.connectionState == .reconnecting {
-                    ConnectionBanner(icon: "arrow.triangle.2.circlepath", text: "Reconnecting…", color: .yellow)
-                } else if mqtt.connectionState == .disconnected {
-                    Button {
-                        onReconnect?()
-                    } label: {
-                        ConnectionBanner(icon: "bolt.slash.fill", text: "Not Connected · Tap to reconnect", color: .red)
-                    }
-                    .buttonStyle(.plain)
-                } else if !connectionMonitor.daemonOnline {
-                    ConnectionBanner(icon: "desktopcomputer", text: "Daemon Offline", color: .orange)
-                }
+                ConnectionBanner(
+                    state: .from(
+                        connectionState: mqtt.connectionState,
+                        daemonOnline: connectionMonitor.daemonOnline
+                    ),
+                    onReconnect: onReconnect
+                )
 
                 // Session list content
                 SessionListContent(
@@ -438,26 +434,6 @@ struct SessionRowView: View {
                 }
             }
         }
-        .padding(.vertical, 4)
-    }
-}
-
-// MARK: - ConnectionBanner
-
-struct ConnectionBanner: View {
-    let icon: String
-    let text: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon).font(.caption)
-            Text(text).font(.caption).fontWeight(.medium)
-        }
-        .foregroundStyle(.primary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .liquidGlass(in: Capsule())
         .padding(.vertical, 4)
     }
 }

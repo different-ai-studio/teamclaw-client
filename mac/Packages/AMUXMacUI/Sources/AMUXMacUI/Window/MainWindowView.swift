@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
+import AMUXSharedUI
 
 public struct MainWindowView: View {
     let pairing: PairingManager
@@ -59,6 +60,18 @@ public struct MainWindowView: View {
         }
         .searchable(text: $searchText, placement: .toolbar, prompt: "Search")
         .navigationSplitViewStyle(.balanced)
+        .overlay(alignment: .top) {
+            ConnectionBanner(
+                state: .from(
+                    connectionState: shared.mqtt?.connectionState ?? .disconnected,
+                    daemonOnline: shared.monitor?.daemonOnline ?? true
+                ),
+                onReconnect: {
+                    Task { await reconnectNow() }
+                }
+            )
+            .allowsHitTesting(shared.mqtt?.connectionState == .disconnected)
+        }
         .navigationTitle("")
         .toolbar(removing: .title)
         .toolbarBackground(.hidden, for: .windowToolbar)
@@ -164,6 +177,14 @@ public struct MainWindowView: View {
         .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 360)
         .task { await connectIfNeeded() }
+    }
+
+    private func reconnectNow() async {
+        // Force-reconnect: tear down and re-establish via SharedConnection.
+        // SharedConnection doesn't currently expose a disconnect API, so
+        // the simplest path is to kick connectIfNeeded again; a full tear-
+        // down requires adding to SharedConnection.
+        await shared.connectIfNeeded(pairing: pairing)
     }
 
     private func connectIfNeeded() async {
