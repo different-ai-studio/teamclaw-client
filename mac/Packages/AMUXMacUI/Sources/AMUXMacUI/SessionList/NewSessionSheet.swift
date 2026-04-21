@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
+import AMUXSharedUI
 
 // MARK: - NewSessionSheet (macOS)
 //
@@ -25,16 +26,22 @@ struct NewSessionSheet: View {
     // to the sheet triggered a window-scene rebuild that wiped column 2's
     // toolbar items. Taking the rows as a plain parameter avoids both issues.
     let workspaces: [Workspace]
+    let preselectedTaskId: String?
     var onSessionCreated: ((String) -> Void)?
 
     @State private var selectedWorkspaceId: String?
     @State private var selectedAgentType: Amux_AgentType = .claudeCode
     @State private var collaborators: [Member] = []
+    @State private var selectedTaskId: String?
     @State private var showMemberPicker = false
     @State private var messageText: String = ""
     @State private var isSending = false
     @State private var errorMessage: String?
+    @State private var voice = VoiceRecorder()
     @FocusState private var isInputFocused: Bool
+    @Query(filter: #Predicate<SessionTask> { !$0.archived },
+           sort: \SessionTask.createdAt, order: .reverse)
+    private var tasks: [SessionTask]
 
     /// Matches daemon.toml `team_id`. Must be kept in sync with the daemon config.
     private static let teamId = "teamclaw"
@@ -53,9 +60,11 @@ struct NewSessionSheet: View {
             VStack(spacing: 0) {
                 header
                 Divider()
-                workspaceAndTypeRow
+                workspaceRow
                 Divider()
                 collaboratorsRow
+                Divider()
+                taskRow
                 Divider()
                 Spacer(minLength: 8)
                 if let errorMessage {
@@ -91,6 +100,33 @@ struct NewSessionSheet: View {
             if workspaces.count == 1 {
                 selectedWorkspaceId = workspaces.first?.workspaceId
             }
+            if selectedTaskId == nil, let preselectedTaskId {
+                selectedTaskId = preselectedTaskId
+                if let task = tasks.first(where: { $0.taskId == preselectedTaskId }),
+                   !task.workspaceId.isEmpty {
+                    selectedWorkspaceId = task.workspaceId
+                }
+            }
+        }
+        .onChange(of: selectedTaskId) { _, newTaskId in
+            guard let newTaskId,
+                  let task = tasks.first(where: { $0.taskId == newTaskId }),
+                  !task.workspaceId.isEmpty else {
+                return
+            }
+            selectedWorkspaceId = task.workspaceId
+        }
+        .onChange(of: voice.transcript) { _, newValue in
+            if voice.state == .recording, !newValue.isEmpty {
+                messageText = newValue
+            }
+        }
+        .onKeyPress(.escape) {
+            if voice.state == .recording {
+                voice.cancel()
+                return .handled
+            }
+            return .ignored
         }
     }
 
@@ -110,62 +146,42 @@ struct NewSessionSheet: View {
         .padding(.bottom, 12)
     }
 
-    // MARK: - Workspace & Agent Type
+    // MARK: - Workspace
 
-    private var workspaceAndTypeRow: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Workspace")
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Menu {
-                    if workspaces.isEmpty {
-                        Text("No workspaces")
-                    } else {
-                        ForEach(workspaces, id: \.workspaceId) { ws in
-                            Button {
-                                selectedWorkspaceId = ws.workspaceId
-                            } label: {
-                                Label(
-                                    ws.displayName,
-                                    systemImage: selectedWorkspaceId == ws.workspaceId ? "checkmark" : "folder"
-                                )
-                            }
+    private var workspaceRow: some View {
+        HStack {
+            Text("Workspace")
+                .foregroundStyle(.secondary)
+            Spacer()
+            Menu {
+                if workspaces.isEmpty {
+                    Text("No workspaces")
+                } else {
+                    ForEach(workspaces, id: \.workspaceId) { ws in
+                        Button {
+                            selectedWorkspaceId = ws.workspaceId
+                        } label: {
+                            Label(
+                                ws.displayName,
+                                systemImage: selectedWorkspaceId == ws.workspaceId ? "checkmark" : "folder"
+                            )
                         }
                     }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(selectedWorkspaceName)
-                            .font(.body)
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.caption)
-                    }
-                    .foregroundStyle(selectedWorkspaceId == nil ? .secondary : .primary)
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-
-            Divider()
-
-            HStack {
-                Text("Agent")
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Picker("Agent", selection: $selectedAgentType) {
-                    Text("Claude").tag(Amux_AgentType.claudeCode)
-                    Text("OpenCode").tag(Amux_AgentType.opencode)
-                    Text("Codex").tag(Amux_AgentType.codex)
+            } label: {
+                HStack(spacing: 4) {
+                    Text(selectedWorkspaceName)
+                        .font(.body)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 280)
+                .foregroundStyle(selectedWorkspaceId == nil ? .secondary : .primary)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     private var selectedWorkspaceName: String {
@@ -217,46 +233,126 @@ struct NewSessionSheet: View {
         .padding(.vertical, 12)
     }
 
+    // MARK: - Task
+
+    private var taskRow: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text("Task")
+                .foregroundStyle(.secondary)
+            Spacer()
+            Menu {
+                Button {
+                    selectedTaskId = nil
+                } label: {
+                    Label("None", systemImage: selectedTaskId == nil ? "checkmark" : "circle")
+                }
+                if !tasks.isEmpty {
+                    Divider()
+                    ForEach(tasks, id: \.taskId) { item in
+                        Button {
+                            selectedTaskId = item.taskId
+                        } label: {
+                            Label(
+                                item.displayTitle,
+                                systemImage: selectedTaskId == item.taskId ? "checkmark" : "circle"
+                            )
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(selectedTaskLabel)
+                        .font(.body)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption)
+                }
+                .foregroundStyle(selectedTaskId == nil ? .secondary : .primary)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private var selectedTaskLabel: String {
+        if let id = selectedTaskId,
+           let item = tasks.first(where: { $0.taskId == id }) {
+            return item.displayTitle
+        }
+        return "None"
+    }
+
     // MARK: - Input bar
 
     private var inputBar: some View {
-        VStack(spacing: 0) {
-            Divider()
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("Initial prompt\u{2026}", text: $messageText, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .focused($isInputFocused)
-                    .lineLimit(1...8)
-                    .font(.body)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        ZStack(alignment: .bottomLeading) {
+            TextField("Initial prompt…", text: $messageText, axis: .vertical)
+                .textFieldStyle(.plain)
+                .focused($isInputFocused)
+                .font(.system(size: 13))
+                .lineLimit(2...6)
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+                .padding(.bottom, 46)
+                .padding(.trailing, 88)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Button(action: sendAndCreate) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 26))
-                        .foregroundStyle(canSend ? Color.accentColor : .secondary.opacity(0.5))
+            HStack(alignment: .bottom, spacing: 10) {
+                HStack(spacing: 8) {
+                    attachmentButton
+                    agentTypePicker
                 }
-                .buttonStyle(.plain)
-                .disabled(!canSend)
-                .keyboardShortcut(.return, modifiers: .command)
+
+                Spacer()
+
+                HStack(spacing: 10) {
+                    voiceButton
+                    sendButton
+                }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(.regularMaterial)
+            .padding(.bottom, 10)
         }
+        .frame(minHeight: 96, maxHeight: 186)
+        .glassEffect(in: Rectangle())
     }
 
     // MARK: - Send
 
+    /// If a task is selected, prefix its context into the first message so the
+    /// new session starts with the chosen task's title/description.
+    private func firstMessageText(userText: String) -> String {
+        guard let id = selectedTaskId,
+              let item = tasks.first(where: { $0.taskId == id }) else {
+            return userText
+        }
+        let description = item.taskDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let taskBlock: String
+        if !description.isEmpty && !title.isEmpty && description != title {
+            taskBlock = "Task: \(title)\n\n\(description)"
+        } else if !description.isEmpty {
+            taskBlock = "Task: \(description)"
+        } else if !title.isEmpty {
+            taskBlock = "Task: \(title)"
+        } else {
+            return userText
+        }
+        return "\(taskBlock)\n\n\(userText)"
+    }
+
     private func sendAndCreate() {
-        let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        let userText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !userText.isEmpty else { return }
+        let text = firstMessageText(userText: userText)
 
         isInputFocused = false
         errorMessage = nil
 
-        if !collaborators.isEmpty {
+        if !collaborators.isEmpty || selectedTaskId != nil {
             createSharedSession(text: text)
             return
         }
@@ -337,6 +433,110 @@ struct NewSessionSheet: View {
         }
     }
 
+    private var attachmentButton: some View {
+        Button(action: {}) {
+            Image(systemName: "paperclip")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(in: Circle())
+        .disabled(true)
+        .help("Attachments are not available yet")
+    }
+
+    private var agentTypePicker: some View {
+        Menu {
+            Button {
+                selectedAgentType = .claudeCode
+            } label: {
+                if selectedAgentType == .claudeCode {
+                    Label("Claude", systemImage: "checkmark")
+                } else {
+                    Text("Claude")
+                }
+            }
+            Button {
+                selectedAgentType = .opencode
+            } label: {
+                if selectedAgentType == .opencode {
+                    Label("OpenCode", systemImage: "checkmark")
+                } else {
+                    Text("OpenCode")
+                }
+            }
+            Button {
+                selectedAgentType = .codex
+            } label: {
+                if selectedAgentType == .codex {
+                    Label("Codex", systemImage: "checkmark")
+                } else {
+                    Text("Codex")
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "cpu")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                Text(selectedAgentTypeLabel)
+                    .font(.system(size: 12))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .glassEffect(in: Capsule())
+            .foregroundStyle(.primary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    private var voiceButton: some View {
+        Button {
+            voice.toggle()
+        } label: {
+            Image(systemName: voice.state == .recording ? "mic.fill" : "mic")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(voice.state == .recording ? .red : .primary)
+                .frame(width: 34, height: 34)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(in: Circle())
+        .help(voice.state == .recording ? "Stop recording (Esc to cancel)" : "Voice input")
+    }
+
+    private var sendButton: some View {
+        Button(action: sendAndCreate) {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(canSend ? Color.white : .secondary)
+                .frame(width: 34, height: 34)
+                .background(canSend ? Color.accentColor : Color.white.opacity(0.42), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!canSend)
+        .keyboardShortcut(.return, modifiers: .command)
+        .help("Start session")
+    }
+
+    private var selectedAgentTypeLabel: String {
+        switch selectedAgentType {
+        case .claudeCode:
+            "Claude"
+        case .opencode:
+            "OpenCode"
+        case .codex:
+            "Codex"
+        default:
+            "Agent"
+        }
+    }
+
     // MARK: - Shared Session (Teamclaw CreateSessionRequest RPC)
     //
     // Mirrors iOS NewSessionSheet.createSharedSession. The daemon listens on
@@ -352,6 +552,9 @@ struct NewSessionSheet: View {
         createReq.title = String(text.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
         createReq.summary = text
         createReq.inviteActorIds = collaborators.map(\.memberId)
+        if let taskId = selectedTaskId, !taskId.isEmpty {
+            createReq.taskID = taskId
+        }
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()

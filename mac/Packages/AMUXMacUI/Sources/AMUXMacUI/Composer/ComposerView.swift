@@ -24,68 +24,46 @@ struct ComposerView: View {
     @State private var showSlashPopup: Bool = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-            VStack(spacing: 8) {
-                TextField("Reply…", text: $text, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .focused($inputFocused)
-                    .lineLimit(1...12)
-                    .font(.system(size: 14))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .glassEffect(in: Capsule())
-                    .onSubmit { send() }
-                    .onChange(of: text) { _, newValue in
-                        updateSlashCandidates(from: newValue)
-                    }
-                    .popover(isPresented: $showSlashPopup, arrowEdge: .top) {
-                        SlashCommandsPopup(candidates: slashCandidates) { cmd in
-                            insertCommand(cmd)
-                        }
-                        .padding(6)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 10)
-
-                HStack(spacing: 8) {
-                    ModelPicker(agent: agent, selectedModelId: $selectedModelId)
-                    Spacer()
-                    Button(action: micTapped) {
-                        Image(systemName: voice.state == .recording ? "mic.fill" : "mic")
-                            .font(.system(size: 14))
-                            .foregroundStyle(voice.state == .recording ? .red : .primary)
-                            .frame(width: 30, height: 30)
-                    }
-                    .buttonStyle(.plain)
-                    .glassEffect(in: Capsule())
-                    .help(voice.state == .recording ? "Stop recording (Esc to cancel)" : "Voice input")
-
-                    Button(action: primaryButtonTapped) {
-                        if isAgentActive {
-                            Image(systemName: "stop.fill")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Color.white)
-                                .frame(width: 30, height: 30)
-                                .background(Color.red, in: Capsule())
-                        } else {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(canSend ? Color.white : .secondary)
-                                .frame(width: 30, height: 30)
-                                .background(canSend ? Color.accentColor : Color.secondary.opacity(0.2), in: Capsule())
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(!isAgentActive && !canSend)
-                    .help(isAgentActive ? "Stop agent" : "Send")
-                }
+        ZStack(alignment: .bottomLeading) {
+            TextField("Reply…", text: $text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .focused($inputFocused)
+                .font(.system(size: 13))
+                .lineLimit(2...6)
                 .padding(.horizontal, 14)
-                .padding(.bottom, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 46)
+                .padding(.trailing, 88)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .onSubmit { send() }
+                .onChange(of: text) { _, newValue in
+                    updateSlashCandidates(from: newValue)
+                }
+                .popover(isPresented: $showSlashPopup, arrowEdge: .top) {
+                SlashCommandsPopup(candidates: slashCandidates) { cmd in
+                    insertCommand(cmd)
+                }
+                .padding(6)
             }
-            .background(.regularMaterial)
+
+            HStack(alignment: .bottom, spacing: 10) {
+                HStack(spacing: 8) {
+                    attachmentButton
+                    ModelPicker(agent: agent, selectedModelId: $selectedModelId)
+                }
+
+                Spacer()
+
+                HStack(spacing: 10) {
+                    voiceButton
+                    sendButton
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
         }
+        .frame(minHeight: 96, maxHeight: 186)
+        .glassEffect(in: Rectangle())
         .onChange(of: voice.transcript) { _, newValue in
             if voice.state == .recording, !newValue.isEmpty {
                 text = newValue
@@ -141,6 +119,53 @@ struct ComposerView: View {
 
     private func micTapped() {
         voice.toggle()
+    }
+
+    private var attachmentButton: some View {
+        Button(action: {}) {
+            Image(systemName: "paperclip")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(in: Circle())
+        .disabled(true)
+        .help("Attachments are not available yet")
+    }
+
+    private var voiceButton: some View {
+        Button(action: micTapped) {
+            Image(systemName: voice.state == .recording ? "mic.fill" : "mic")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(voice.state == .recording ? .red : .primary)
+                .frame(width: 34, height: 34)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(in: Circle())
+        .help(voice.state == .recording ? "Stop recording (Esc to cancel)" : "Voice input")
+    }
+
+    private var sendButton: some View {
+        Button(action: primaryButtonTapped) {
+            if isAgentActive {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color.red, in: Circle())
+            } else {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(canSend ? Color.white : .secondary)
+                    .frame(width: 34, height: 34)
+                    .background(canSend ? Color.accentColor : Color.white.opacity(0.42), in: Circle())
+            }
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.return, modifiers: .command)
+        .disabled(!isAgentActive && !canSend)
+        .help(isAgentActive ? "Stop agent" : "Send")
     }
 
     private func updateSlashCandidates(from text: String) {
