@@ -16,7 +16,7 @@ exception
 end;
 $$;
 
-select plan(38);
+select plan(40);
 
 select lives_ok(
 $$
@@ -239,6 +239,37 @@ select is(
   (select count(*) from public.messages),
   0::bigint,
   'failed self-enrollment does not grant session message visibility'
+);
+
+set local request.jwt.claim.sub = '90000000-0000-0000-0000-000000000003';
+
+select ok(
+  pg_temp.raises_sqlstate(
+    $sql$
+      insert into public.session_participants (
+        id,
+        session_id,
+        actor_id,
+        role
+      )
+      values (
+        '70000000-0000-0000-0000-000000000004',
+        '50000000-0000-0000-0000-000000000001',
+        '10000000-0000-0000-0000-000000000002',
+        'observer'
+      )
+    $sql$,
+    '42501'
+  ),
+  'non-creator participant cannot add another actor to the session'
+);
+
+set local request.jwt.claim.sub = '90000000-0000-0000-0000-000000000002';
+
+select is(
+  (select count(*) from public.messages),
+  0::bigint,
+  'failed participant-managed add does not expand session message visibility'
 );
 
 reset role;

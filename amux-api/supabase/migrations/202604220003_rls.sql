@@ -324,6 +324,7 @@ for insert to authenticated with check (
     from public.sessions s
     where s.id = session_participants.session_id
       and app.is_team_member(s.team_id)
+      and s.created_by_actor_id = app.current_actor_id()
   )
   and app.is_session_participant(session_participants.session_id)
 );
