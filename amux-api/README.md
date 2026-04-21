@@ -35,3 +35,22 @@ supabase start
 supabase db reset
 supabase test db
 ```
+
+## Implemented in phase 1
+
+- team tenancy and membership
+- shared-key actors with member/agent subtypes
+- team-scoped workspaces
+- tasks and external issue links
+- task-owned sessions
+- session participants
+- durable collaboration messages
+- agent member permissions (`view`, `prompt`, `admin`)
+- light agent runtime state
+
+## Deferred
+
+- actor online presence table
+- full runtime event persistence
+- external issue sync
+- HTTP handlers beyond the database boundary

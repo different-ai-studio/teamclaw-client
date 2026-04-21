@@ -1,3 +1,38 @@
+insert into auth.users (
+  id,
+  aud,
+  role,
+  email,
+  email_confirmed_at,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  created_at,
+  updated_at
+)
+values
+  (
+    '90000000-0000-0000-0000-000000000001',
+    'authenticated',
+    'authenticated',
+    'alice@example.com',
+    now(),
+    '{}'::jsonb,
+    '{"display_name":"Alice"}'::jsonb,
+    now(),
+    now()
+  ),
+  (
+    '90000000-0000-0000-0000-000000000002',
+    'authenticated',
+    'authenticated',
+    'carol@example.com',
+    now(),
+    '{}'::jsonb,
+    '{"display_name":"Carol"}'::jsonb,
+    now(),
+    now()
+  );
+
 insert into public.teams (id, slug, name)
 values ('00000000-0000-0000-0000-000000000001', 'core', 'Core Team');
 
@@ -9,8 +44,8 @@ values
 
 insert into public.members (id, user_id, status)
 values
-  ('10000000-0000-0000-0000-000000000001', null, 'active'),
-  ('10000000-0000-0000-0000-000000000002', null, 'active');
+  ('10000000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-000000000001', 'active'),
+  ('10000000-0000-0000-0000-000000000002', '90000000-0000-0000-0000-000000000002', 'active');
 
 insert into public.team_members (team_id, member_id, role)
 values
@@ -71,7 +106,7 @@ values
     'collab',
     'Agent access review',
     'Alice chatting with Builder',
-    'Carol joined but cannot prompt Builder',
+    'Carol joined with view-only access to Builder',
     now()
   );
 
@@ -85,7 +120,7 @@ insert into public.messages (team_id, session_id, sender_actor_id, kind, content
 values
   ('00000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'text', 'Please help review the permission model.'),
   ('00000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'text', 'I can respond to Alice.'),
-  ('00000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 'system', 'Carol is present in the session but only has view access to Builder.');
+  ('00000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 'text', 'I can follow the review, but only Alice should be able to drive Builder.');
 
 insert into public.agent_runtimes (team_id, agent_id, session_id, workspace_id, backend_type, backend_session_id, status, current_model, last_seen_at)
 values
