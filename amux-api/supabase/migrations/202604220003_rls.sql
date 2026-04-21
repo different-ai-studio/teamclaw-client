@@ -325,6 +325,7 @@ for insert to authenticated with check (
     where s.id = session_participants.session_id
       and app.is_team_member(s.team_id)
   )
+  and app.is_session_participant(session_participants.session_id)
 );
 
 create policy messages_select_if_session_participant on public.messages

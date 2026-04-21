@@ -16,7 +16,7 @@ exception
 end;
 $$;
 
-select plan(36);
+select plan(38);
 
 select lives_ok(
 $$
@@ -212,6 +212,33 @@ set local request.jwt.claim.sub = '90000000-0000-0000-0000-000000000002';
 select ok(
   app.can_prompt_agent('10000000-0000-0000-0000-0000000000a1'::uuid),
   'explicit grant allows active team member to prompt agent'
+);
+
+select ok(
+  pg_temp.raises_sqlstate(
+    $sql$
+      insert into public.session_participants (
+        id,
+        session_id,
+        actor_id,
+        role
+      )
+      values (
+        '70000000-0000-0000-0000-000000000003',
+        '50000000-0000-0000-0000-000000000001',
+        '10000000-0000-0000-0000-000000000002',
+        'observer'
+      )
+    $sql$,
+    '42501'
+  ),
+  'non-participant team member cannot self-enroll into a session'
+);
+
+select is(
+  (select count(*) from public.messages),
+  0::bigint,
+  'failed self-enrollment does not grant session message visibility'
 );
 
 reset role;
