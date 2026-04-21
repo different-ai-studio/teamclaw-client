@@ -23,6 +23,10 @@ AMUX 是一个多平台系统，用于远程监控和操控 AI 编程代理。Ru
   (shared schema)
 ```
 
+## AMUX API Schema
+
+The first-phase Supabase schema work lives in `amux-api/`. Use that directory for local Supabase migrations, RLS, seeds, and database tests.
+
 ## Prerequisites / 前置条件
 
 - Rust (edition 2021)
