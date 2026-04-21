@@ -10,7 +10,7 @@ public struct MembersWindowScene: Scene {
     }
 
     public var body: some Scene {
-        Window("Members", id: "amux.members") {
+        Window("Actors", id: "amux.members") {
             MembersWindowView(pairing: pairing)
                 .frame(minWidth: 480, minHeight: 540)
                 .appAppearance()
@@ -29,7 +29,7 @@ private struct MembersWindowView: View {
             mqtt: shared.mqtt,
             deviceId: pairing.deviceId
         )
-        .navigationTitle("Team Members")
+        .navigationTitle("Actors")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {

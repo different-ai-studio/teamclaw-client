@@ -26,7 +26,7 @@ public struct MembersTab: View {
                               deviceId: pairing.deviceId,
                               peerId: "ios-\(pairing.authToken.prefix(6))",
                               sessionViewModel: sessionViewModel)
-                .navigationTitle("Members")
+                .navigationTitle("Actors")
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
@@ -50,8 +50,8 @@ public struct MembersTab: View {
                 }
                 .sheet(isPresented: $showInvite) {
                     MemberInviteSheet(mqtt: mqtt,
-                                deviceId: pairing.deviceId,
-                                peerId: "ios-\(pairing.authToken.prefix(6))")
+                                      deviceId: pairing.deviceId,
+                                      peerId: "ios-\(pairing.authToken.prefix(6))")
                 }
         }
     }

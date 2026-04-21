@@ -94,6 +94,7 @@ public struct MainWindowView: View {
                     deviceId: pairing.deviceId,
                     peerId: peerId,
                     workspaces: workspaces,
+                    preselectedTaskId: selectedTaskId,
                     onSessionCreated: { agentId in
                         selectedSessionId = agentId
                     }
