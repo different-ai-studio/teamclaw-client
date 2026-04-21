@@ -7,6 +7,7 @@ mod error;
 mod history;
 mod mqtt;
 mod proto;
+mod supabase;
 mod teamclaw;
 
 use clap::Parser;
