@@ -110,9 +110,12 @@ as $$
   select exists (
     select 1
     from public.agent_member_access ama
+    join public.agents a on a.id = ama.agent_id
+    join public.actors act on act.id = a.id
     where ama.agent_id = target_agent_id
       and ama.member_id = app.current_member_id()
       and ama.permission_level in ('prompt', 'admin')
+      and app.is_team_member(act.team_id)
   )
   or exists (
     select 1

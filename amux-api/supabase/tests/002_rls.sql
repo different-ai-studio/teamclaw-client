@@ -16,7 +16,7 @@ exception
 end;
 $$;
 
-select plan(31);
+select plan(36);
 
 select lives_ok(
 $$
@@ -155,6 +155,21 @@ values (
   'Hello'
 );
 
+insert into public.agent_member_access (
+  id,
+  agent_id,
+  member_id,
+  permission_level,
+  granted_by_member_id
+)
+values (
+  '81000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-0000000000a1',
+  '10000000-0000-0000-0000-000000000002',
+  'prompt',
+  '10000000-0000-0000-0000-000000000003'
+);
+
 select ok(
   not has_function_privilege('anon', 'app.current_member_id()', 'EXECUTE'),
   'anon cannot execute current_member_id directly'
@@ -191,6 +206,41 @@ select is(
   1::bigint,
   'active participant can read session messages'
 );
+
+set local request.jwt.claim.sub = '90000000-0000-0000-0000-000000000002';
+
+select ok(
+  app.can_prompt_agent('10000000-0000-0000-0000-0000000000a1'::uuid),
+  'explicit grant allows active team member to prompt agent'
+);
+
+reset role;
+
+delete from public.team_members
+where id = '20000000-0000-0000-0000-000000000002';
+
+set local role authenticated;
+set local request.jwt.claim.role = 'authenticated';
+set local request.jwt.claim.sub = '90000000-0000-0000-0000-000000000002';
+
+select ok(
+  not app.can_prompt_agent('10000000-0000-0000-0000-0000000000a1'::uuid),
+  'explicit grant no longer authorizes removed team member'
+);
+
+reset role;
+
+insert into public.team_members (id, team_id, member_id, role)
+values (
+  '20000000-0000-0000-0000-000000000002',
+  '00000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000002',
+  'member'
+);
+
+set local role authenticated;
+set local request.jwt.claim.role = 'authenticated';
+set local request.jwt.claim.sub = '90000000-0000-0000-0000-000000000001';
 
 reset role;
 
