@@ -16,7 +16,7 @@ exception
 end;
 $$;
 
-select plan(43);
+select plan(44);
 
 select has_schema('app');
 select has_table('public', 'teams');
@@ -169,6 +169,41 @@ select ok(
     '23514'
   ),
   'sessions.team_id update is rejected when dependent messages exist'
+);
+
+-- 202604220008: workspaces unique is (team_id, agent_id, name)
+do $$
+declare
+  v_team uuid := gen_random_uuid();
+  v_agent_a uuid := gen_random_uuid();
+  v_agent_b uuid := gen_random_uuid();
+begin
+  insert into public.teams (id, slug, name) values (v_team, 'dup-ws', 'dup-ws');
+  insert into public.actors (id, team_id, actor_type, display_name)
+    values (v_agent_a, v_team, 'agent', 'a'),
+           (v_agent_b, v_team, 'agent', 'b');
+  insert into public.agents (id, agent_kind, status) values
+    (v_agent_a, 'claude', 'active'),
+    (v_agent_b, 'claude', 'active');
+
+  -- Same name on two different agents in the same team must now be allowed.
+  insert into public.workspaces (team_id, agent_id, name) values (v_team, v_agent_a, 'amux');
+  insert into public.workspaces (team_id, agent_id, name) values (v_team, v_agent_b, 'amux');
+
+  -- Duplicate on the SAME agent must still fail.
+  if not pg_temp.raises_sqlstate(
+    format('insert into public.workspaces (team_id, agent_id, name) values (%L, %L, %L)',
+           v_team, v_agent_a, 'amux'),
+    '23505'
+  ) then
+    raise exception 'expected unique violation on (team_id, agent_id, name)';
+  end if;
+end;
+$$;
+
+select ok(
+  true,
+  'workspaces unique constraint is (team_id, agent_id, name)'
 );
 
 select * from finish();
