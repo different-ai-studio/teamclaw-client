@@ -151,6 +151,237 @@ create table public.agent_runtimes (
   updated_at timestamptz not null default now()
 );
 
+create or replace function app.actor_team_id(p_actor_id uuid)
+returns uuid
+language sql
+stable
+as $$
+  select team_id
+  from public.actors
+  where id = p_actor_id
+$$;
+
+create or replace function app.table_team_id(p_table regclass, p_id uuid)
+returns uuid
+language plpgsql
+stable
+as $$
+declare
+  v_team_id uuid;
+begin
+  if p_id is null then
+    return null;
+  end if;
+
+  execute format('select team_id from %s where id = $1', p_table)
+    into v_team_id
+    using p_id;
+
+  return v_team_id;
+end;
+$$;
+
+create or replace function app.require_same_team(
+  p_expected_team_id uuid,
+  p_actual_team_id uuid,
+  p_context text
+)
+returns void
+language plpgsql
+as $$
+begin
+  if p_expected_team_id is null or p_actual_team_id is null then
+    return;
+  end if;
+
+  if p_expected_team_id is distinct from p_actual_team_id then
+    raise exception '% violates team scoping', p_context
+      using errcode = '23514',
+            detail = format(
+              'Expected team %s but found team %s',
+              p_expected_team_id,
+              p_actual_team_id
+            );
+  end if;
+end;
+$$;
+
+create or replace function app.require_actor_type(
+  p_actor_id uuid,
+  p_expected_type text,
+  p_context text
+)
+returns void
+language plpgsql
+as $$
+declare
+  v_actor_type text;
+begin
+  if p_actor_id is null then
+    return;
+  end if;
+
+  select actor_type
+  into v_actor_type
+  from public.actors
+  where id = p_actor_id;
+
+  if v_actor_type is null then
+    return;
+  end if;
+
+  if v_actor_type <> p_expected_type then
+    raise exception '% requires actor_type = %', p_context, p_expected_type
+      using errcode = '23514',
+            detail = format(
+              'Actor %s has actor_type %s',
+              p_actor_id,
+              v_actor_type
+            );
+  end if;
+end;
+$$;
+
+create or replace function app.enforce_actor_subtype()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_table_name = 'members' then
+    perform app.require_actor_type(new.id, 'member', 'members.id');
+  elsif tg_table_name = 'agents' then
+    perform app.require_actor_type(new.id, 'agent', 'agents.id');
+  else
+    raise exception 'app.enforce_actor_subtype is not defined for table %', tg_table_name;
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function app.enforce_core_team_integrity()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_table_name = 'team_members' then
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.member_id),
+      'team_members.member_id'
+    );
+  elsif tg_table_name = 'workspaces' then
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.created_by_member_id),
+      'workspaces.created_by_member_id'
+    );
+  elsif tg_table_name = 'agents' then
+    perform app.require_same_team(
+      app.actor_team_id(new.id),
+      app.actor_team_id(new.created_by_member_id),
+      'agents.created_by_member_id'
+    );
+    perform app.require_same_team(
+      app.actor_team_id(new.id),
+      app.table_team_id('public.workspaces'::regclass, new.default_workspace_id),
+      'agents.default_workspace_id'
+    );
+  elsif tg_table_name = 'agent_member_access' then
+    perform app.require_same_team(
+      app.actor_team_id(new.agent_id),
+      app.actor_team_id(new.member_id),
+      'agent_member_access.member_id'
+    );
+    perform app.require_same_team(
+      app.actor_team_id(new.agent_id),
+      app.actor_team_id(new.granted_by_member_id),
+      'agent_member_access.granted_by_member_id'
+    );
+  elsif tg_table_name = 'tasks' then
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.workspaces'::regclass, new.workspace_id),
+      'tasks.workspace_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.tasks'::regclass, new.parent_task_id),
+      'tasks.parent_task_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.created_by_actor_id),
+      'tasks.created_by_actor_id'
+    );
+  elsif tg_table_name = 'task_external_refs' then
+    perform app.require_same_team(
+      app.table_team_id('public.tasks'::regclass, new.task_id),
+      app.actor_team_id(new.linked_by_actor_id),
+      'task_external_refs.linked_by_actor_id'
+    );
+  elsif tg_table_name = 'sessions' then
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.tasks'::regclass, new.task_id),
+      'sessions.task_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.created_by_actor_id),
+      'sessions.created_by_actor_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.primary_agent_id),
+      'sessions.primary_agent_id'
+    );
+  elsif tg_table_name = 'session_participants' then
+    perform app.require_same_team(
+      app.table_team_id('public.sessions'::regclass, new.session_id),
+      app.actor_team_id(new.actor_id),
+      'session_participants.actor_id'
+    );
+  elsif tg_table_name = 'messages' then
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.sessions'::regclass, new.session_id),
+      'messages.session_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.sender_actor_id),
+      'messages.sender_actor_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.messages'::regclass, new.reply_to_message_id),
+      'messages.reply_to_message_id'
+    );
+  elsif tg_table_name = 'agent_runtimes' then
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.agent_id),
+      'agent_runtimes.agent_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.sessions'::regclass, new.session_id),
+      'agent_runtimes.session_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.workspaces'::regclass, new.workspace_id),
+      'agent_runtimes.workspace_id'
+    );
+  else
+    raise exception 'app.enforce_core_team_integrity is not defined for table %', tg_table_name;
+  end if;
+
+  return new;
+end;
+$$;
+
 create index idx_actors_team_id on public.actors(team_id);
 create index idx_team_members_member_id on public.team_members(member_id);
 create index idx_workspaces_team_id on public.workspaces(team_id);
@@ -163,6 +394,31 @@ create index idx_messages_session_created_at on public.messages(session_id, crea
 create index idx_session_participants_actor_id on public.session_participants(actor_id);
 create index idx_agent_runtimes_session_id on public.agent_runtimes(session_id);
 create index idx_agent_runtimes_agent_id on public.agent_runtimes(agent_id);
+
+create trigger enforce_members_actor_type before insert or update on public.members
+for each row execute function app.enforce_actor_subtype();
+create trigger enforce_agents_actor_type before insert or update on public.agents
+for each row execute function app.enforce_actor_subtype();
+create trigger enforce_team_members_same_team before insert or update on public.team_members
+for each row execute function app.enforce_core_team_integrity();
+create trigger enforce_workspaces_same_team before insert or update on public.workspaces
+for each row execute function app.enforce_core_team_integrity();
+create trigger enforce_agents_same_team before insert or update on public.agents
+for each row execute function app.enforce_core_team_integrity();
+create trigger enforce_agent_member_access_same_team before insert or update on public.agent_member_access
+for each row execute function app.enforce_core_team_integrity();
+create trigger enforce_tasks_same_team before insert or update on public.tasks
+for each row execute function app.enforce_core_team_integrity();
+create trigger enforce_task_external_refs_same_team before insert or update on public.task_external_refs
+for each row execute function app.enforce_core_team_integrity();
+create trigger enforce_sessions_same_team before insert or update on public.sessions
+for each row execute function app.enforce_core_team_integrity();
+create trigger enforce_session_participants_same_team before insert or update on public.session_participants
+for each row execute function app.enforce_core_team_integrity();
+create trigger enforce_messages_same_team before insert or update on public.messages
+for each row execute function app.enforce_core_team_integrity();
+create trigger enforce_agent_runtimes_same_team before insert or update on public.agent_runtimes
+for each row execute function app.enforce_core_team_integrity();
 
 create trigger set_teams_updated_at before update on public.teams
 for each row execute function app.bump_updated_at();
