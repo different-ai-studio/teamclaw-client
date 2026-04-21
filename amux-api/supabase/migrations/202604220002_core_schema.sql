@@ -242,6 +242,18 @@ begin
 end;
 $$;
 
+create or replace function app.reject_team_reassignment(
+  p_context text
+)
+returns void
+language plpgsql
+as $$
+begin
+  raise exception '% cannot change team_id while dependent rows exist', p_context
+    using errcode = '23514';
+end;
+$$;
+
 create or replace function app.enforce_actor_subtype()
 returns trigger
 language plpgsql
@@ -253,6 +265,74 @@ begin
     perform app.require_actor_type(new.id, 'agent', 'agents.id');
   else
     raise exception 'app.enforce_actor_subtype is not defined for table %', tg_table_name;
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function app.enforce_parent_integrity()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_table_name = 'actors' then
+    if new.actor_type is distinct from old.actor_type then
+      if exists (select 1 from public.members where id = new.id) and new.actor_type <> 'member' then
+        raise exception 'actors.actor_type cannot diverge from members.id'
+          using errcode = '23514';
+      end if;
+
+      if exists (select 1 from public.agents where id = new.id) and new.actor_type <> 'agent' then
+        raise exception 'actors.actor_type cannot diverge from agents.id'
+          using errcode = '23514';
+      end if;
+    end if;
+
+    if new.team_id is distinct from old.team_id then
+      if exists (select 1 from public.members where id = new.id)
+        or exists (select 1 from public.agents where id = new.id)
+        or exists (select 1 from public.team_members where member_id = new.id)
+        or exists (select 1 from public.workspaces where created_by_member_id = new.id)
+        or exists (select 1 from public.agent_member_access where member_id = new.id or granted_by_member_id = new.id or agent_id = new.id)
+        or exists (select 1 from public.tasks where created_by_actor_id = new.id)
+        or exists (select 1 from public.task_external_refs where linked_by_actor_id = new.id)
+        or exists (select 1 from public.sessions where created_by_actor_id = new.id or primary_agent_id = new.id)
+        or exists (select 1 from public.session_participants where actor_id = new.id)
+        or exists (select 1 from public.messages where sender_actor_id = new.id)
+        or exists (select 1 from public.agent_runtimes where agent_id = new.id) then
+        perform app.reject_team_reassignment('actors.team_id');
+      end if;
+    end if;
+  elsif tg_table_name = 'workspaces' then
+    if new.team_id is distinct from old.team_id
+      and (
+        exists (select 1 from public.agents where default_workspace_id = new.id)
+        or exists (select 1 from public.tasks where workspace_id = new.id)
+        or exists (select 1 from public.agent_runtimes where workspace_id = new.id)
+      ) then
+      perform app.reject_team_reassignment('workspaces.team_id');
+    end if;
+  elsif tg_table_name = 'tasks' then
+    if new.team_id is distinct from old.team_id
+      and (
+        exists (select 1 from public.tasks where parent_task_id = new.id)
+        or exists (select 1 from public.task_external_refs where task_id = new.id)
+        or exists (select 1 from public.sessions where task_id = new.id)
+      ) then
+      perform app.reject_team_reassignment('tasks.team_id');
+    end if;
+  elsif tg_table_name = 'sessions' then
+    if new.team_id is distinct from old.team_id
+      and (
+        exists (select 1 from public.session_participants where session_id = new.id)
+        or exists (select 1 from public.messages where session_id = new.id)
+        or exists (select 1 from public.agent_runtimes where session_id = new.id)
+      ) then
+      perform app.reject_team_reassignment('sessions.team_id');
+    end if;
+  else
+    raise exception 'app.enforce_parent_integrity is not defined for table %', tg_table_name;
   end if;
 
   return new;
@@ -399,20 +479,28 @@ create trigger enforce_members_actor_type before insert or update on public.memb
 for each row execute function app.enforce_actor_subtype();
 create trigger enforce_agents_actor_type before insert or update on public.agents
 for each row execute function app.enforce_actor_subtype();
+create trigger enforce_actors_parent_integrity before update on public.actors
+for each row execute function app.enforce_parent_integrity();
 create trigger enforce_team_members_same_team before insert or update on public.team_members
 for each row execute function app.enforce_core_team_integrity();
 create trigger enforce_workspaces_same_team before insert or update on public.workspaces
 for each row execute function app.enforce_core_team_integrity();
+create trigger enforce_workspaces_parent_integrity before update on public.workspaces
+for each row execute function app.enforce_parent_integrity();
 create trigger enforce_agents_same_team before insert or update on public.agents
 for each row execute function app.enforce_core_team_integrity();
 create trigger enforce_agent_member_access_same_team before insert or update on public.agent_member_access
 for each row execute function app.enforce_core_team_integrity();
 create trigger enforce_tasks_same_team before insert or update on public.tasks
 for each row execute function app.enforce_core_team_integrity();
+create trigger enforce_tasks_parent_integrity before update on public.tasks
+for each row execute function app.enforce_parent_integrity();
 create trigger enforce_task_external_refs_same_team before insert or update on public.task_external_refs
 for each row execute function app.enforce_core_team_integrity();
 create trigger enforce_sessions_same_team before insert or update on public.sessions
 for each row execute function app.enforce_core_team_integrity();
+create trigger enforce_sessions_parent_integrity before update on public.sessions
+for each row execute function app.enforce_parent_integrity();
 create trigger enforce_session_participants_same_team before insert or update on public.session_participants
 for each row execute function app.enforce_core_team_integrity();
 create trigger enforce_messages_same_team before insert or update on public.messages
