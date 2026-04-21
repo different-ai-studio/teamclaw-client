@@ -16,7 +16,7 @@ exception
 end;
 $$;
 
-select plan(28);
+select plan(31);
 
 select lives_ok(
 $$
@@ -190,6 +190,41 @@ select is(
   (select count(*) from public.messages),
   1::bigint,
   'active participant can read session messages'
+);
+
+reset role;
+
+delete from public.team_members
+where id = '20000000-0000-0000-0000-000000000001';
+
+set local role authenticated;
+set local request.jwt.claim.role = 'authenticated';
+set local request.jwt.claim.sub = '90000000-0000-0000-0000-000000000001';
+
+select ok(
+  not app.is_team_member('00000000-0000-0000-0000-000000000001'::uuid),
+  'team membership removal revokes team membership'
+);
+
+select ok(
+  not app.is_session_participant('50000000-0000-0000-0000-000000000001'::uuid),
+  'team membership removal revokes session participation'
+);
+
+select is(
+  (select count(*) from public.messages),
+  0::bigint,
+  'team membership removal revokes session message visibility'
+);
+
+reset role;
+
+insert into public.team_members (id, team_id, member_id, role)
+values (
+  '20000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000001',
+  'member'
 );
 
 reset role;
