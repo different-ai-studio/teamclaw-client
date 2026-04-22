@@ -41,4 +41,30 @@ delete from auth.users u
 -- Note: the display_name ↔ email pairing is fragile. Step 3 below re-links
 -- surviving daemons via auth.users.raw_app_meta_data->>'actor_id'.
 
+-- ===========================================================================
+-- 2. Lift user_id and invited_by_actor_id onto actors
+-- ===========================================================================
+alter table public.actors
+  add column user_id uuid references auth.users(id) on delete set null,
+  add column invited_by_actor_id uuid references public.actors(id) on delete set null;
+
+-- Backfill: humans from members.user_id
+update public.actors a
+   set user_id = m.user_id
+  from public.members m
+ where m.id = a.id and m.user_id is not null;
+
+-- Backfill: surviving daemons from auth.users.raw_app_meta_data->>'actor_id'
+-- (written by _0011_/_0014_ into the JWT claims).
+update public.actors a
+   set user_id = u.id
+  from auth.users u
+ where a.actor_type = 'agent'
+   and a.id::text = u.raw_app_meta_data->>'actor_id'
+   and a.user_id is null;
+
+create unique index actors_team_user_idx
+  on public.actors (team_id, user_id)
+  where user_id is not null;
+
 commit;
