@@ -184,4 +184,63 @@ drop function if exists public.claim_daemon_invite(uuid);
 drop function if exists public.create_daemon_invite(uuid, text);
 drop table    if exists public.daemon_invites cascade;
 
+-- ===========================================================================
+-- 9. team_invites — unified invite token table
+-- ===========================================================================
+create table public.team_invites (
+  id                    uuid primary key default gen_random_uuid(),
+  team_id               uuid not null references public.teams(id) on delete cascade,
+  token                 text not null unique,
+  kind                  text not null check (kind in ('member','agent')),
+  team_role             text check (team_role in ('member','admin')),
+  agent_kind            text,
+  display_name          text not null,
+  invited_by_actor_id   uuid not null references public.actors(id),
+  expires_at            timestamptz not null,
+  consumed_at           timestamptz,
+  consumed_by_actor_id  uuid references public.actors(id),
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+  constraint team_invites_kind_fields_check check (
+    (kind = 'member' and team_role is not null and agent_kind is null)
+    or
+    (kind = 'agent'  and team_role is null     and agent_kind is not null)
+  )
+);
+
+create index team_invites_team_unconsumed_idx
+  on public.team_invites (team_id) where consumed_at is null;
+create index team_invites_token_unconsumed_idx
+  on public.team_invites (token) where consumed_at is null;
+
+create trigger set_team_invites_updated_at
+  before update on public.team_invites
+  for each row execute function app.bump_updated_at();
+
+alter table public.team_invites enable row level security;
+
+create policy team_invites_select_if_team_member on public.team_invites
+  for select to authenticated
+  using (app.is_team_member(team_id));
+
+create policy team_invites_insert_via_rpc on public.team_invites
+  for insert to authenticated
+  with check (
+    app.is_team_member(team_id)
+    and exists (
+      select 1 from public.actors a
+       where a.id = invited_by_actor_id
+         and a.user_id = auth.uid()
+         and a.team_id = team_id
+    )
+  );
+
+-- ===========================================================================
+-- 10. actors: allow self-update of last_active_at
+-- ===========================================================================
+create policy actors_self_heartbeat on public.actors
+  for update to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
 commit;
