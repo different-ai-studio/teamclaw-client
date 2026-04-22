@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+// chrono re-exported for callers constructing AgentRuntimeUpsert
+pub use chrono;
+
 #[derive(Debug, Clone)]
 pub struct SupabaseClient {
     http: Client,
@@ -177,29 +180,81 @@ impl SupabaseClient {
         Ok(resp.json().await?)
     }
 
-    /// Typed wrapper around the `claim_daemon_invite` RPC. Supabase's
-    /// PostgREST always returns a set-returning function as an array, so we
-    /// deserialize into `Vec<ClaimResult>` and pick the first row.
-    pub async fn claim_daemon_invite(
-        &self,
-        token: uuid::Uuid,
-    ) -> SupabaseResult<ClaimResult> {
+    /// Anonymous claim for agents (daemon path). Calls `claim_team_invite` RPC.
+    /// Supabase's PostgREST always returns a set-returning function as an array,
+    /// so we deserialize into `Vec<ClaimResult>` and pick the first row.
+    pub async fn claim_team_invite(&self, token: &str) -> SupabaseResult<ClaimResult> {
         #[derive(Serialize)]
-        struct Req {
-            p_invite_token: uuid::Uuid,
+        struct Req<'a> {
+            p_token: &'a str,
         }
-        let rows: Vec<ClaimResult> = self
-            .rpc_anon("claim_daemon_invite", &Req { p_invite_token: token })
-            .await?;
+        let payload = Req { p_token: token };
+        let rows: Vec<ClaimResult> = self.rpc_anon("claim_team_invite", &payload).await?;
         rows.into_iter().next().ok_or(SupabaseError::InviteInvalid)
     }
 }
 
+/// Returned by `public.claim_team_invite` — both member and agent branches.
+/// `refresh_token` is `None` for member claims.
 #[derive(Debug, Deserialize)]
 pub struct ClaimResult {
-    pub agent_id: String,
+    pub actor_id: String,
     pub team_id: String,
-    pub refresh_token: String,
+    pub actor_type: String,
+    pub display_name: String,
+    pub refresh_token: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AgentRuntimeUpsert<'a> {
+    pub team_id: &'a str,
+    pub agent_id: &'a str,
+    pub session_id: Option<&'a str>,
+    pub workspace_id: Option<&'a str>,
+    pub backend_type: &'a str,
+    pub backend_session_id: Option<&'a str>,
+    pub status: &'a str,
+    pub current_model: Option<&'a str>,
+    pub last_seen_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl SupabaseClient {
+    /// Upsert an agent_runtimes row keyed on (agent_id, backend_session_id).
+    pub async fn upsert_agent_runtime(
+        &self,
+        row: &AgentRuntimeUpsert<'_>,
+    ) -> SupabaseResult<()> {
+        let token = self.access_token().await?;
+        let url = format!(
+            "{}/rest/v1/agent_runtimes?on_conflict=agent_id,backend_session_id",
+            self.cfg.url
+        );
+        let resp = self
+            .http
+            .post(&url)
+            .header("apikey", &self.cfg.anon_key)
+            .header("Prefer", "resolution=merge-duplicates")
+            .bearer_auth(token)
+            .json(&[row])
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(SupabaseError::Rpc {
+                code: Some(status.as_u16().to_string()),
+                message: text,
+            });
+        }
+        Ok(())
+    }
+
+    /// Heartbeat: POST /rest/v1/rpc/update_actor_last_active
+    pub async fn heartbeat(&self) -> SupabaseResult<()> {
+        let _: serde_json::Value =
+            self.rpc("update_actor_last_active", &serde_json::Value::Null).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -289,17 +344,36 @@ mod tests {
         Mock::given(method("POST"))
             .and(path_regex(r"^/rest/v1/rpc/claim$"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
-                {"agent_id": "a", "team_id": "t", "auth_email": "e", "auth_password": "p"}
+                {"actor_id": "a", "team_id": "t", "actor_type": "agent",
+                 "display_name": "Test", "refresh_token": null}
             ])))
             .mount(&srv)
             .await;
 
         let client = SupabaseClient::new(test_cfg(srv.uri())).unwrap();
         let body: serde_json::Value = client
-            .rpc_anon("claim", &serde_json::json!({"p_invite_token": "abc"}))
+            .rpc_anon("claim", &serde_json::json!({"p_token": "abc"}))
             .await
             .unwrap();
-        assert_eq!(body[0]["agent_id"], "a");
+        assert_eq!(body[0]["actor_id"], "a");
+    }
+
+    #[tokio::test]
+    async fn claim_team_invite_decodes_agent_response() {
+        let srv = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/rest/v1/rpc/claim_team_invite$"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([{
+                "actor_id": "a", "team_id": "t", "actor_type": "agent",
+                "display_name": "M1 Studio", "refresh_token": "rt"
+            }])))
+            .mount(&srv)
+            .await;
+
+        let client = SupabaseClient::new(test_cfg(srv.uri())).unwrap();
+        let r = client.claim_team_invite("opaque-token-abc123").await.unwrap();
+        assert_eq!(r.actor_type, "agent");
+        assert_eq!(r.refresh_token.as_deref(), Some("rt"));
     }
 
     #[tokio::test]
@@ -324,5 +398,37 @@ mod tests {
             .unwrap();
         assert_eq!(tok, "at-pwd");
         assert_eq!(client.config().refresh_token, "rt-final");
+    }
+
+    #[tokio::test]
+    async fn upsert_agent_runtime_sends_merge_duplicates_header() {
+        let srv = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/rest/v1/agent_runtimes"))
+            .and(wiremock::matchers::header("Prefer", "resolution=merge-duplicates"))
+            .respond_with(ResponseTemplate::new(201))
+            .mount(&srv)
+            .await;
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/auth/v1/token$"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "access_token": "at", "expires_in": 3600, "refresh_token": "rt"
+            })))
+            .mount(&srv)
+            .await;
+
+        let client = SupabaseClient::new(test_cfg(srv.uri())).unwrap();
+        let row = AgentRuntimeUpsert {
+            team_id: "t",
+            agent_id: "a",
+            session_id: None,
+            workspace_id: None,
+            backend_type: "claude",
+            backend_session_id: Some("s-1"),
+            status: "running",
+            current_model: Some("opus"),
+            last_seen_at: chrono::Utc::now(),
+        };
+        client.upsert_agent_runtime(&row).await.unwrap();
     }
 }
