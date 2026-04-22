@@ -6,6 +6,7 @@ mod daemon;
 mod error;
 mod history;
 mod mqtt;
+mod onboarding;
 mod proto;
 mod supabase;
 mod teamclaw;
