@@ -1,5 +1,4 @@
 pub mod init;
-pub mod invite;
 pub mod members;
 pub mod test_client;
 
@@ -31,14 +30,6 @@ pub enum Commands {
     Init {
         /// amux://join?token=...&url=...&anon=... URL from an iOS invite.
         join_url: Option<String>,
-    },
-    /// Generate invite for a new member
-    Invite {
-        name: String,
-        #[arg(long, default_value = "24")]
-        expires: u32,
-        #[arg(long)]
-        owner: bool,
     },
     /// Manage members
     Members {

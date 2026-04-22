@@ -33,9 +33,6 @@ fn main() -> anyhow::Result<()> {
                 cli::init::run_init()?;
             }
         }
-        Commands::Invite { name, expires, owner } => {
-            cli::invite::run_invite(&name, expires, owner)?;
-        }
         Commands::Members { action } => match action.unwrap_or(MemberAction::List) {
             MemberAction::List => cli::members::run_list()?,
             MemberAction::Remove { member_id } => cli::members::run_remove(&member_id)?,
