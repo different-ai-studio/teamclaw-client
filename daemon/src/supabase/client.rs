@@ -199,8 +199,7 @@ impl SupabaseClient {
 pub struct ClaimResult {
     pub agent_id: String,
     pub team_id: String,
-    pub auth_email: String,
-    pub auth_password: String,
+    pub refresh_token: String,
 }
 
 #[cfg(test)]

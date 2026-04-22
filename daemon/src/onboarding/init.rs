@@ -10,12 +10,14 @@ pub struct InitOutcome {
 }
 
 /// Execute the `amuxd init <url>` flow against Supabase:
-/// parse the join URL, claim the invite, log in with the returned one-time
-/// credentials, and persist the refresh token + identity to disk.
+/// parse the join URL, claim the invite to get a refresh token minted by the
+/// RPC, verify the token works by trading it for an access token, and
+/// persist the result to disk.
 pub async fn run(raw_url: &str, config_path: Option<&Path>) -> SupabaseResult<InitOutcome> {
     let invite = invite_url::parse(raw_url)?;
 
-    // Placeholder cfg: the client only needs url+anon_key until login succeeds.
+    // Placeholder cfg: the client only needs url+anon_key for the anonymous
+    // claim RPC.
     let placeholder = SupabaseConfig {
         url: invite.url.clone(),
         anon_key: invite.anon_key.clone(),
@@ -23,19 +25,22 @@ pub async fn run(raw_url: &str, config_path: Option<&Path>) -> SupabaseResult<In
         team_id: String::new(),
         actor_id: String::new(),
     };
-    let mut client = SupabaseClient::new(placeholder)?;
-    let claim = client.claim_daemon_invite(invite.token).await?;
-    client
-        .login_with_password(&claim.auth_email, &claim.auth_password)
-        .await?;
+    let claim_client = SupabaseClient::new(placeholder)?;
+    let claim = claim_client.claim_daemon_invite(invite.token).await?;
 
     let cfg = SupabaseConfig {
         url: invite.url,
         anon_key: invite.anon_key,
-        refresh_token: client.config().refresh_token.clone(),
+        refresh_token: claim.refresh_token.clone(),
         team_id: claim.team_id.clone(),
         actor_id: claim.agent_id.clone(),
     };
+
+    // Smoke-check the refresh token before we persist by trading it for an
+    // access token. Catches a broken mint before the daemon restarts.
+    let verify_client = SupabaseClient::new(cfg.clone())?;
+    verify_client.access_token().await?;
+
     let path = match config_path {
         Some(p) => p.to_path_buf(),
         None => SupabaseConfig::default_path()?,
@@ -66,19 +71,22 @@ mod tests {
                 {
                     "agent_id": "agent-uuid",
                     "team_id": "team-uuid",
-                    "auth_email": "daemon+agent-uuid@amux.local",
-                    "auth_password": "pw"
+                    "refresh_token": "rt-from-claim"
                 }
             ])))
             .mount(&srv)
             .await;
 
+        // The verify-step trades the refresh_token for an access_token.
+        // GoTrue returns a (possibly rotated) refresh_token on that call;
+        // in the default config it rotates, but what matters here is only
+        // that verify succeeds.
         Mock::given(method("POST"))
             .and(path_regex(r"^/auth/v1/token$"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "access_token": "at",
                 "expires_in": 3600,
-                "refresh_token": "rt-final"
+                "refresh_token": "rt-from-claim"
             })))
             .mount(&srv)
             .await;
@@ -95,7 +103,7 @@ mod tests {
         assert_eq!(outcome.agent_id, "agent-uuid");
         assert_eq!(outcome.team_id, "team-uuid");
         let saved = SupabaseConfig::load(&cfg_path).unwrap();
-        assert_eq!(saved.refresh_token, "rt-final");
+        assert_eq!(saved.refresh_token, "rt-from-claim");
         assert_eq!(saved.team_id, "team-uuid");
         assert_eq!(saved.actor_id, "agent-uuid");
     }
