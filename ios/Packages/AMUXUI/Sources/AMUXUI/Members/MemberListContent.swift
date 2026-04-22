@@ -4,294 +4,109 @@ import AMUXCore
 
 #if os(iOS)
 
-private enum ActorDirectoryEntry: Identifiable {
-    case member(Member)
-    case agent(Agent)
-
-    var id: String {
-        switch self {
-        case .member(let member): return "member:\(member.memberId)"
-        case .agent(let agent): return "agent:\(agent.agentId)"
-        }
-    }
-
-    var sortName: String {
-        switch self {
-        case .member(let member): return member.displayName
-        case .agent(let agent): return actorDisplayName(for: agent)
-        }
-    }
-}
-
-/// Browse-mode actor list body. No NavigationStack; parent provides it.
-/// Used as the pushable content in MembersTab.
 public struct MemberListContent: View {
-    @State private var viewModel = MemberListViewModel()
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Agent.sessionTitle) private var allAgents: [Agent]
-    let mqtt: MQTTService
-    let deviceId: String
-    let peerId: String
-    let sessionViewModel: SessionListViewModel
+    @Query(sort: \CachedActor.displayName) private var actors: [CachedActor]
+    @State private var searchText = ""
 
-    public init(mqtt: MQTTService,
-                deviceId: String,
-                peerId: String,
-                sessionViewModel: SessionListViewModel) {
-        self.mqtt = mqtt
-        self.deviceId = deviceId
-        self.peerId = peerId
-        self.sessionViewModel = sessionViewModel
-    }
+    let store: ActorStore
 
-    private var actors: [ActorDirectoryEntry] {
-        (viewModel.members.map(ActorDirectoryEntry.member) + allAgents.map(ActorDirectoryEntry.agent))
-            .sorted { lhs, rhs in
-                lhs.sortName.localizedCaseInsensitiveCompare(rhs.sortName) == .orderedAscending
-            }
+    public init(store: ActorStore) { self.store = store }
+
+    private var filtered: [CachedActor] {
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return actors }
+        let norm = q.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        return actors.filter { a in
+            [a.displayName, a.roleLabel, a.agentKind ?? "", a.actorId]
+                .joined(separator: " ")
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                .contains(norm)
+        }
     }
 
     public var body: some View {
-        List {
-            ForEach(actors) { actor in
-                NavigationLink {
-                    ActorDetailView(actor: actor,
-                                    mqtt: mqtt,
-                                    deviceId: deviceId,
-                                    peerId: peerId,
-                                    sessionViewModel: sessionViewModel,
-                                    memberViewModel: viewModel)
-                } label: {
-                    ActorRow(actor: actor, onlineMemberIds: viewModel.onlineMemberIds)
+        Group {
+            if actors.isEmpty {
+                ContentUnavailableView("No Actors Yet", systemImage: "person.2",
+                                       description: Text("Invite teammates or agents to see them here."))
+            } else if filtered.isEmpty {
+                ContentUnavailableView.search(text: searchText)
+            } else {
+                List {
+                    ForEach(filtered, id: \.actorId) { a in
+                        NavigationLink {
+                            ActorDetailView(actor: a)
+                        } label: {
+                            ActorRow(actor: a)
+                        }
+                    }
                 }
             }
         }
-        .task { viewModel.start(mqtt: mqtt, deviceId: deviceId, modelContext: modelContext) }
+        .searchable(text: $searchText, prompt: "Search actors")
+        .task { await store.reload(); await store.heartbeat() }
+        .refreshable { await store.reload() }
     }
 }
-#else
-struct MemberListContent: View {
-    var body: some View {
-        ContentUnavailableView("Actors", systemImage: "person.2")
-    }
-}
-#endif
 
 private struct ActorRow: View {
-    let actor: ActorDirectoryEntry
-    let onlineMemberIds: Set<String>
-
+    let actor: CachedActor
     var body: some View {
         HStack {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 8, height: 8)
+            Circle().fill(actor.isOnline ? Color.green : Color.secondary.opacity(0.4))
+                    .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.body)
-                HStack(spacing: 6) {
-                    Text(primaryMeta)
-                    if let secondaryMeta {
-                        Text("·").foregroundStyle(.tertiary)
-                        Text(secondaryMeta)
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(actor.displayName).font(.body)
+                Text(subtitle).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Text("0 sessions")
+            Text(actor.isOnline ? "Online" : "Offline")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
-            if crownVisible {
+                .foregroundStyle(actor.isOnline ? .green : .secondary)
+            if actor.isOwner {
                 Image(systemName: "crown.fill").foregroundStyle(.orange).font(.caption)
             }
         }
     }
-
-    private var title: String {
-        switch actor {
-        case .member(let member): return member.displayName
-        case .agent(let agent): return actorDisplayName(for: agent)
-        }
+    private var subtitle: String {
+        if actor.isMember { return actor.roleLabel }
+        let kind = actor.agentKind?.capitalized ?? "Agent"
+        let status = actor.agentStatus ?? ""
+        return status.isEmpty ? kind : "\(kind) · \(status)"
     }
-
-    private var primaryMeta: String {
-        switch actor {
-        case .member(let member): return member.roleLabel
-        case .agent: return "Digital Employee"
-        }
-    }
-
-    private var secondaryMeta: String? {
-        switch actor {
-        case .member(let member):
-            let label = departmentLabel(for: member)
-            return label == "—" ? nil : label
-        case .agent(let agent):
-            return agent.agentTypeLabel
-        }
-    }
-
-    private var crownVisible: Bool {
-        if case .member(let member) = actor { return member.isOwner }
-        return false
-    }
-
-    private var statusColor: Color {
-        switch actor {
-        case .member(let member):
-            return onlineMemberIds.contains(member.memberId) ? .green : .secondary.opacity(0.4)
-        case .agent(let agent):
-            switch agent.status {
-            case 2: return .green
-            case 3: return .yellow
-            case 4, 5: return .red
-            default: return .secondary.opacity(0.4)
-            }
-        }
-    }
-}
-
-private func departmentLabel(for member: Member) -> String {
-    if let dept = member.department, !dept.isEmpty { return dept }
-    return "—"
 }
 
 private struct ActorDetailView: View {
-    let actor: ActorDirectoryEntry
-    let mqtt: MQTTService
-    let deviceId: String
-    let peerId: String
-    let sessionViewModel: SessionListViewModel
-    let memberViewModel: MemberListViewModel
-
-    @Query private var allMessages: [SessionMessage]
-    @Query(sort: \Session.lastMessageAt, order: .reverse)
-    private var allSessions: [Session]
-
-    @State private var showNewSession = false
-
-    private var title: String {
-        switch actor {
-        case .member(let member): return member.displayName
-        case .agent(let agent): return actorDisplayName(for: agent)
-        }
-    }
-
-    private var actorId: String {
-        switch actor {
-        case .member(let member): return member.memberId
-        case .agent(let agent): return agent.agentId
-        }
-    }
-
-    private var actorSessions: [Session] {
-        let sessionIds = Set(
-            allMessages
-                .filter { $0.senderActorId == actorId }
-                .map(\.sessionId)
-        )
-        let messageSessions = allSessions.filter { sessionIds.contains($0.sessionId) }
-        switch actor {
-        case .member:
-            return messageSessions
-        case .agent(let agent):
-            let primarySessions = allSessions.filter { $0.primaryAgentId == agent.agentId }
-            return Array(Dictionary(uniqueKeysWithValues: (messageSessions + primarySessions).map { ($0.sessionId, $0) }).values)
-                .sorted { lhs, rhs in
-                    (lhs.lastMessageAt ?? lhs.createdAt) > (rhs.lastMessageAt ?? rhs.createdAt)
-                }
-        }
-    }
-
+    let actor: CachedActor
     var body: some View {
         List {
             Section("Info") {
-                switch actor {
-                case .member(let member):
-                    LabeledContent("Name") {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(memberViewModel.isOnline(member) ? Color.green : Color.secondary.opacity(0.4))
-                                .frame(width: 8, height: 8)
-                            Text(member.displayName)
-                        }
-                    }
-                    LabeledContent("Kind", value: "Human")
-                    LabeledContent("Status", value: memberViewModel.isOnline(member) ? "Online" : "Offline")
-                    LabeledContent("Role", value: member.roleLabel)
-                    LabeledContent("Department", value: departmentLabel(for: member))
-                    LabeledContent("Joined", value: member.joinedAt.formatted(date: .abbreviated, time: .shortened))
-                case .agent(let agent):
-                    LabeledContent("Name", value: actorDisplayName(for: agent))
-                    LabeledContent("Kind", value: "Digital Employee")
-                    LabeledContent("Status", value: agent.statusLabel)
-                    LabeledContent("Backend", value: agent.agentTypeLabel)
-                    LabeledContent("Workspace", value: agent.workspaceId.isEmpty ? "—" : agent.workspaceId)
-                    if let model = agent.currentModel, !model.isEmpty {
-                        LabeledContent("Model", value: model)
-                    }
-                }
-            }
-            Section("Collab Sessions") {
-                if actorSessions.isEmpty {
-                    Text("No sessions yet")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
+                LabeledContent("Name", value: actor.displayName)
+                LabeledContent("Kind", value: actor.isMember ? "Human" : "Agent")
+                if actor.isMember {
+                    LabeledContent("Role",   value: actor.roleLabel)
+                    LabeledContent("Status", value: actor.memberStatus?.capitalized ?? "—")
                 } else {
-                    ForEach(actorSessions, id: \.sessionId) { session in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(session.title.isEmpty ? "(untitled)" : session.title)
-                                .font(.body)
-                            if let last = session.lastMessageAt {
-                                Text(last.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+                    LabeledContent("Agent kind", value: actor.agentKind ?? "—")
+                    LabeledContent("Status",     value: actor.agentStatus?.capitalized ?? "—")
                 }
+                LabeledContent("Joined",
+                               value: actor.createdAt.formatted(date: .abbreviated, time: .shortened))
             }
             Section("ID") {
-                Text(actorId)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+                Text(actor.actorId).font(.caption)
+                    .foregroundStyle(.secondary).textSelection(.enabled)
             }
         }
-        .navigationTitle(title)
+        .navigationTitle(actor.displayName)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
-        .toolbar {
-            if case .member(let member) = actor {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showNewSession = true
-                    } label: {
-                        Image(systemName: "bubble.left.and.bubble.right")
-                            .font(.title3)
-                            .foregroundStyle(.primary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("New session")
-                }
-            }
-        }
-        .sheet(isPresented: $showNewSession) {
-            if case .member(let member) = actor {
-                NewSessionSheet(
-                    mqtt: mqtt,
-                    deviceId: deviceId,
-                    peerId: peerId,
-                    viewModel: sessionViewModel,
-                    preselectedCollaborators: [member]
-                )
-            }
-        }
     }
 }
 
-private func actorDisplayName(for agent: Agent) -> String {
-    if !agent.sessionTitle.isEmpty { return agent.sessionTitle }
-    return agent.agentId
+#else
+struct MemberListContent: View {
+    init(store: ActorStore) {}
+    var body: some View { ContentUnavailableView("Actors", systemImage: "person.2") }
 }
+#endif
