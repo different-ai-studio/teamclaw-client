@@ -123,6 +123,59 @@ impl SupabaseClient {
         self.cfg.refresh_token = body.refresh_token.clone();
         Ok(body.access_token)
     }
+
+    /// Call a PostgREST RPC function with the daemon's bearer token.
+    pub async fn rpc<Req: Serialize, Resp: serde::de::DeserializeOwned>(
+        &self,
+        name: &str,
+        payload: &Req,
+    ) -> SupabaseResult<Resp> {
+        let token = self.access_token().await?;
+        let url = format!("{}/rest/v1/rpc/{name}", self.cfg.url);
+        let resp = self
+            .http
+            .post(&url)
+            .header("apikey", &self.cfg.anon_key)
+            .bearer_auth(token)
+            .json(payload)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(SupabaseError::Rpc {
+                code: Some(status.as_u16().to_string()),
+                message: text,
+            });
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// Anonymous RPC — used for `claim_daemon_invite`, where the invite token
+    /// *is* the credential.
+    pub async fn rpc_anon<Req: Serialize, Resp: serde::de::DeserializeOwned>(
+        &self,
+        name: &str,
+        payload: &Req,
+    ) -> SupabaseResult<Resp> {
+        let url = format!("{}/rest/v1/rpc/{name}", self.cfg.url);
+        let resp = self
+            .http
+            .post(&url)
+            .header("apikey", &self.cfg.anon_key)
+            .json(payload)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(SupabaseError::Rpc {
+                code: Some(status.as_u16().to_string()),
+                message: text,
+            });
+        }
+        Ok(resp.json().await?)
+    }
 }
 
 #[cfg(test)]
@@ -178,6 +231,51 @@ mod tests {
             Err(SupabaseError::Auth(_)) => {}
             other => panic!("expected auth error, got {:?}", other),
         }
+    }
+
+    #[tokio::test]
+    async fn rpc_posts_with_bearer_and_json() {
+        let srv = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/auth/v1/token$"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "access_token": "at",
+                "expires_in": 3600,
+                "refresh_token": "rt"
+            })))
+            .mount(&srv)
+            .await;
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/rest/v1/rpc/echo$"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+            .mount(&srv)
+            .await;
+
+        let client = SupabaseClient::new(test_cfg(srv.uri())).unwrap();
+        let body: serde_json::Value = client
+            .rpc("echo", &serde_json::json!({"x": 1}))
+            .await
+            .unwrap();
+        assert_eq!(body["ok"], true);
+    }
+
+    #[tokio::test]
+    async fn rpc_anon_omits_bearer() {
+        let srv = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/rest/v1/rpc/claim$"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {"agent_id": "a", "team_id": "t", "auth_email": "e", "auth_password": "p"}
+            ])))
+            .mount(&srv)
+            .await;
+
+        let client = SupabaseClient::new(test_cfg(srv.uri())).unwrap();
+        let body: serde_json::Value = client
+            .rpc_anon("claim", &serde_json::json!({"p_invite_token": "abc"}))
+            .await
+            .unwrap();
+        assert_eq!(body[0]["agent_id"], "a");
     }
 
     #[tokio::test]
