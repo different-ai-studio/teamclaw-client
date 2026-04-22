@@ -1,9 +1,206 @@
-use crate::supabase::error::SupabaseResult;
+use crate::supabase::config::SupabaseConfig;
+use crate::supabase::error::{SupabaseError, SupabaseResult};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
-pub struct SupabaseClient;
+#[derive(Debug, Clone)]
+pub struct SupabaseClient {
+    http: Client,
+    cfg: SupabaseConfig,
+    state: Arc<Mutex<AuthState>>,
+}
+
+#[derive(Debug, Default)]
+struct AuthState {
+    access_token: Option<String>,
+    refresh_token: String,
+    expires_at: Option<Instant>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TokenResponse {
+    access_token: String,
+    expires_in: u64,
+    refresh_token: String,
+}
+
+#[derive(Debug, Serialize)]
+struct RefreshRequest<'a> {
+    refresh_token: &'a str,
+}
+
+// Refresh while the access token still has >10 min of life left, so a single
+// slow call won't expire mid-flight.
+const REFRESH_SKEW: Duration = Duration::from_secs(10 * 60);
 
 impl SupabaseClient {
-    pub fn new() -> SupabaseResult<Self> {
-        Ok(Self)
+    pub fn new(cfg: SupabaseConfig) -> SupabaseResult<Self> {
+        let http = Client::builder()
+            .timeout(Duration::from_secs(20))
+            .build()?;
+        let state = AuthState {
+            refresh_token: cfg.refresh_token.clone(),
+            ..Default::default()
+        };
+        Ok(Self {
+            http,
+            cfg,
+            state: Arc::new(Mutex::new(state)),
+        })
+    }
+
+    pub fn config(&self) -> &SupabaseConfig {
+        &self.cfg
+    }
+
+    pub async fn access_token(&self) -> SupabaseResult<String> {
+        {
+            let st = self.state.lock().unwrap();
+            if let (Some(tok), Some(exp)) = (&st.access_token, st.expires_at) {
+                if exp > Instant::now() + REFRESH_SKEW {
+                    return Ok(tok.clone());
+                }
+            }
+        }
+        self.refresh().await
+    }
+
+    async fn refresh(&self) -> SupabaseResult<String> {
+        let rt = { self.state.lock().unwrap().refresh_token.clone() };
+        let url = format!("{}/auth/v1/token?grant_type=refresh_token", self.cfg.url);
+        let resp = self
+            .http
+            .post(&url)
+            .header("apikey", &self.cfg.anon_key)
+            .json(&RefreshRequest { refresh_token: &rt })
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            return Err(SupabaseError::Auth(format!("refresh failed: {text}")));
+        }
+        let body: TokenResponse = resp.json().await?;
+
+        let mut st = self.state.lock().unwrap();
+        st.access_token = Some(body.access_token.clone());
+        st.refresh_token = body.refresh_token;
+        st.expires_at = Some(Instant::now() + Duration::from_secs(body.expires_in));
+        Ok(body.access_token)
+    }
+
+    /// Trade an email/password for tokens. Used immediately after
+    /// `claim_daemon_invite` returns the daemon's one-time credentials.
+    pub async fn login_with_password(
+        &mut self,
+        email: &str,
+        password: &str,
+    ) -> SupabaseResult<String> {
+        #[derive(Serialize)]
+        struct Req<'a> {
+            email: &'a str,
+            password: &'a str,
+        }
+        let url = format!("{}/auth/v1/token?grant_type=password", self.cfg.url);
+        let resp = self
+            .http
+            .post(&url)
+            .header("apikey", &self.cfg.anon_key)
+            .json(&Req { email, password })
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            return Err(SupabaseError::Auth(format!("password login: {text}")));
+        }
+        let body: TokenResponse = resp.json().await?;
+        let mut st = self.state.lock().unwrap();
+        st.access_token = Some(body.access_token.clone());
+        st.refresh_token = body.refresh_token.clone();
+        st.expires_at = Some(Instant::now() + Duration::from_secs(body.expires_in));
+        self.cfg.refresh_token = body.refresh_token.clone();
+        Ok(body.access_token)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wiremock::matchers::{method, path_regex};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn test_cfg(url: String) -> SupabaseConfig {
+        SupabaseConfig {
+            url,
+            anon_key: "anon".into(),
+            refresh_token: "rt-0".into(),
+            team_id: "t".into(),
+            actor_id: "a".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn refreshes_access_token_when_expired() {
+        let srv = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/auth/v1/token$"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "access_token": "at-new",
+                    "expires_in": 3600,
+                    "refresh_token": "rt-1"
+                })),
+            )
+            .mount(&srv)
+            .await;
+
+        let client = SupabaseClient::new(test_cfg(srv.uri())).unwrap();
+        let tok = client.access_token().await.unwrap();
+        assert_eq!(tok, "at-new");
+
+        let tok2 = client.access_token().await.unwrap();
+        assert_eq!(tok2, "at-new");
+    }
+
+    #[tokio::test]
+    async fn refresh_failure_is_auth_error() {
+        let srv = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/auth/v1/token$"))
+            .respond_with(ResponseTemplate::new(400).set_body_string("bad"))
+            .mount(&srv)
+            .await;
+
+        let client = SupabaseClient::new(test_cfg(srv.uri())).unwrap();
+        match client.access_token().await {
+            Err(SupabaseError::Auth(_)) => {}
+            other => panic!("expected auth error, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn password_login_updates_refresh_token() {
+        let srv = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/auth/v1/token$"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "access_token": "at-pwd",
+                    "expires_in": 3600,
+                    "refresh_token": "rt-final"
+                })),
+            )
+            .mount(&srv)
+            .await;
+
+        let mut client = SupabaseClient::new(test_cfg(srv.uri())).unwrap();
+        let tok = client
+            .login_with_password("daemon+x@amux.local", "secret")
+            .await
+            .unwrap();
+        assert_eq!(tok, "at-pwd");
+        assert_eq!(client.config().refresh_token, "rt-final");
     }
 }
