@@ -138,7 +138,131 @@ $$;
 grant execute on function app.current_actor_id_for_team(uuid) to authenticated;
 grant execute on function app.is_current_agent(uuid) to authenticated;
 
--- 6b. Rewrite create_team: members.user_id is gone; identity lives on actors.
+-- 6b. Fix enforce_core_team_integrity: remove agents.created_by_member_id branch
+--     (column was dropped above; default_workspace_id check is preserved).
+create or replace function app.enforce_core_team_integrity()
+returns trigger language plpgsql as $$
+begin
+  if tg_table_name = 'team_members' then
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.member_id),
+      'team_members.member_id'
+    );
+  elsif tg_table_name = 'workspaces' then
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.created_by_member_id),
+      'workspaces.created_by_member_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.agent_id),
+      'workspaces.agent_id'
+    );
+  elsif tg_table_name = 'agents' then
+    -- created_by_member_id was dropped in migration 0015; only workspace check remains.
+    perform app.require_same_team(
+      app.actor_team_id(new.id),
+      app.table_team_id('public.workspaces'::regclass, new.default_workspace_id),
+      'agents.default_workspace_id'
+    );
+  elsif tg_table_name = 'agent_member_access' then
+    perform app.require_same_team(
+      app.actor_team_id(new.agent_id),
+      app.actor_team_id(new.member_id),
+      'agent_member_access.member_id'
+    );
+    perform app.require_same_team(
+      app.actor_team_id(new.agent_id),
+      app.actor_team_id(new.granted_by_member_id),
+      'agent_member_access.granted_by_member_id'
+    );
+  elsif tg_table_name = 'tasks' then
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.workspaces'::regclass, new.workspace_id),
+      'tasks.workspace_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.tasks'::regclass, new.parent_task_id),
+      'tasks.parent_task_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.created_by_actor_id),
+      'tasks.created_by_actor_id'
+    );
+  elsif tg_table_name = 'task_external_refs' then
+    perform app.require_same_team(
+      app.table_team_id('public.tasks'::regclass, new.task_id),
+      app.actor_team_id(new.linked_by_actor_id),
+      'task_external_refs.linked_by_actor_id'
+    );
+  elsif tg_table_name = 'sessions' then
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.tasks'::regclass, new.task_id),
+      'sessions.task_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.created_by_actor_id),
+      'sessions.created_by_actor_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.primary_agent_id),
+      'sessions.primary_agent_id'
+    );
+  elsif tg_table_name = 'session_participants' then
+    perform app.require_same_team(
+      app.table_team_id('public.sessions'::regclass, new.session_id),
+      app.actor_team_id(new.actor_id),
+      'session_participants.actor_id'
+    );
+  elsif tg_table_name = 'messages' then
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.sessions'::regclass, new.session_id),
+      'messages.session_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.sender_actor_id),
+      'messages.sender_actor_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.messages'::regclass, new.reply_to_message_id),
+      'messages.reply_to_message_id'
+    );
+  elsif tg_table_name = 'agent_runtimes' then
+    perform app.require_same_team(
+      new.team_id,
+      app.actor_team_id(new.agent_id),
+      'agent_runtimes.agent_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.sessions'::regclass, new.session_id),
+      'agent_runtimes.session_id'
+    );
+    perform app.require_same_team(
+      new.team_id,
+      app.table_team_id('public.workspaces'::regclass, new.workspace_id),
+      'agent_runtimes.workspace_id'
+    );
+  else
+    raise exception 'app.enforce_core_team_integrity is not defined for table %', tg_table_name;
+  end if;
+
+  return new;
+end;
+$$;
+
+-- 6d. Rewrite create_team: members.user_id is gone; identity lives on actors.
 create or replace function public.create_team(
   p_name text,
   p_slug text default null
