@@ -23,9 +23,10 @@ fn main() -> anyhow::Result<()> {
                 let rt = tokio::runtime::Runtime::new()?;
                 let outcome = rt.block_on(onboarding::init::run(&url, None))?;
                 println!(
-                    "Daemon onboarded. agent_id={} team_id={} config={}",
-                    outcome.agent_id,
+                    "Daemon onboarded. actor_id={} team_id={} display_name={} config={}",
+                    outcome.actor_id,
                     outcome.team_id,
+                    outcome.display_name,
                     outcome.config_path.display()
                 );
             } else {
