@@ -13,11 +13,12 @@ end;
 $$;
 
 -- Fixture users: alice (team A owner), bob (stranger), carol (to be invited)
+-- Use .test TLD to avoid collision with seed users (alice@example.com etc.)
 insert into auth.users (id, email, aud, role, instance_id)
 values
-  ('11111111-1111-1111-1111-111111111111', 'alice@example.com', 'authenticated', 'authenticated', '00000000-0000-0000-0000-000000000000'),
-  ('22222222-2222-2222-2222-222222222222', 'bob@example.com',   'authenticated', 'authenticated', '00000000-0000-0000-0000-000000000000'),
-  ('33333333-3333-3333-3333-333333333333', 'carol@example.com', 'authenticated', 'authenticated', '00000000-0000-0000-0000-000000000000')
+  ('11111111-1111-1111-1111-111111111111', 'alice-pgtest@amux.test', 'authenticated', 'authenticated', '00000000-0000-0000-0000-000000000000'),
+  ('22222222-2222-2222-2222-222222222222', 'bob-pgtest@amux.test',   'authenticated', 'authenticated', '00000000-0000-0000-0000-000000000000'),
+  ('33333333-3333-3333-3333-333333333333', 'carol-pgtest@amux.test', 'authenticated', 'authenticated', '00000000-0000-0000-0000-000000000000')
 on conflict do nothing;
 
 select pg_temp.as_user('11111111-1111-1111-1111-111111111111');
