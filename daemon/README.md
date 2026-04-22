@@ -1,0 +1,55 @@
+# amuxd — AMUX Daemon
+
+Rust daemon that spawns and manages AI coding agents (Claude Code via ACP/stdio), publishes events over MQTT, and syncs state to Supabase.
+
+## Build prerequisites
+
+`amuxd` bakes the Supabase project URL and anon key into the binary at compile time. Set:
+
+```bash
+export SUPABASE_URL=https://srhaytajyfrniuvnkfpd.supabase.co
+export SUPABASE_ANON_KEY=<anon key from Supabase dashboard or amux-api/.env>
+```
+
+Before running `cargo build`. The build script will rerun automatically whenever these env vars change.
+
+### Recommended setup
+
+Copy `daemon/.env.example` to `daemon/.env` and fill in the values, then either:
+
+- Source it before building: `source daemon/.env && cargo build`
+- Or use [direnv](https://direnv.net/): place a `.envrc` in `daemon/` with `dotenv .env`
+
+The `.env` file is gitignored and must not be committed.
+
+## Build
+
+```bash
+source daemon/.env   # or: export SUPABASE_URL=... SUPABASE_ANON_KEY=...
+cd daemon && cargo build
+```
+
+## First-time setup (daemon onboarding)
+
+1. On the owner's iOS device, create an agent invite — copy the `amux://invite?token=...` deeplink.
+2. Run:
+
+```bash
+./target/release/amuxd init "amux://invite?token=<paste here>"
+```
+
+Expected output: `Daemon onboarded. actor_id=<uuid> team_id=<uuid> display_name=<name> config=<path>`
+
+This writes `~/.config/amux/supabase.toml` with the daemon's credentials.
+
+## Run
+
+```bash
+./target/release/amuxd start
+```
+
+## Test
+
+```bash
+cd daemon && cargo test
+```
