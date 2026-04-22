@@ -177,4 +177,11 @@ create policy agents_self_update on public.agents
   using (app.is_current_agent(id))
   with check (app.is_current_agent(id));
 
+-- ===========================================================================
+-- 8. Drop old daemon invite flow (replaced by team_invites in Task 8)
+-- ===========================================================================
+drop function if exists public.claim_daemon_invite(uuid);
+drop function if exists public.create_daemon_invite(uuid, text);
+drop table    if exists public.daemon_invites cascade;
+
 commit;
