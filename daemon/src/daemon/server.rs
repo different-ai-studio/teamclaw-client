@@ -3,6 +3,7 @@ use tracing::{error, info, warn};
 
 use crate::config::{DaemonConfig, MemberStore, SessionStore, StoredSession, WorkspaceStore};
 use crate::mqtt::{MqttClient, publisher::Publisher, subscriber};
+use crate::supabase::{SupabaseClient, SupabaseConfig};
 use std::path::PathBuf;
 use crate::agent::AgentManager;
 use crate::collab::{AuthManager, AuthResult, PeerTracker, PeerState, PermissionManager};
@@ -22,6 +23,7 @@ pub struct DaemonServer {
     sessions_path: PathBuf,
     history: EventHistory,
     teamclaw: Option<crate::teamclaw::SessionManager>,
+    supabase: Option<SupabaseClient>,
 }
 
 impl DaemonServer {
@@ -42,7 +44,6 @@ impl DaemonServer {
         let auth = AuthManager::new(members_path)?;
         let peers = PeerTracker::new();
         let permissions = PermissionManager::new();
-        let agents = AgentManager::new(binary, flags);
 
         let workspaces_path = config_path.parent()
             .unwrap_or(std::path::Path::new("."))
@@ -73,7 +74,33 @@ impl DaemonServer {
             .join("history");
         let history = EventHistory::new(&history_dir);
 
-        Ok(Self { config, mqtt, agents, auth, peers, permissions, workspaces, workspaces_path, sessions, sessions_path, history, teamclaw })
+        // Load Supabase client if supabase.toml is present (absent = legacy mode).
+        let supabase: Option<SupabaseClient> = match SupabaseConfig::default_path() {
+            Ok(path) if path.exists() => {
+                match SupabaseConfig::load(&path).and_then(SupabaseClient::new) {
+                    Ok(c) => {
+                        info!(
+                            actor_id = %c.config().actor_id,
+                            team_id = %c.config().team_id,
+                            "Supabase client initialised"
+                        );
+                        Some(c)
+                    }
+                    Err(e) => {
+                        warn!("Supabase config present but init failed: {e}");
+                        None
+                    }
+                }
+            }
+            _ => {
+                info!("No supabase.toml found; Supabase features disabled");
+                None
+            }
+        };
+
+        let agents = AgentManager::new(binary, flags, supabase.clone());
+
+        Ok(Self { config, mqtt, agents, auth, peers, permissions, workspaces, workspaces_path, sessions, sessions_path, history, teamclaw, supabase })
     }
 
     pub async fn run(mut self) -> crate::error::Result<()> {
@@ -114,6 +141,20 @@ impl DaemonServer {
         self.publish_all_agent_states().await;
 
         info!(device_id = %self.config.device.id, "MQTT connected, listening for commands");
+
+        // Spawn 60s Supabase heartbeat task (no-op when supabase is None)
+        if let Some(sb) = self.supabase.clone() {
+            tokio::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+                tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                loop {
+                    tick.tick().await;
+                    if let Err(e) = sb.heartbeat().await {
+                        warn!("supabase heartbeat error: {e}");
+                    }
+                }
+            });
+        }
 
         // Main event loop
         loop {
@@ -272,6 +313,45 @@ impl DaemonServer {
                 let _ = self.sessions.save(&self.sessions_path);
             }
             self.publish_agent_state_by_id(agent_id).await;
+
+            // Upsert agent_runtimes on status transitions
+            if let Some(sb) = &self.supabase {
+                let new_status = amux::AgentStatus::try_from(sc.new_status)
+                    .unwrap_or(amux::AgentStatus::Unknown);
+                let supabase_status: &'static str = match new_status {
+                    amux::AgentStatus::Active => "running",
+                    amux::AgentStatus::Idle => "idle",
+                    amux::AgentStatus::Stopped => "stopped",
+                    _ => "unknown",
+                };
+                let acp_sid = self.agents.get_handle(agent_id)
+                    .map(|h| h.acp_session_id.clone())
+                    .unwrap_or_default();
+                let ws_id = self.agents.get_handle(agent_id)
+                    .map(|h| h.workspace_id.clone())
+                    .unwrap_or_default();
+                let current_model = self.agents.current_model(agent_id).cloned();
+                let team_id = sb.config().team_id.clone();
+                let actor_id = sb.config().actor_id.clone();
+                let sb_clone = sb.clone();
+                let now = chrono::Utc::now();
+                tokio::spawn(async move {
+                    let row = crate::supabase::AgentRuntimeUpsert {
+                        team_id: &team_id,
+                        agent_id: &actor_id,
+                        session_id: None,
+                        workspace_id: if ws_id.is_empty() { None } else { Some(ws_id.as_str()) },
+                        backend_type: "claude",
+                        backend_session_id: if acp_sid.is_empty() { None } else { Some(acp_sid.as_str()) },
+                        status: supabase_status,
+                        current_model: current_model.as_deref(),
+                        last_seen_at: now,
+                    };
+                    if let Err(e) = sb_clone.upsert_agent_runtime(&row).await {
+                        warn!("agent_runtimes upsert ({supabase_status}): {e}");
+                    }
+                });
+            }
         }
 
         // Update session on complete output
@@ -770,60 +850,10 @@ impl DaemonServer {
                     let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
                 }
             }
-            amux::device_collab_command::Command::InviteMember(invite) => {
-                let role = self.peers.get_peer(&peer_id).map(|p| p.role).unwrap_or(amux::MemberRole::Member);
-                if role != amux::MemberRole::Owner {
-                    warn!(peer_id, "invite rejected: not owner");
-                    let reject = amux::DeviceCollabEvent {
-                        device_id: self.config.device.id.clone(),
-                        timestamp: chrono::Utc::now().timestamp(),
-                        event: Some(amux::device_collab_event::Event::CommandRejected(
-                            amux::PromptRejected {
-                                command_id,
-                                reason: "Only owners can invite members".to_string(),
-                            },
-                        )),
-                    };
-                    let _ = publisher.publish_device_collab_event(&reject).await;
-                    return;
-                }
-                let invite_role = if invite.role == amux::MemberRole::Owner as i32 { "owner" } else { "member" };
-                match self.auth.create_invite(&invite.display_name, 24, invite_role) {
-                    Ok(pending) => {
-                        let deeplink = format!(
-                            "amux://join?broker={}&device={}&token={}",
-                            self.config.mqtt.broker_url, self.config.device.id, pending.invite_token
-                        );
-                        let event = amux::DeviceCollabEvent {
-                            device_id: self.config.device.id.clone(),
-                            timestamp: chrono::Utc::now().timestamp(),
-                            event: Some(amux::device_collab_event::Event::InviteCreated(
-                                amux::InviteCreated {
-                                    request_id: invite.request_id,
-                                    invite_token: pending.invite_token,
-                                    deeplink,
-                                    expires_at: pending.expires_at.timestamp(),
-                                },
-                            )),
-                        };
-                        let _ = publisher.publish_device_collab_event(&event).await;
-                        info!("invite created for {}", invite.display_name);
-                    }
-                    Err(e) => {
-                        error!("failed to create invite: {}", e);
-                        let reject = amux::DeviceCollabEvent {
-                            device_id: self.config.device.id.clone(),
-                            timestamp: chrono::Utc::now().timestamp(),
-                            event: Some(amux::device_collab_event::Event::CommandRejected(
-                                amux::PromptRejected {
-                                    command_id,
-                                    reason: format!("Failed to create invite: {}", e),
-                                },
-                            )),
-                        };
-                        let _ = publisher.publish_device_collab_event(&reject).await;
-                    }
-                }
+            amux::device_collab_command::Command::InviteMember(_invite) => {
+                // Legacy MQTT invite flow removed. Invites are now issued via
+                // the Supabase create_team_invite RPC from iOS directly.
+                warn!(peer_id, "InviteMember command received but handler removed; use Supabase invite flow");
             }
             amux::device_collab_command::Command::RemoveMember(remove) => {
                 let role = self.peers.get_peer(&peer_id).map(|p| p.role).unwrap_or(amux::MemberRole::Member);
