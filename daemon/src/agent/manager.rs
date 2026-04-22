@@ -1,8 +1,10 @@
 use std::collections::HashMap;
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::proto::amux;
+use crate::supabase::{AgentRuntimeUpsert, SupabaseClient};
+use chrono::Utc;
 use super::adapter;
 use super::handle::AgentHandle;
 
@@ -15,16 +17,19 @@ pub struct AgentManager {
     /// responsible for actually calling ACP `session/set_model`; this map
     /// is the daemon-side mirror used to populate AgentInfo.current_model.
     current_model_per_agent: HashMap<String, String>,
+    supabase: Option<SupabaseClient>,
 }
 
 impl AgentManager {
-    pub fn new(binary: String, _flags: Vec<String>) -> Self {
+    pub fn new(binary: String, _flags: Vec<String>, supabase: Option<SupabaseClient>) -> Self {
         Self {
             agents: HashMap::new(),
             claude_binary: binary,
             current_model_per_agent: HashMap::new(),
+            supabase,
         }
     }
+
 
     /// Records that an agent's session is now running on `model_id`.
     /// Caller is responsible for actually invoking ACP set_model on the
@@ -84,6 +89,27 @@ impl AgentManager {
             }
         }
 
+        // Upsert agent_runtimes with status="starting"
+        if let Some(sb) = &self.supabase {
+            let acp_sid = self.agents.get(&agent_id)
+                .map(|h| h.acp_session_id.clone())
+                .unwrap_or_default();
+            let row = AgentRuntimeUpsert {
+                team_id: &sb.config().team_id,
+                agent_id: &sb.config().actor_id,
+                session_id: None,
+                workspace_id: if workspace_id.is_empty() { None } else { Some(workspace_id) },
+                backend_type: "claude",
+                backend_session_id: if acp_sid.is_empty() { None } else { Some(&acp_sid) },
+                status: "starting",
+                current_model: self.current_model_per_agent.get(&agent_id).map(|s| s.as_str()),
+                last_seen_at: Utc::now(),
+            };
+            if let Err(e) = sb.upsert_agent_runtime(&row).await {
+                warn!("agent_runtimes upsert (starting): {e}");
+            }
+        }
+
         Ok(agent_id)
     }
 
@@ -137,6 +163,24 @@ impl AgentManager {
         } else {
             acp_session_id.to_string()
         };
+
+        // Upsert agent_runtimes with status="starting" on resume
+        if let Some(sb) = &self.supabase {
+            let row = AgentRuntimeUpsert {
+                team_id: &sb.config().team_id,
+                agent_id: &sb.config().actor_id,
+                session_id: None,
+                workspace_id: if workspace_id.is_empty() { None } else { Some(workspace_id) },
+                backend_type: "claude",
+                backend_session_id: if new_acp_sid.is_empty() { None } else { Some(&new_acp_sid) },
+                status: "starting",
+                current_model: self.current_model_per_agent.get(agent_id).map(|s| s.as_str()),
+                last_seen_at: Utc::now(),
+            };
+            if let Err(e) = sb.upsert_agent_runtime(&row).await {
+                warn!("agent_runtimes upsert (starting/resume): {e}");
+            }
+        }
 
         Ok(new_acp_sid)
     }
@@ -280,7 +324,7 @@ mod tests {
 
     #[test]
     fn set_current_model_records_value() {
-        let mut mgr = AgentManager::new("claude".to_string(), vec![]);
+        let mut mgr = AgentManager::new("claude".to_string(), vec![], None);
         mgr.set_current_model("agent-1", "claude-sonnet-4-6");
         assert_eq!(
             mgr.current_model("agent-1").map(|s| s.as_str()),
@@ -290,7 +334,7 @@ mod tests {
 
     #[test]
     fn current_model_returns_none_for_unknown_agent() {
-        let mgr = AgentManager::new("claude".to_string(), vec![]);
+        let mgr = AgentManager::new("claude".to_string(), vec![], None);
         assert_eq!(mgr.current_model("agent-1"), None);
     }
 }
