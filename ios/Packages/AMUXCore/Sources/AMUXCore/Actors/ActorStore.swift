@@ -2,6 +2,10 @@ import Foundation
 import Observation
 import SwiftData
 
+public extension Notification.Name {
+    static let amuxInviteTokenReceived = Notification.Name("amuxInviteTokenReceived")
+}
+
 @Observable
 @MainActor
 public final class ActorStore {

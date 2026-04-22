@@ -88,6 +88,11 @@ public struct RootTabView: View {
         .task(id: activeTeam?.id) {
             await configureActorStore()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .amuxInviteTokenReceived)) { note in
+            guard let token = note.userInfo?["token"] as? String,
+                  let store = actorStore else { return }
+            Task { _ = await store.claimInvite(token: token) }
+        }
     }
 
     @MainActor

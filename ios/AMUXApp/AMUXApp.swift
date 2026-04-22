@@ -38,7 +38,18 @@ struct AMUXApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(pairing: pairing)
+                .onOpenURL { url in handle(url) }
         }
         .modelContainer(modelContainer)
+    }
+
+    private func handle(_ url: URL) {
+        guard url.scheme == "amux", url.host == "invite",
+              let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let token = comps.queryItems?.first(where: { $0.name == "token" })?.value
+        else { return }
+        NotificationCenter.default.post(
+            name: .amuxInviteTokenReceived, object: nil, userInfo: ["token": token]
+        )
     }
 }
