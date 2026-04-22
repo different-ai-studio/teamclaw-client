@@ -13,12 +13,13 @@ public final class TeamclawService {
     private var teamId: String = ""
     private var deviceId: String = ""
     private var peerId: String = ""
-    /// Member id of the local actor, resolved from the retained PeerList on
-    /// `amux/{deviceId}/peers` by matching our own peer_id. Populated once
+    /// Member id of the local actor, resolved from the retained device peer
+    /// list by matching our own peer_id. Populated once
     /// PeerList arrives; used as `sender_actor_id` on outgoing RPCs so the
     /// daemon records the creator as a member rather than a device.
     public private(set) var localMemberId: String = ""
     public private(set) var localDisplayName: String = ""
+    private var subscribedSessionMetaActorID: String?
     private var listenerTask: Task<Void, Never>?
     private var modelContainer: ModelContainer?
 
@@ -69,17 +70,17 @@ public final class TeamclawService {
             let stream = mqtt.messages()
 
             // Subscribe to core teamclaw topics
-            try? await mqtt.subscribe("teamclaw/\(teamId)/sessions")
-            try? await mqtt.subscribe("teamclaw/\(teamId)/members")
+            try? await mqtt.subscribe(MQTTTopics.teamSessions(teamID: teamId))
+            try? await mqtt.subscribe(MQTTTopics.teamMembers(teamID: teamId))
             // Subscribe to the legacy peer-scoped invite topic first so older
             // senders still reach us until all clients publish member-scoped
             // invite targets. Once we resolve localMemberId from PeerList we
             // additionally subscribe to the canonical member-scoped topic.
-            try? await mqtt.subscribe("teamclaw/\(teamId)/user/\(peerId)/invites")
-            try? await mqtt.subscribe("teamclaw/\(teamId)/rpc/\(deviceId)/+/res")
-            try? await mqtt.subscribe("teamclaw/\(teamId)/tasks")
+            try? await mqtt.subscribe(MQTTTopics.userInvites(teamID: teamId, actorID: peerId))
+            try? await mqtt.subscribe(MQTTTopics.rpcResponseWildcard(teamID: teamId, deviceID: deviceId))
+            try? await mqtt.subscribe(MQTTTopics.teamTasks(teamID: teamId))
             // amux-side peer list — used to resolve our local member id.
-            try? await mqtt.subscribe("amux/\(deviceId)/peers")
+            try? await mqtt.subscribe(MQTTTopics.devicePeers(teamID: teamId, deviceID: deviceId))
 
             isConnected = true
             print("[TeamclawService] subscribed to teamclaw topics for team: \(teamId)")
@@ -97,6 +98,7 @@ public final class TeamclawService {
         listenerTask?.cancel()
         listenerTask = nil
         isConnected = false
+        subscribedSessionMetaActorID = nil
     }
 
     // MARK: - Message Dispatch
@@ -104,16 +106,12 @@ public final class TeamclawService {
     private func handleIncoming(_ incoming: MQTTIncoming, modelContext: ModelContext) async {
         let topic = incoming.topic
 
-        if topic == "amux/\(deviceId)/peers" {
+        if topic == MQTTTopics.devicePeers(teamID: teamId, deviceID: deviceId) {
             if let list = try? Amux_PeerList(serializedBytes: incoming.payload) {
                 if let mine = list.peers.first(where: { $0.peerID == peerId }) {
                     if !mine.memberID.isEmpty, mine.memberID != localMemberId {
                         localMemberId = mine.memberID
-                        if let mqtt {
-                            Task {
-                                try? await mqtt.subscribe("teamclaw/\(teamId)/user/\(mine.memberID)/invites")
-                            }
-                        }
+                        Task { await subscribeToCurrentActorTopics(actorID: mine.memberID) }
                     }
                     if !mine.displayName.isEmpty {
                         localDisplayName = mine.displayName
@@ -123,7 +121,7 @@ public final class TeamclawService {
             return
         }
 
-        if topic == "teamclaw/\(teamId)/sessions" {
+        if topic == MQTTTopics.teamSessions(teamID: teamId) {
             guard let index = try? Teamclaw_SessionIndex(serializedBytes: incoming.payload) else {
                 print("[TeamclawService] failed to decode SessionIndex from topic: \(topic)")
                 return
@@ -143,7 +141,7 @@ public final class TeamclawService {
             return
         }
 
-        if topic == "teamclaw/\(teamId)/tasks" {
+        if topic == MQTTTopics.teamTasks(teamID: teamId) {
             guard let event = try? Teamclaw_TaskEvent(serializedBytes: incoming.payload) else {
                 print("[TeamclawService] failed to decode TaskEvent from global topic")
                 return
@@ -179,6 +177,7 @@ public final class TeamclawService {
             }
             if envelope.hasSession {
                 syncSessionMeta(envelope.session, modelContext: modelContext)
+                subscribeToSession(envelope.session.sessionID)
             }
             return
         }
@@ -243,15 +242,39 @@ public final class TeamclawService {
         let descriptor = FetchDescriptor<Session>(
             predicate: #Predicate { $0.sessionId == sessionId }
         )
-        guard let existing = (try? modelContext.fetch(descriptor))?.first else {
-            // No local Session yet — the SessionIndex sync path will create one
-            // when the retained /sessions message arrives. Avoid speculative inserts
-            // to prevent duplicates; syncSessionMeta will be re-triggered on the
-            // next retained delivery or can be applied once the session exists.
-            return
-        }
+        let existing = (try? modelContext.fetch(descriptor))?.first ?? {
+            let created = Session(
+                sessionId: sessionId,
+                mode: proto.sessionType == .control ? "control" : "collab",
+                teamId: proto.teamID,
+                title: proto.title,
+                hostDeviceId: proto.hostDeviceID,
+                createdBy: proto.createdBy,
+                createdAt: proto.createdAt > 0
+                    ? Date(timeIntervalSince1970: TimeInterval(proto.createdAt))
+                    : .now,
+                summary: proto.summary,
+                participantCount: proto.participants.count,
+                lastMessagePreview: proto.lastMessagePreview,
+                lastMessageAt: proto.lastMessageAt > 0
+                    ? Date(timeIntervalSince1970: TimeInterval(proto.lastMessageAt))
+                    : nil,
+                taskId: proto.taskID
+            )
+            created.primaryAgentId = proto.primaryAgentID.isEmpty ? nil : proto.primaryAgentID
+            modelContext.insert(created)
+            return created
+        }()
 
         existing.primaryAgentId = proto.primaryAgentID.isEmpty ? nil : proto.primaryAgentID
+        existing.mode = proto.sessionType == .control ? "control" : "collab"
+        existing.teamId = proto.teamID
+        existing.hostDeviceId = proto.hostDeviceID
+        existing.createdBy = proto.createdBy
+        existing.createdAt = proto.createdAt > 0
+            ? Date(timeIntervalSince1970: TimeInterval(proto.createdAt))
+            : existing.createdAt
+        existing.participantCount = proto.participants.count
         if !proto.title.isEmpty { existing.title = proto.title }
         if !proto.summary.isEmpty { existing.summary = proto.summary }
         if !proto.taskID.isEmpty { existing.taskId = proto.taskID }
@@ -335,7 +358,7 @@ public final class TeamclawService {
         rpcReq.senderDeviceID = deviceId
         rpcReq.method = .joinSession(joinReq)
 
-        let topic = "teamclaw/\(teamId)/rpc/\(invite.hostDeviceID)/\(rpcReq.requestID)/req"
+        let topic = MQTTTopics.rpcRequest(teamID: teamId, deviceID: invite.hostDeviceID, requestID: rpcReq.requestID)
         if let data = try? rpcReq.serializedData() {
             Task {
                 try? await mqtt.publish(topic: topic, payload: data, retain: false)
@@ -449,7 +472,7 @@ public final class TeamclawService {
             return
         }
 
-        let topic = "teamclaw/\(teamId)/session/\(sessionId)/messages"
+        let topic = MQTTTopics.sessionMessages(teamID: teamId, sessionID: sessionId)
         Task {
             try? await mqtt.publish(topic: topic, payload: data, retain: false)
         }
@@ -509,7 +532,7 @@ public final class TeamclawService {
         rpcReq.method = .createTask(createReq)
 
         let requestId = rpcReq.requestID
-        let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(requestId)/req"
+        let topic = MQTTTopics.rpcRequest(teamID: teamId, deviceID: deviceId, requestID: requestId)
         let stream = mqtt.messages()
 
         guard let data = try? rpcReq.serializedData() else { return false }
@@ -548,7 +571,7 @@ public final class TeamclawService {
         rpcReq.senderDeviceID = deviceId
         rpcReq.method = .updateTask(update)
 
-        let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
+        let topic = MQTTTopics.rpcRequest(teamID: teamId, deviceID: deviceId, requestID: rpcReq.requestID)
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
@@ -576,7 +599,7 @@ public final class TeamclawService {
         rpcReq.senderDeviceID = deviceId
         rpcReq.method = .updateTask(update)
 
-        let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
+        let topic = MQTTTopics.rpcRequest(teamID: teamId, deviceID: deviceId, requestID: rpcReq.requestID)
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
@@ -606,7 +629,7 @@ public final class TeamclawService {
         rpcReq.senderDeviceID = deviceId
         rpcReq.method = .updateTask(update)
 
-        let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
+        let topic = MQTTTopics.rpcRequest(teamID: teamId, deviceID: deviceId, requestID: rpcReq.requestID)
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
@@ -626,14 +649,21 @@ public final class TeamclawService {
 
     public func subscribeToSession(_ sessionId: String) {
         guard let mqtt else { return }
-        let base = "teamclaw/\(teamId)/session/\(sessionId)"
         Task {
-            try? await mqtt.subscribe("\(base)/messages")
-            try? await mqtt.subscribe("\(base)/meta")
-            try? await mqtt.subscribe("\(base)/tasks")
-            try? await mqtt.subscribe("\(base)/presence")
+            try? await mqtt.subscribe(MQTTTopics.sessionMessages(teamID: teamId, sessionID: sessionId))
+            try? await mqtt.subscribe(MQTTTopics.sessionTasks(teamID: teamId, sessionID: sessionId))
+            try? await mqtt.subscribe(MQTTTopics.sessionPresence(teamID: teamId, sessionID: sessionId))
             await fetchRecentMessages(sessionId: sessionId)
         }
+    }
+
+    private func subscribeToCurrentActorTopics(actorID: String) async {
+        guard let mqtt else { return }
+        if subscribedSessionMetaActorID != actorID {
+            try? await mqtt.subscribe(MQTTTopics.actorSessionMetaWildcard(teamID: teamId, actorID: actorID))
+            subscribedSessionMetaActorID = actorID
+        }
+        try? await mqtt.subscribe(MQTTTopics.userInvites(teamID: teamId, actorID: actorID))
     }
 
     public func fetchRecentMessages(sessionId: String, beforeCreatedAt: Int64 = 0, pageSize: UInt32 = 100) async {
@@ -656,7 +686,7 @@ public final class TeamclawService {
         rpcReq.senderDeviceID = deviceId
         rpcReq.method = .fetchSessionMessages(req)
 
-        let topic = "teamclaw/\(teamId)/rpc/\(session.hostDeviceId)/\(rpcReq.requestID)/req"
+        let topic = MQTTTopics.rpcRequest(teamID: teamId, deviceID: session.hostDeviceId, requestID: rpcReq.requestID)
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
 

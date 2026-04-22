@@ -20,6 +20,10 @@ pub enum IncomingMessage {
         session_id: String,
         payload: Vec<u8>,
     },
+    TeamclawSessionMeta {
+        session_id: String,
+        payload: Vec<u8>,
+    },
     TeamclawTaskEvent {
         session_id: String,
         payload: Vec<u8>,
@@ -29,21 +33,30 @@ pub enum IncomingMessage {
 pub fn parse_incoming(publish: &Publish) -> Option<IncomingMessage> {
     let topic = &publish.topic;
 
-    // Teamclaw topic matching (checked before AMUX topics)
-    if topic.starts_with("teamclaw/") {
+    if topic.starts_with("amux/") && topic.contains("/rpc/") {
         if topic.ends_with("/req") {
             return Some(IncomingMessage::TeamclawRpc {
                 topic: topic.clone(),
                 payload: publish.payload.to_vec(),
             });
         }
-        // teamclaw/{team_id}/session/{session_id}/messages  or  /tasks
+    }
+
+    // Team-scoped collaboration topics are matched before device-scoped topics.
+    if topic.starts_with("amux/") && !topic.contains("/device/") {
+        // amux/{team_id}/session/{session_id}/messages or /tasks
         let parts: Vec<&str> = topic.split('/').collect();
         if parts.len() == 5 && parts[2] == "session" {
             let session_id = parts[3].to_string();
             match parts[4] {
                 "messages" => {
                     return Some(IncomingMessage::TeamclawSessionMessage {
+                        session_id,
+                        payload: publish.payload.to_vec(),
+                    });
+                }
+                "meta" => {
+                    return Some(IncomingMessage::TeamclawSessionMeta {
                         session_id,
                         payload: publish.payload.to_vec(),
                     });
@@ -57,12 +70,19 @@ pub fn parse_incoming(publish: &Publish) -> Option<IncomingMessage> {
                 _ => {}
             }
         }
+        // amux/{team_id}/actor/{actor_id}/session/{session_id}/meta
+        if parts.len() == 7 && parts[2] == "actor" && parts[4] == "session" && parts[6] == "meta" {
+            return Some(IncomingMessage::TeamclawSessionMeta {
+                session_id: parts[5].to_string(),
+                payload: publish.payload.to_vec(),
+            });
+        }
     }
 
     if topic.contains("/agent/") && topic.ends_with("/commands") {
         let parts: Vec<&str> = topic.split('/').collect();
-        if parts.len() >= 5 {
-            let agent_id = parts[3].to_string();
+        if parts.len() >= 7 {
+            let agent_id = parts[5].to_string();
             match amux::CommandEnvelope::decode(publish.payload.as_ref()) {
                 Ok(envelope) => return Some(IncomingMessage::AgentCommand { agent_id, envelope }),
                 Err(e) => warn!("failed to decode CommandEnvelope: {}", e),

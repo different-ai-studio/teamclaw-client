@@ -93,7 +93,7 @@ public struct InviteSheet: View {
             var envelope = Teamclaw_InviteEnvelope()
             envelope.invite = invite
 
-            let topic = "teamclaw/\(teamId)/user/\(memberId)/invites"
+            let topic = MQTTTopics.userInvites(teamID: teamId, actorID: memberId)
             if let data = try? envelope.serializedData() {
                 Task {
                     try? await mqtt.publish(topic: topic, payload: data, retain: false)

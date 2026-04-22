@@ -1,6 +1,9 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
+import os
+
+private let newSessionLogger = Logger(subsystem: "com.amux.app", category: "NewSession")
 
 // MARK: - NewSessionSheet
 
@@ -15,17 +18,21 @@ public struct NewSessionSheet: View {
     let teamID: String
     let currentActorID: String?
     let isAgentAvailable: Bool
+    let connectedAgentsStore: ConnectedAgentsStore?
 
     let viewModel: SessionListViewModel
     let preselectedTaskId: String?
     let preselectedCollaborators: [CachedActor]
     @State private var selectedWorkspaceId: String?
     @State private var selectedAgentType: Amux_AgentType = .claudeCode
+    @State private var workspaceStore: WorkspaceStore?
 
     @State private var collaborators: [CachedActor] = []
+    @State private var primaryAgentID: String?
     @State private var selectedTaskId: String?
     @State private var messageText: String = ""
     @State private var showMemberPicker = false
+    @State private var primaryAgentCandidates: [CachedActor] = []
     @State private var isSending = false
     @State private var errorMessage: String?
     @FocusState private var isInputFocused: Bool
@@ -34,18 +41,26 @@ public struct NewSessionSheet: View {
            sort: \SessionTask.createdAt, order: .reverse)
     private var tasks: [SessionTask]
 
-    private var workspaces: [Workspace] { viewModel.workspaces }
+    private var workspaces: [WorkspaceRecord] { workspaceStore?.workspaces ?? [] }
+    private var selectedWorkspaceRecord: WorkspaceRecord? {
+        guard shouldShowWorkspaceRow,
+              let selectedWorkspaceId else { return nil }
+        return workspaces.first(where: { $0.id == selectedWorkspaceId })
+    }
     private var availableTasks: [SessionTask] {
         guard let selectedWorkspaceId, !selectedWorkspaceId.isEmpty else { return tasks }
         let scopedTasks = tasks.filter { $0.workspaceId == selectedWorkspaceId }
         return scopedTasks.isEmpty ? tasks : scopedTasks
     }
+    private var shouldShowWorkspaceRow: Bool { primaryAgentID != nil }
 
     /// Set by parent — called with agentId when session is created
     var onSessionCreated: ((String) -> Void)?
 
     public init(mqtt: MQTTService, deviceId: String, peerId: String, teamclawService: TeamclawService? = nil,
-                teamID: String = "", currentActorID: String? = nil, isAgentAvailable: Bool = true, viewModel: SessionListViewModel,
+                teamID: String = "", currentActorID: String? = nil, isAgentAvailable: Bool = true,
+                connectedAgentsStore: ConnectedAgentsStore? = nil,
+                viewModel: SessionListViewModel,
                 preselectedTaskId: String? = nil,
                 preselectedCollaborators: [CachedActor] = [],
                 onSessionCreated: ((String) -> Void)? = nil) {
@@ -56,6 +71,7 @@ public struct NewSessionSheet: View {
         self.teamID = teamID
         self.currentActorID = currentActorID
         self.isAgentAvailable = isAgentAvailable
+        self.connectedAgentsStore = connectedAgentsStore
         self.viewModel = viewModel
         self.preselectedTaskId = preselectedTaskId
         self.preselectedCollaborators = preselectedCollaborators
@@ -63,7 +79,7 @@ public struct NewSessionSheet: View {
     }
 
     private var canSend: Bool {
-        selectedWorkspaceId != nil &&
+        (!shouldShowWorkspaceRow || selectedWorkspaceId != nil) &&
         !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -71,9 +87,9 @@ public struct NewSessionSheet: View {
         NavigationStack {
             ZStack {
                 VStack(spacing: 0) {
-                    workspaceAndTypeRow
-                    Divider()
                     collaboratorsRow
+                    Divider()
+                    workspaceAndTypeRow
                     Divider()
                     taskRow
                     Divider()
@@ -107,19 +123,45 @@ public struct NewSessionSheet: View {
             }
         }
         .sheet(isPresented: $showMemberPicker) {
-            MemberListView(mqtt: mqtt, deviceId: deviceId, peerId: peerId,
-                           selected: Set(collaborators.map(\.actorId))) { selected in
+            MemberListView(
+                selected: Set(collaborators.map(\.actorId)),
+                accessibleAgentIDs: Set(connectedAgentsStore?.agents.map(\.id) ?? []),
+                currentPrimaryAgentID: primaryAgentID,
+                excludeActorID: currentActorID
+            ) { selected in
                 collaborators = selected
+                let agents = selected.filter { $0.isAgent }
+                // Primary agent needed when no session exists yet OR the
+                // current primary is no longer in the selection. Show the
+                // confirmation sheet when we have candidates to pick from.
+                let needsPrimary = primaryAgentID == nil
+                    || !agents.contains(where: { $0.actorId == primaryAgentID })
+                if needsPrimary {
+                    if agents.count == 1 {
+                        primaryAgentID = agents[0].actorId
+                    } else if agents.count > 1 {
+                        primaryAgentCandidates = agents
+                    } else {
+                        primaryAgentID = nil
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { !primaryAgentCandidates.isEmpty },
+            set: { if !$0 { primaryAgentCandidates = [] } }
+        )) {
+            PrimaryAgentSheet(candidates: primaryAgentCandidates) { id in
+                primaryAgentID = id
+                primaryAgentCandidates = []
             }
         }
         .onAppear {
             isInputFocused = true
-            if workspaces.count == 1 {
-                selectedWorkspaceId = workspaces.first?.workspaceId
-            }
             if selectedTaskId == nil, let preselectedTaskId {
                 selectedTaskId = preselectedTaskId
-                if let task = tasks.first(where: { $0.taskId == preselectedTaskId }),
+                if shouldShowWorkspaceRow,
+                   let task = tasks.first(where: { $0.taskId == preselectedTaskId }),
                    !task.workspaceId.isEmpty {
                     selectedWorkspaceId = task.workspaceId
                 }
@@ -130,6 +172,7 @@ public struct NewSessionSheet: View {
         }
         .onChange(of: selectedTaskId) { _, newTaskId in
             guard let newTaskId,
+                  shouldShowWorkspaceRow,
                   let task = tasks.first(where: { $0.taskId == newTaskId }),
                   !task.workspaceId.isEmpty else {
                 return
@@ -146,44 +189,55 @@ public struct NewSessionSheet: View {
                 self.selectedTaskId = nil
             }
         }
+        .task {
+            guard workspaceStore == nil, !teamID.isEmpty else { return }
+            if let repository = try? SupabaseWorkspaceRepository() {
+                workspaceStore = WorkspaceStore(teamID: teamID, repository: repository)
+                await reloadWorkspacesForPrimaryAgent()
+            }
+        }
+        .onChange(of: primaryAgentID) { _, _ in
+            Task { await reloadWorkspacesForPrimaryAgent() }
+        }
     }
 
     // MARK: - Workspace & Agent Type row
 
     private var workspaceAndTypeRow: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Workspace")
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Menu {
-                    if workspaces.isEmpty {
-                        Text("No workspaces available")
-                    } else {
-                        ForEach(workspaces, id: \.workspaceId) { ws in
-                            Button {
-                                selectedWorkspaceId = ws.workspaceId
-                            } label: {
-                                Label(ws.displayName, systemImage: selectedWorkspaceId == ws.workspaceId ? "checkmark" : "folder")
+            if shouldShowWorkspaceRow {
+                HStack {
+                    Text("Workspace")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Menu {
+                        if workspaces.isEmpty {
+                            Text("No workspaces available")
+                        } else {
+                            ForEach(workspaces) { ws in
+                                Button {
+                                    selectedWorkspaceId = ws.id
+                                } label: {
+                                    Label(ws.displayName, systemImage: selectedWorkspaceId == ws.id ? "checkmark" : "folder")
+                                }
                             }
                         }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(selectedWorkspaceName)
+                                .font(.body)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption)
+                        }
+                        .foregroundStyle(selectedWorkspaceId == nil ? .secondary : .primary)
                     }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(selectedWorkspaceName)
-                            .font(.body)
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.caption)
-                    }
-                    .foregroundStyle(selectedWorkspaceId == nil ? .secondary : .primary)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
 
-            if isAgentAvailable {
+            if isAgentAvailable && shouldShowWorkspaceRow {
                 Divider()
-
                 HStack {
                     Text("Agent")
                         .foregroundStyle(.secondary)
@@ -204,10 +258,28 @@ public struct NewSessionSheet: View {
 
     private var selectedWorkspaceName: String {
         if let id = selectedWorkspaceId,
-           let ws = workspaces.first(where: { $0.workspaceId == id }) {
+           let ws = workspaces.first(where: { $0.id == id }) {
             return ws.displayName
         }
         return "Select\u{2026}"
+    }
+
+    @MainActor
+    private func reloadWorkspacesForPrimaryAgent() async {
+        guard let workspaceStore else { return }
+        await workspaceStore.reload(agentID: primaryAgentID)
+
+        if !shouldShowWorkspaceRow {
+            selectedWorkspaceId = nil
+            return
+        }
+
+        if let selectedWorkspaceId,
+           workspaces.contains(where: { $0.id == selectedWorkspaceId }) {
+            return
+        }
+
+        selectedWorkspaceId = workspaces.count == 1 ? workspaces.first?.id : nil
     }
 
     // MARK: - Collaborators row
@@ -226,7 +298,7 @@ public struct NewSessionSheet: View {
                     } else {
                         ForEach(collaborators, id: \.actorId) { member in
                             CollaboratorChip(name: member.displayName) {
-                                collaborators.removeAll { $0.actorId == member.actorId }
+                                removeCollaborator(member)
                             }
                         }
                     }
@@ -357,6 +429,22 @@ public struct NewSessionSheet: View {
         return "\(taskBlock)\n\n\(userText)"
     }
 
+    /// Removes a collaborator chip. If the removed actor was the primary
+    /// agent, the primary is cleared and — as long as there are other agents
+    /// still in the collaborator list — the primary-agent picker is shown so
+    /// the user can pick a replacement.
+    private func removeCollaborator(_ member: CachedActor) {
+        collaborators.removeAll { $0.actorId == member.actorId }
+        guard primaryAgentID == member.actorId else { return }
+        primaryAgentID = nil
+        let remainingAgents = collaborators.filter { $0.isAgent }
+        if remainingAgents.count == 1 {
+            primaryAgentID = remainingAgents[0].actorId
+        } else if remainingAgents.count > 1 {
+            primaryAgentCandidates = remainingAgents
+        }
+    }
+
     private func sendAndCreate() {
         let userText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !userText.isEmpty else { return }
@@ -390,11 +478,15 @@ public struct NewSessionSheet: View {
             // 10 KB per-packet cap.
             let stream = mqtt.messages()
 
-            let cmd = makeStartAgentCommand(initialPrompt: text)
+            let cmd = makeStartAgentCommand(initialPrompt: text, sessionID: "")
+            let routeDevice = effectiveDeviceID
 
             do {
                 let data = try ProtoMQTTCoder.encode(cmd)
-                try await mqtt.publish(topic: "amux/\(deviceId)/agent/new/commands", payload: data)
+                try await mqtt.publish(
+                    topic: MQTTTopics.agentCommands(teamID: effectiveTeamID, deviceID: routeDevice, agentID: "new"),
+                    payload: data
+                )
             } catch {
                 isSending = false
                 errorMessage = "Failed to send: \(error.localizedDescription)"
@@ -402,7 +494,7 @@ public struct NewSessionSheet: View {
             }
 
             // Wait up to 15s for the new agent's state publish or a rejection.
-            let collabTopic = "amux/\(deviceId)/collab"
+            let collabTopic = MQTTTopics.deviceCollab(teamID: effectiveTeamID, deviceID: routeDevice)
             let deadline = Date().addingTimeInterval(15)
             for await msg in stream {
                 if Date() > deadline { break }
@@ -435,82 +527,85 @@ public struct NewSessionSheet: View {
         }
     }
 
-    /// v1: team_id matches daemon.toml config. Must be kept in sync.
-    private static let teamId = "teamclaw"
+    /// Routing team_id for teamclaw RPCs. Real Supabase team UUID when
+    /// available; falls back to the legacy hardcoded bucket otherwise.
+    private var effectiveTeamID: String {
+        teamID.isEmpty ? "teamclaw" : teamID
+    }
+
+    /// Daemon device UUID to publish MQTT commands at. Picks the primary
+    /// agent's registered `agents.device_id` when set (populated by the
+    /// daemon on start), otherwise falls back to the user-typed value in
+    /// Settings for older daemons.
+    private var effectiveDeviceID: String {
+        if let primary = primaryAgentID,
+           let agent = connectedAgentsStore?.agents.first(where: { $0.id == primary }),
+           let id = agent.deviceID, !id.isEmpty {
+            return id
+        }
+        return deviceId
+    }
 
     private func createSharedSession(text: String, title: String) {
+        guard let currentActorID else {
+            errorMessage = "Current actor is not ready yet."
+            return
+        }
+
         isSending = true
 
-        // Build CreateSessionRequest RPC
-        let createReq = teamclawService?.makeCreateSessionRequest(
-            teamId: Self.teamId,
-            title: String(title.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines),
+        let sessionID = UUID().uuidString.lowercased()
+        let trimmedTitle = String(title.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
+        let createdAt = Date()
+        let participantActors = sessionParticipants(currentActorID: currentActorID)
+        let participantInfos = sessionInfoParticipants(
+            currentActorID: currentActorID,
+            createdAt: createdAt,
+            participants: participantActors
+        )
+        let info = makeSessionInfo(
+            sessionID: sessionID,
+            title: trimmedTitle,
             summary: text,
-            inviteActorIds: collaborators.map(\.actorId),
-            taskId: selectedTaskId ?? ""
-        ) ?? {
-            var req = Teamclaw_CreateSessionRequest()
-            req.sessionType = .collab
-            req.teamID = Self.teamId
-            req.title = String(title.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
-            req.summary = text
-            req.inviteActorIds = collaborators.map(\.actorId)
-            if let taskId = selectedTaskId, !taskId.isEmpty {
-                req.taskID = taskId
-            }
-            return req
-        }()
+            createdAt: createdAt,
+            currentActorID: currentActorID,
+            participants: participantInfos
+        )
 
-        var rpcReq = Teamclaw_RpcRequest()
-        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = deviceId
-        rpcReq.method = .createSession(createReq)
-
-        // Send RPC to local amuxd (teamId in topic must match daemon's team_id)
-        let requestId = rpcReq.requestID
-        let topic = "teamclaw/\(Self.teamId)/rpc/\(deviceId)/\(requestId)/req"
         Task {
-            // Subscribe to RPC responses for this device
-            let responseTopic = "teamclaw/\(Self.teamId)/rpc/\(deviceId)/+/res"
-            try? await mqtt.subscribe(responseTopic)
-            // Install the stream before publishing so a fast local host response
-            // can't arrive and get dropped before we start iterating.
-            let rpcStream = mqtt.messages()
-
-            guard let data = try? rpcReq.serializedData() else {
-                isSending = false
-                errorMessage = "Failed to encode request"
-                return
-            }
             do {
-                try await mqtt.publish(topic: topic, payload: data, retain: false)
-                guard let info = try await waitForSessionInfoResponse(
-                    requestId: requestId,
-                    timeout: 10,
-                    stream: rpcStream
-                ) else {
-                    isSending = false
-                    errorMessage = "Session creation timed out"
-                    return
-                }
+                let repository = try SupabaseSessionRepository()
+                try await repository.createSession(
+                    SessionCreateInput(
+                        id: sessionID,
+                        teamID: effectiveTeamID,
+                        taskID: selectedTaskId,
+                        createdByActorID: currentActorID,
+                        primaryAgentID: primaryAgentID,
+                        title: trimmedTitle,
+                        summary: text,
+                        hostDeviceID: effectiveDeviceID,
+                        participants: participantActors.map { SessionParticipantInput(actorID: $0.actorId) }
+                    )
+                )
 
-                teamclawService?.subscribeToSession(info.sessionID)
+                teamclawService?.subscribeToSession(sessionID)
                 let session = persistSession(info)
-
-                try await addLocalHumanParticipantIfNeeded(sessionId: info.sessionID, hostDeviceId: info.hostDeviceID)
-                let agentId = try await startAgentAndWaitForState(initialPrompt: "")
-                try await addAgentParticipant(sessionId: info.sessionID, hostDeviceId: info.hostDeviceID, agentId: agentId)
-
-                session.primaryAgentId = agentId
-                let localParticipantCount = (teamclawService?.currentHumanActorId == nil) ? 1 : 2
-                session.participantCount = max(session.participantCount, localParticipantCount)
+                session.primaryAgentId = primaryAgentID
                 try? modelContext.save()
                 viewModel.reloadSessions(modelContext: modelContext)
 
-                teamclawService?.sendMessage(sessionId: info.sessionID, content: text)
+                try await publishSessionCreated(info, participants: participantActors)
+                if let primaryAgentID, !primaryAgentID.isEmpty {
+                    _ = try await startAgentAndWaitForState(
+                        initialPrompt: text,
+                        sessionID: sessionID
+                    )
+                }
+                teamclawService?.sendMessage(sessionId: sessionID, content: text)
 
                 isSending = false
-                onSessionCreated?("collab:\(info.sessionID)")
+                onSessionCreated?("collab:\(sessionID)")
                 dismiss()
             } catch {
                 isSending = false
@@ -559,19 +654,28 @@ public struct NewSessionSheet: View {
         dismiss()
     }
 
-    private func makeStartAgentCommand(initialPrompt: String) -> Amux_CommandEnvelope {
+    private func makeStartAgentCommand(initialPrompt: String, sessionID: String) -> Amux_CommandEnvelope {
         var cmd = Amux_CommandEnvelope()
         cmd.agentID = ""
-        cmd.deviceID = deviceId
+        cmd.deviceID = effectiveDeviceID
         cmd.peerID = peerId
+        cmd.senderActorID = currentActorID ?? ""
         cmd.commandID = UUID().uuidString
         cmd.timestamp = Int64(Date().timeIntervalSince1970)
 
         var start = Amux_AcpStartAgent()
         start.agentType = selectedAgentType
-        start.workspaceID = selectedWorkspaceId ?? ""
-        start.worktree = ""
+        start.workspaceID = selectedWorkspaceRecord?.id ?? ""
+        // Pair the Supabase workspace id with its path so the daemon can
+        // resolve the checkout location without needing a local mirror of
+        // the workspaces table.
+        start.worktree = selectedWorkspaceRecord?.path ?? ""
         start.initialPrompt = initialPrompt
+        start.sessionID = sessionID
+
+        newSessionLogger.info(
+            "startAgent envelope device=\(self.effectiveDeviceID, privacy: .public) primaryAgent=\(self.primaryAgentID ?? "", privacy: .public) sessionID=\(sessionID, privacy: .public) workspaceID=\(start.workspaceID, privacy: .public) worktree=\(start.worktree, privacy: .public)"
+        )
 
         var acpCmd = Amux_AcpCommand()
         acpCmd.command = .startAgent(start)
@@ -580,7 +684,7 @@ public struct NewSessionSheet: View {
     }
 
     private func isAgentStateTopic(_ topic: String) -> Bool {
-        let prefix = "amux/\(deviceId)/agent/"
+        let prefix = MQTTTopics.agentStatePrefix(teamID: effectiveTeamID, deviceID: effectiveDeviceID)
         return topic.hasPrefix(prefix) && topic.hasSuffix("/state")
     }
 
@@ -655,16 +759,20 @@ public struct NewSessionSheet: View {
         return nil
     }
 
-    private func startAgentAndWaitForState(initialPrompt: String) async throws -> String {
+    private func startAgentAndWaitForState(initialPrompt: String, sessionID: String) async throws -> String {
         let knownAgentIds = Set(viewModel.agents.map(\.agentId))
         let stream = mqtt.messages()
         let sentAt = Int64(Date().timeIntervalSince1970)
-        let collabTopic = "amux/\(deviceId)/collab"
-        let cmd = makeStartAgentCommand(initialPrompt: initialPrompt)
+        let routeDevice = effectiveDeviceID
+        let collabTopic = MQTTTopics.deviceCollab(teamID: effectiveTeamID, deviceID: routeDevice)
+        let cmd = makeStartAgentCommand(initialPrompt: initialPrompt, sessionID: sessionID)
 
         do {
             let data = try ProtoMQTTCoder.encode(cmd)
-            try await mqtt.publish(topic: "amux/\(deviceId)/agent/new/commands", payload: data)
+            try await mqtt.publish(
+                topic: MQTTTopics.agentCommands(teamID: effectiveTeamID, deviceID: routeDevice, agentID: "new"),
+                payload: data
+            )
         } catch {
             throw SessionCreationError.rpc("Failed to start agent: \(error.localizedDescription)")
         }
@@ -696,6 +804,17 @@ public struct NewSessionSheet: View {
                 }
             } else if info.currentPrompt != initialPrompt {
                 continue
+            }
+
+            // Daemon-side failures surface as AgentInfo with status=Error or
+            // Stopped. Without this check iOS would hang on "Starting
+            // session…" because the for-await loop keeps waiting for a
+            // matching healthy state that never arrives.
+            if info.status == .error || info.status == .stopped {
+                let reason = info.lastOutputSummary.isEmpty
+                    ? "Agent exited with status \(info.status). Check daemon logs."
+                    : info.lastOutputSummary
+                throw SessionCreationError.rpc(reason)
             }
 
             return info.agentID
@@ -744,22 +863,22 @@ public struct NewSessionSheet: View {
         req.sessionID = sessionId
         req.participant = participant
 
+        let routeTeam = effectiveTeamID
+        let routeDevice = effectiveDeviceID
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = deviceId
+        rpcReq.senderDeviceID = routeDevice
         rpcReq.method = .addParticipant(req)
 
         guard let data = try? rpcReq.serializedData() else {
             throw SessionCreationError.rpc("Failed to encode participant request")
         }
 
-        let responseTopic = "teamclaw/\(Self.teamId)/rpc/\(deviceId)/+/res"
+        let responseTopic = MQTTTopics.rpcResponseWildcard(teamID: routeTeam, deviceID: routeDevice)
         try? await mqtt.subscribe(responseTopic)
-        // Install the stream before publish to avoid missing an immediate host
-        // response on the same broker connection.
         let stream = mqtt.messages()
         try await mqtt.publish(
-            topic: "teamclaw/\(Self.teamId)/rpc/\(hostDeviceId)/\(rpcReq.requestID)/req",
+            topic: MQTTTopics.rpcRequest(teamID: routeTeam, deviceID: hostDeviceId, requestID: rpcReq.requestID),
             payload: data,
             retain: false
         )
@@ -792,6 +911,81 @@ public struct NewSessionSheet: View {
             case .rpc(let message):
                 return message
             }
+        }
+    }
+
+    private func sessionParticipants(currentActorID: String) -> [CachedActor] {
+        var deduped: [String: CachedActor] = collaborators.reduce(into: [:]) { partialResult, actor in
+            partialResult[actor.actorId] = actor
+        }
+
+        if deduped[currentActorID] == nil {
+            deduped[currentActorID] = CachedActor(
+                actorId: currentActorID,
+                teamId: teamID,
+                actorType: "member",
+                displayName: teamclawService?.localDisplayName.isEmpty == false ? teamclawService?.localDisplayName ?? currentActorID : currentActorID,
+                teamRole: "member"
+            )
+        }
+
+        if let primaryAgentID,
+           deduped[primaryAgentID] == nil,
+           let primaryAgent = collaborators.first(where: { $0.actorId == primaryAgentID }) {
+            deduped[primaryAgentID] = primaryAgent
+        }
+
+        return Array(deduped.values)
+    }
+
+    private func sessionInfoParticipants(
+        currentActorID: String,
+        createdAt: Date,
+        participants: [CachedActor]
+    ) -> [Teamclaw_Participant] {
+        participants.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            .map { actor in
+                var participant = Teamclaw_Participant()
+                participant.actorID = actor.actorId
+                participant.actorType = actor.isAgent ? .personalAgent : .human
+                participant.displayName = actor.actorId == currentActorID && !(teamclawService?.localDisplayName ?? "").isEmpty
+                    ? teamclawService?.localDisplayName ?? actor.displayName
+                    : actor.displayName
+                participant.joinedAt = Int64(createdAt.timeIntervalSince1970)
+                return participant
+            }
+    }
+
+    private func makeSessionInfo(
+        sessionID: String,
+        title: String,
+        summary: String,
+        createdAt: Date,
+        currentActorID: String,
+        participants: [Teamclaw_Participant]
+    ) -> Teamclaw_SessionInfo {
+        var info = Teamclaw_SessionInfo()
+        info.sessionID = sessionID
+        info.sessionType = .collab
+        info.teamID = effectiveTeamID
+        info.title = title
+        info.hostDeviceID = effectiveDeviceID
+        info.createdBy = currentActorID
+        info.createdAt = Int64(createdAt.timeIntervalSince1970)
+        info.participants = participants
+        info.summary = summary
+        info.primaryAgentID = primaryAgentID ?? ""
+        info.taskID = selectedTaskId ?? ""
+        return info
+    }
+
+    private func publishSessionCreated(_ info: Teamclaw_SessionInfo, participants: [CachedActor]) async throws {
+        var envelope = Teamclaw_SessionMetaEnvelope()
+        envelope.session = info
+        let payload = try envelope.serializedData()
+        for participant in participants {
+            let topic = MQTTTopics.actorSessionMeta(teamID: info.teamID, actorID: participant.actorId, sessionID: info.sessionID)
+            try await mqtt.publish(topic: topic, payload: payload, retain: true)
         }
     }
 }

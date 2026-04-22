@@ -18,6 +18,7 @@ pub struct SessionManager {
     pub(crate) config_dir: PathBuf,
     device_id: String,
     team_id: String,
+    actor_id: Option<String>,
     is_team_host: bool,
     team_host_device_id: Option<String>,
 }
@@ -27,6 +28,7 @@ impl SessionManager {
         client: AsyncClient,
         team_id: &str,
         device_id: &str,
+        actor_id: Option<String>,
         config_dir: PathBuf,
         is_team_host: bool,
         team_host_device_id: Option<String>,
@@ -45,6 +47,7 @@ impl SessionManager {
             config_dir,
             device_id: device_id.to_string(),
             team_id: team_id.to_string(),
+            actor_id,
             is_team_host,
             team_host_device_id,
         })
@@ -54,11 +57,13 @@ impl SessionManager {
     pub async fn subscribe_all(&self) -> crate::error::Result<()> {
         // Team-level topics
         self.client
-            .subscribe(self.topics.members(), QoS::AtLeastOnce)
-            .await?;
-        self.client
             .subscribe(self.topics.sessions(), QoS::AtLeastOnce)
             .await?;
+        if let Some(actor_id) = &self.actor_id {
+            self.client
+                .subscribe(self.topics.actor_session_meta_wildcard(actor_id), QoS::AtLeastOnce)
+                .await?;
+        }
 
         // Global tasks topic
         self.client
@@ -71,10 +76,7 @@ impl SessionManager {
             .await?;
 
         // RPC: responses directed at this device
-        let rpc_responses = format!(
-            "teamclaw/{}/rpc/{}/+/res",
-            self.team_id, self.device_id
-        );
+        let rpc_responses = self.topics.rpc_response(&self.device_id, "+");
         self.client
             .subscribe(rpc_responses, QoS::AtLeastOnce)
             .await?;
@@ -90,6 +92,46 @@ impl SessionManager {
             self.subscribe_session(session_id).await?;
         }
 
+        Ok(())
+    }
+
+    pub async fn apply_session_meta(
+        &mut self,
+        info: &teamclaw::SessionInfo,
+    ) -> crate::error::Result<()> {
+        if info.session_id.is_empty() {
+            return Ok(());
+        }
+
+        let participants = info.participants.iter().map(|participant| StoredParticipant {
+            actor_id: participant.actor_id.clone(),
+            actor_type: actor_type_to_string(participant.actor_type),
+            display_name: participant.display_name.clone(),
+            joined_at: chrono::DateTime::<Utc>::from_timestamp(participant.joined_at, 0)
+                .unwrap_or_else(Utc::now),
+        }).collect();
+
+        let stored = StoredSession {
+            session_id: info.session_id.clone(),
+            session_type: match info.session_type {
+                x if x == teamclaw::SessionType::Control as i32 => "control".to_string(),
+                _ => "collab".to_string(),
+            },
+            team_id: info.team_id.clone(),
+            title: info.title.clone(),
+            host_device_id: info.host_device_id.clone(),
+            created_by: info.created_by.clone(),
+            created_at: chrono::DateTime::<Utc>::from_timestamp(info.created_at, 0)
+                .unwrap_or_else(Utc::now),
+            summary: info.summary.clone(),
+            task_id: info.task_id.clone(),
+            participants,
+            primary_agent_id: info.primary_agent_id.clone(),
+        };
+
+        self.sessions.upsert(stored);
+        self.sessions.save(&self.sessions_path)?;
+        self.subscribe_session(&info.session_id).await?;
         Ok(())
     }
 
@@ -1076,11 +1118,19 @@ impl SessionManager {
         let envelope = teamclaw::SessionMetaEnvelope {
             session: Some(session_info),
         };
-        let topic = self.topics.session_meta(session_id);
         let payload = envelope.encode_to_vec();
-        self.client
-            .publish(topic, QoS::AtLeastOnce, true, payload)
-            .await?;
+        if let Some(session) = self.sessions.find_by_id(session_id) {
+            for participant in &session.participants {
+                self.client
+                    .publish(
+                        self.topics.actor_session_meta(&participant.actor_id, session_id),
+                        QoS::AtLeastOnce,
+                        true,
+                        payload.clone(),
+                    )
+                    .await?;
+            }
+        }
         Ok(())
     }
 
@@ -1115,9 +1165,6 @@ impl SessionManager {
     async fn subscribe_session(&self, session_id: &str) -> crate::error::Result<()> {
         self.client
             .subscribe(self.topics.session_messages(session_id), QoS::AtLeastOnce)
-            .await?;
-        self.client
-            .subscribe(self.topics.session_meta(session_id), QoS::AtLeastOnce)
             .await?;
         self.client
             .subscribe(self.topics.session_tasks(session_id), QoS::AtLeastOnce)

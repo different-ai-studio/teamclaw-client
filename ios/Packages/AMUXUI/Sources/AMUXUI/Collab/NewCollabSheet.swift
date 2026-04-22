@@ -78,7 +78,7 @@ public struct NewCollabSheet: View {
         rpcReq.senderDeviceID = deviceId
         rpcReq.method = .createSession(createReq)
 
-        let topic = "teamclaw/\(teamId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
+        let topic = MQTTTopics.rpcRequest(teamID: teamId, deviceID: deviceId, requestID: rpcReq.requestID)
         if let data = try? rpcReq.serializedData() {
             Task {
                 try? await mqtt.publish(topic: topic, payload: data, retain: false)

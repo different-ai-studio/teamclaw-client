@@ -42,7 +42,8 @@ impl TestClient {
             ));
         }
 
-        let topics = Topics::new(&config.device.id);
+        let team_id = config.team_id.as_deref().unwrap_or("teamclaw");
+        let topics = Topics::new(team_id, &config.device.id);
         let (client, eventloop) = AsyncClient::new(opts, 100);
 
         Ok(Self { client, eventloop, topics, peer_id, config })
@@ -54,11 +55,11 @@ impl TestClient {
         // Subscribe to all device-level and agent-level topics
         self.client.subscribe(self.topics.status(), QoS::AtLeastOnce).await?;
         self.client.subscribe(self.topics.peers(), QoS::AtLeastOnce).await?;
-        self.client.subscribe(self.topics.members(), QoS::AtLeastOnce).await?;
         self.client.subscribe(self.topics.collab(), QoS::AtLeastOnce).await?;
         // Wildcard for all agent topics
-        self.client.subscribe(&format!("amux/{}/agent/+/state", device_id), QoS::AtLeastOnce).await?;
-        self.client.subscribe(&format!("amux/{}/agent/+/events", device_id), QoS::AtLeastOnce).await?;
+        let team_id = self.config.team_id.as_deref().unwrap_or("teamclaw");
+        self.client.subscribe(&format!("amux/{}/device/{}/agent/+/state", team_id, device_id), QoS::AtLeastOnce).await?;
+        self.client.subscribe(&format!("amux/{}/device/{}/agent/+/events", team_id, device_id), QoS::AtLeastOnce).await?;
 
         info!("subscribed to all amux/{}/... topics", device_id);
         Ok(())
@@ -232,19 +233,21 @@ pub async fn run_start_agent(config: DaemonConfig, worktree: &str, prompt: &str)
         peer_id: tc.peer_id.clone(),
         command_id: Uuid::new_v4().to_string(),
         timestamp: chrono::Utc::now().timestamp(),
+        sender_actor_id: String::new(),
         acp_command: Some(amux::AcpCommand {
             command: Some(amux::acp_command::Command::StartAgent(amux::AcpStartAgent {
                 agent_type: amux::AgentType::ClaudeCode as i32,
                 worktree: worktree.into(),
                 initial_prompt: prompt.into(),
                 workspace_id: String::new(),
+                session_id: String::new(),
             })),
         }),
     };
 
     let payload = envelope.encode_to_vec();
     // Send to a dummy agent ID — daemon picks up from wildcard subscription
-    let topic = format!("amux/{}/agent/new/commands", tc.config.device.id);
+    let topic = tc.topics.agent_commands("new");
 
     tc.client.publish(&topic, QoS::AtLeastOnce, false, payload).await?;
     println!("📤 Sent StartAgent command (worktree={}, prompt=\"{}\")", worktree, prompt);
@@ -281,6 +284,7 @@ pub async fn run_announce(config: DaemonConfig, token: &str) -> anyhow::Result<(
         peer_id: tc.peer_id.clone(),
         command_id: Uuid::new_v4().to_string(),
         timestamp: chrono::Utc::now().timestamp(),
+        sender_actor_id: String::new(),
         command: Some(amux::DeviceCollabCommand {
             command: Some(amux::device_collab_command::Command::PeerAnnounce(amux::PeerAnnounce {
                 peer: Some(amux::PeerInfo {
@@ -335,6 +339,7 @@ pub async fn run_e2e(config: DaemonConfig, token: &str, worktree: &str, prompt: 
         peer_id: peer_id.clone(),
         command_id: Uuid::new_v4().to_string(),
         timestamp: chrono::Utc::now().timestamp(),
+        sender_actor_id: String::new(),
         command: Some(amux::DeviceCollabCommand {
             command: Some(amux::device_collab_command::Command::PeerAnnounce(amux::PeerAnnounce {
                 peer: Some(amux::PeerInfo {
@@ -370,16 +375,18 @@ pub async fn run_e2e(config: DaemonConfig, token: &str, worktree: &str, prompt: 
         peer_id: peer_id.clone(),
         command_id: Uuid::new_v4().to_string(),
         timestamp: chrono::Utc::now().timestamp(),
+        sender_actor_id: String::new(),
         acp_command: Some(amux::AcpCommand {
             command: Some(amux::acp_command::Command::StartAgent(amux::AcpStartAgent {
                 agent_type: amux::AgentType::ClaudeCode as i32,
                 worktree: worktree.into(),
                 initial_prompt: prompt.into(),
                 workspace_id: String::new(),
+                session_id: String::new(),
             })),
         }),
     };
-    let topic = format!("amux/{}/agent/new/commands", device_id);
+    let topic = tc.topics.agent_commands("new");
     tc.client.publish(&topic, QoS::AtLeastOnce, false, start_cmd.encode_to_vec()).await?;
     println!("📤 StartAgent sent (prompt=\"{}\")", prompt);
 

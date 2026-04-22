@@ -106,7 +106,7 @@ public struct WorkspaceManagementView: View {
 
             do {
                 let data = try ProtoMQTTCoder.encode(envelope)
-                try await mqtt.publish(topic: "amux/\(deviceId)/collab", payload: data)
+                try await mqtt.publish(topic: MQTTTopics.deviceCollab(teamID: "", deviceID: deviceId), payload: data)
             } catch {
                 isAdding = false
                 errorMessage = "Failed to send: \(error.localizedDescription)"
@@ -114,7 +114,7 @@ public struct WorkspaceManagementView: View {
             }
 
             let stream = mqtt.messages()
-            let collabTopic = "amux/\(deviceId)/collab"
+            let collabTopic = MQTTTopics.deviceCollab(teamID: "", deviceID: deviceId)
             let deadline = Date().addingTimeInterval(10)
             for await msg in stream {
                 if Date() > deadline { break }
@@ -152,7 +152,7 @@ public struct WorkspaceManagementView: View {
             envelope.command = cmd
 
             if let data = try? ProtoMQTTCoder.encode(envelope) {
-                try? await mqtt.publish(topic: "amux/\(deviceId)/collab", payload: data)
+                try? await mqtt.publish(topic: MQTTTopics.deviceCollab(teamID: "", deviceID: deviceId), payload: data)
             }
         }
     }

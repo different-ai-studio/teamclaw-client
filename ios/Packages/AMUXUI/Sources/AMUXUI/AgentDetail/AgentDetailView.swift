@@ -24,21 +24,26 @@ public struct AgentDetailView: View {
 
     let allAgentIds: [String]
     @Binding var navigationPath: [String]
+    let connectedAgentsStore: ConnectedAgentsStore?
 
     public init(agent: Agent, mqtt: MQTTService, deviceId: String, peerId: String,
-                allAgentIds: [String], navigationPath: Binding<[String]>) {
+                allAgentIds: [String], navigationPath: Binding<[String]>,
+                connectedAgentsStore: ConnectedAgentsStore? = nil) {
         _viewModel = State(initialValue: AgentDetailViewModel(
             agent: agent, mqtt: mqtt, deviceId: deviceId, peerId: peerId))
         self.allAgentIds = allAgentIds
         self._navigationPath = navigationPath
+        self.connectedAgentsStore = connectedAgentsStore
     }
 
     public init(session: Session, mqtt: MQTTService, deviceId: String, peerId: String,
-                teamclawService: TeamclawService?, navigationPath: Binding<[String]>) {
+                teamclawService: TeamclawService?, navigationPath: Binding<[String]>,
+                connectedAgentsStore: ConnectedAgentsStore? = nil) {
         _viewModel = State(initialValue: AgentDetailViewModel(
-            agent: nil, mqtt: mqtt, deviceId: deviceId, peerId: peerId, session: session, teamclawService: teamclawService))
+            agent: nil, mqtt: mqtt, teamID: session.teamId, deviceId: deviceId, peerId: peerId, session: session, teamclawService: teamclawService))
         self.allAgentIds = []
         self._navigationPath = navigationPath
+        self.connectedAgentsStore = connectedAgentsStore
     }
 
     private var agentLogoName: String {
@@ -294,8 +299,19 @@ public struct AgentDetailView: View {
             }
         }
         .sheet(isPresented: $showMembers) {
-            MemberListView(mqtt: viewModel.mqttRef, deviceId: viewModel.deviceIdRef, peerId: viewModel.peerIdRef,
-                           selected: Set(collaborators.map(\.actorId))) { selected in
+            // "Add Actor" on an existing session: the session's current primary
+            // agent stays pinned (⭐), and the picker lets the caller add extra
+            // collaborators (humans + any agents they have access to).
+            let accessible: Set<String> = {
+                var s = Set(connectedAgentsStore?.agents.map(\.id) ?? [])
+                if let current = viewModel.agent?.agentId { s.insert(current) }
+                return s
+            }()
+            MemberListView(
+                selected: Set(collaborators.map(\.actorId)),
+                accessibleAgentIDs: accessible,
+                currentPrimaryAgentID: viewModel.agent?.agentId
+            ) { selected in
                 collaborators = selected
                 if !selected.isEmpty {
                     forkToCollab(members: selected)
@@ -326,7 +342,7 @@ public struct AgentDetailView: View {
         rpcReq.method = .createSession(createReq)
 
         let deviceId = viewModel.deviceIdRef
-        let topic = "teamclaw/\(deviceId)/rpc/\(deviceId)/\(rpcReq.requestID)/req"
+        let topic = MQTTTopics.rpcRequest(teamID: viewModel.session?.teamId ?? "", deviceID: deviceId, requestID: rpcReq.requestID)
         Task {
             if let data = try? rpcReq.serializedData() {
                 try? await viewModel.mqttRef.publish(topic: topic, payload: data, retain: false)

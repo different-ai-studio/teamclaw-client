@@ -85,7 +85,8 @@ impl MqttClient {
         }
 
         // LWT: publish offline status if daemon disconnects unexpectedly
-        let topics = Topics::new(&config.device.id);
+        let team_id = config.team_id.as_deref().unwrap_or("teamclaw");
+        let topics = Topics::new(team_id, &config.device.id);
         let lwt_payload = DeviceStatus {
             online: false,
             device_name: config.device.name.clone(),

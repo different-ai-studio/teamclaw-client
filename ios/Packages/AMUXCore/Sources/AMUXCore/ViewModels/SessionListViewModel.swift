@@ -40,7 +40,7 @@ public final class SessionListViewModel {
 
     public init() {}
 
-    public func start(mqtt: MQTTService, deviceId: String, modelContext: ModelContext) {
+    public func start(mqtt: MQTTService, teamID: String = "", deviceId: String, modelContext: ModelContext) {
         // Create a dedicated context from the same container for async work
         let container = modelContext.container
         let ctx = ModelContext(container)
@@ -50,16 +50,23 @@ public final class SessionListViewModel {
         workspaces = (try? ctx.fetch(FetchDescriptor<Workspace>(sortBy: [SortDescriptor(\.displayName)]))) ?? []
         sessions = (try? ctx.fetch(FetchDescriptor<Session>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
 
+        guard !deviceId.isEmpty else {
+            isLoading = false
+            task?.cancel()
+            task = nil
+            return
+        }
+
         task?.cancel()
         // Daemon fans each session out to its own retained topic
-        // `amux/{device}/agent/{id}/state` (one AgentInfo per message) so a
+        // `device/{id}/agent/{agent}/state` (one AgentInfo per message) so a
         // single publish never bumps into HiveMQ's 10 KB packet cap. We
         // subscribe to the wildcard and rebuild our dict as retained
         // messages arrive.
-        let agentStatePrefix = "amux/\(deviceId)/agent/"
+        let agentStatePrefix = MQTTTopics.agentStatePrefix(teamID: teamID, deviceID: deviceId)
         let agentStateSuffix = "/state"
-        let agentStateWildcard = "amux/\(deviceId)/agent/+/state"
-        let workspacesTopic = "amux/\(deviceId)/workspaces"
+        let agentStateWildcard = MQTTTopics.agentStateWildcard(teamID: teamID, deviceID: deviceId)
+        let workspacesTopic = MQTTTopics.deviceWorkspaces(teamID: teamID, deviceID: deviceId)
         task = Task {
             // Outer loop: each iteration represents a fresh MQTT connection
             // lifecycle. When the inner stream ends (disconnect clears
@@ -221,8 +228,23 @@ public final class SessionListViewModel {
         sessions = (try? modelContext.fetch(FetchDescriptor<Session>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
     }
 
+    /// Authoritative session IDs for the active team, fetched from Supabase.
+    /// When non-nil, `reloadSessions` prunes any local SwiftData rows whose
+    /// `sessionId` isn't in the set — this is how we keep MQTT-retained
+    /// session garbage on the shared broker from showing up in the list.
+    public var validSessionIDs: Set<String>?
+
     /// Call this from views when sessions are known to have changed (e.g. after TeamclawService sync).
     public func reloadSessions(modelContext: ModelContext) {
+        if let validIDs = validSessionIDs {
+            let all = (try? modelContext.fetch(FetchDescriptor<Session>())) ?? []
+            var didDelete = false
+            for row in all where !validIDs.contains(row.sessionId) {
+                modelContext.delete(row)
+                didDelete = true
+            }
+            if didDelete { try? modelContext.save() }
+        }
         sessions = (try? modelContext.fetch(FetchDescriptor<Session>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
     }
 

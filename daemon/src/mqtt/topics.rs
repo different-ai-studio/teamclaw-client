@@ -1,48 +1,50 @@
-/// Builds MQTT topic paths for a given device.
+/// Builds MQTT topic paths for a given team-scoped device namespace.
 pub struct Topics {
+    team_id: String,
     device_id: String,
 }
 
 impl Topics {
-    pub fn new(device_id: &str) -> Self {
+    pub fn new(team_id: &str, device_id: &str) -> Self {
         Self {
+            team_id: team_id.to_string(),
             device_id: device_id.to_string(),
         }
     }
 
+    fn device_base(&self) -> String {
+        format!("amux/{}/device/{}", self.team_id, self.device_id)
+    }
+
     pub fn status(&self) -> String {
-        format!("amux/{}/status", self.device_id)
+        format!("{}/status", self.device_base())
     }
 
     pub fn peers(&self) -> String {
-        format!("amux/{}/peers", self.device_id)
-    }
-
-    pub fn members(&self) -> String {
-        format!("amux/{}/members", self.device_id)
+        format!("{}/peers", self.device_base())
     }
 
     pub fn workspaces(&self) -> String {
-        format!("amux/{}/workspaces", self.device_id)
+        format!("{}/workspaces", self.device_base())
     }
 
     pub fn collab(&self) -> String {
-        format!("amux/{}/collab", self.device_id)
+        format!("{}/collab", self.device_base())
     }
 
     pub fn agent_state(&self, agent_id: &str) -> String {
-        format!("amux/{}/agent/{}/state", self.device_id, agent_id)
+        format!("{}/agent/{}/state", self.device_base(), agent_id)
     }
 
     pub fn agent_events(&self, agent_id: &str) -> String {
-        format!("amux/{}/agent/{}/events", self.device_id, agent_id)
+        format!("{}/agent/{}/events", self.device_base(), agent_id)
     }
 
     pub fn agent_commands(&self, agent_id: &str) -> String {
-        format!("amux/{}/agent/{}/commands", self.device_id, agent_id)
+        format!("{}/agent/{}/commands", self.device_base(), agent_id)
     }
 
     pub fn all_agent_commands(&self) -> String {
-        format!("amux/{}/agent/+/commands", self.device_id)
+        format!("{}/agent/+/commands", self.device_base())
     }
 }

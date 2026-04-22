@@ -19,25 +19,25 @@ impl RpcServer {
 
     /// Parses an MQTT topic and payload into a (request_id, RpcRequest) pair.
     ///
-    /// Expected topic format: `teamclaw/{teamId}/rpc/{targetDeviceId}/{requestId}/req`
+    /// Expected topic format: `amux/{teamId}/device/{targetDeviceId}/rpc/{requestId}/req`
     pub fn parse_request(topic: &str, payload: &[u8]) -> Option<(String, RpcRequest)> {
         // Split topic and extract request_id from position 4
         let parts: Vec<&str> = topic.split('/').collect();
-        // teamclaw / {teamId} / rpc / {targetDeviceId} / {requestId} / req
-        if parts.len() != 6 {
+        // amux / {teamId} / device / {targetDeviceId} / rpc / {requestId} / req
+        if parts.len() != 7 {
             return None;
         }
-        if parts[0] != "teamclaw" || parts[2] != "rpc" || parts[5] != "req" {
+        if parts[0] != "amux" || parts[2] != "device" || parts[4] != "rpc" || parts[6] != "req" {
             return None;
         }
-        let request_id = parts[4].to_string();
+        let request_id = parts[5].to_string();
         let request = RpcRequest::decode(payload).ok()?;
         Some((request_id, request))
     }
 
     /// Publishes an RPC response back to the sender's device.
     ///
-    /// Response topic: `teamclaw/{teamId}/rpc/{senderDeviceId}/{requestId}/res`
+    /// Response topic: `amux/{teamId}/device/{senderDeviceId}/rpc/{requestId}/res`
     pub async fn respond(
         &self,
         request: &RpcRequest,
@@ -45,7 +45,7 @@ impl RpcServer {
         response: RpcResponse,
     ) {
         let topic = format!(
-            "teamclaw/{}/rpc/{}/{}/res",
+            "amux/{}/device/{}/rpc/{}/res",
             self.team_id, request.sender_device_id, request_id
         );
         let payload = response.encode_to_vec();
@@ -81,7 +81,7 @@ impl RpcClient {
     ) -> crate::error::Result<oneshot::Receiver<RpcResponse>> {
         let request_id = Self::new_request_id();
         let topic = format!(
-            "teamclaw/{}/rpc/{}/{}/req",
+            "amux/{}/device/{}/rpc/{}/req",
             self.team_id, target_device_id, request_id
         );
         let payload = request.encode_to_vec();
@@ -93,17 +93,17 @@ impl RpcClient {
 
     /// Handles an incoming response topic+payload. Returns `true` if it matched a pending request.
     ///
-    /// Expected topic format: `teamclaw/{teamId}/rpc/{deviceId}/{requestId}/res`
+    /// Expected topic format: `amux/{teamId}/device/{deviceId}/rpc/{requestId}/res`
     pub fn handle_response(&mut self, topic: &str, payload: &[u8]) -> bool {
         let parts: Vec<&str> = topic.split('/').collect();
-        // teamclaw / {teamId} / rpc / {deviceId} / {requestId} / res
-        if parts.len() != 6 {
+        // amux / {teamId} / device / {deviceId} / rpc / {requestId} / res
+        if parts.len() != 7 {
             return false;
         }
-        if parts[0] != "teamclaw" || parts[2] != "rpc" || parts[5] != "res" {
+        if parts[0] != "amux" || parts[2] != "device" || parts[4] != "rpc" || parts[6] != "res" {
             return false;
         }
-        let request_id = parts[4];
+        let request_id = parts[5];
         if let Some(tx) = self.pending.remove(request_id) {
             if let Ok(response) = RpcResponse::decode(payload) {
                 let _ = tx.send(response);
@@ -136,7 +136,7 @@ mod tests {
             )),
         };
         let payload = req.encode_to_vec();
-        let topic = "teamclaw/team1/rpc/dev-a/req123/req";
+        let topic = "amux/team1/device/dev-a/rpc/req123/req";
 
         let result = RpcServer::parse_request(topic, &payload);
         assert!(result.is_some());
@@ -147,19 +147,19 @@ mod tests {
 
     #[test]
     fn test_parse_request_wrong_suffix() {
-        let topic = "teamclaw/team1/rpc/dev-a/req123/res"; // "res" not "req"
+        let topic = "amux/team1/device/dev-a/rpc/req123/res"; // "res" not "req"
         assert!(RpcServer::parse_request(topic, &[]).is_none());
     }
 
     #[test]
     fn test_parse_request_wrong_part_count() {
-        let topic = "teamclaw/team1/rpc/dev-a/req"; // only 5 parts
+        let topic = "amux/team1/device/dev-a/rpc/req"; // too few parts
         assert!(RpcServer::parse_request(topic, &[]).is_none());
     }
 
     #[test]
     fn test_parse_request_invalid_payload() {
-        let topic = "teamclaw/team1/rpc/dev-a/req123/req";
+        let topic = "amux/team1/device/dev-a/rpc/req123/req";
         assert!(RpcServer::parse_request(topic, b"not protobuf").is_none());
     }
 
@@ -184,7 +184,7 @@ mod tests {
                 result: None,
             };
             let payload = response.encode_to_vec();
-            let topic = "teamclaw/team1/rpc/dev-a/req123/res";
+            let topic = "amux/team1/device/dev-a/rpc/req123/res";
 
             let matched = rpc_client.handle_response(topic, &payload);
             assert!(matched);
@@ -212,7 +212,7 @@ mod tests {
                 result: None,
             };
             let payload = response.encode_to_vec();
-            let topic = "teamclaw/team1/rpc/dev-a/req999/res";
+            let topic = "amux/team1/device/dev-a/rpc/req999/res";
 
             let matched = rpc_client.handle_response(topic, &payload);
             assert!(!matched); // no pending request

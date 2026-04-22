@@ -37,6 +37,7 @@ public final class AgentDetailViewModel {
     public let session: Session?
     private let mqtt: MQTTService
     private let deviceId: String
+    private let teamID: String
     private let peerId: String
     private let teamclawService: TeamclawService?
     private var task: Task<Void, Never>?
@@ -65,8 +66,8 @@ public final class AgentDetailViewModel {
     public var participantCount: Int { session?.participantCount ?? 0 }
     public var hasAgent: Bool { agent != nil }
 
-    public init(agent: Agent?, mqtt: MQTTService, deviceId: String, peerId: String, session: Session? = nil, teamclawService: TeamclawService? = nil) {
-        self.agent = agent; self.mqtt = mqtt; self.deviceId = deviceId; self.peerId = peerId
+    public init(agent: Agent?, mqtt: MQTTService, teamID: String = "", deviceId: String, peerId: String, session: Session? = nil, teamclawService: TeamclawService? = nil) {
+        self.agent = agent; self.mqtt = mqtt; self.deviceId = deviceId; self.teamID = teamID; self.peerId = peerId
         self.session = session; self.teamclawService = teamclawService
     }
 
@@ -235,7 +236,7 @@ public final class AgentDetailViewModel {
 
         recomputeGroups()
 
-        let eventsTopic = "amux/\(deviceId)/agent/\(agentId)/events"
+        let eventsTopic = MQTTTopics.agentEvents(teamID: teamID, deviceID: deviceId, agentID: agentId)
         task = Task {
             // Outer loop: each iteration represents a fresh MQTT connection lifecycle.
             // When the inner stream finishes (e.g. after disconnect clears continuations),
@@ -548,7 +549,7 @@ public final class AgentDetailViewModel {
         makeCommand(&acpCmd)
         cmd.acpCommand = acpCmd
         let data = try ProtoMQTTCoder.encode(cmd)
-        try await mqtt.publish(topic: "amux/\(deviceId)/agent/\(agent.agentId)/commands", payload: data)
+        try await mqtt.publish(topic: MQTTTopics.agentCommands(teamID: teamID, deviceID: deviceId, agentID: agent.agentId), payload: data)
     }
 
     public func sendPrompt(_ text: String, modelId: String? = nil, modelContext: ModelContext? = nil) async throws {
