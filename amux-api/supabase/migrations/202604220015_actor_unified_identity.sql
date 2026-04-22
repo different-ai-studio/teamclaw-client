@@ -93,4 +93,49 @@ alter table public.agents
   add constraint agents_status_check
   check (status in ('active', 'disabled', 'archived'));
 
+-- ===========================================================================
+-- 6. Helpers rewritten around actors.user_id
+-- ===========================================================================
+create or replace function app.current_member_id()
+returns uuid language sql stable security definer set search_path = public, auth as $$
+  select a.id
+    from public.actors a
+    join public.members m on m.id = a.id
+   where a.user_id = auth.uid() and m.status = 'active'
+   order by a.created_at limit 1
+$$;
+
+create or replace function app.current_actor_id()
+returns uuid language sql stable security definer set search_path = public, auth as $$
+  select id from public.actors where user_id = auth.uid()
+   order by created_at limit 1
+$$;
+
+create or replace function app.current_actor_id_for_team(p_team_id uuid)
+returns uuid language sql stable security definer set search_path = public, auth as $$
+  select id from public.actors
+   where user_id = auth.uid() and team_id = p_team_id
+$$;
+
+create or replace function app.is_team_member(target_team_id uuid)
+returns boolean language sql stable security definer set search_path = public, auth as $$
+  select exists (
+    select 1 from public.actors
+     where user_id = auth.uid() and team_id = target_team_id
+  )
+$$;
+
+create or replace function app.is_current_agent(p_agent_id uuid)
+returns boolean language sql stable security definer set search_path = public, auth as $$
+  select exists (
+    select 1 from public.actors a
+     where a.id = p_agent_id
+       and a.actor_type = 'agent'
+       and a.user_id = auth.uid()
+  )
+$$;
+
+grant execute on function app.current_actor_id_for_team(uuid) to authenticated;
+grant execute on function app.is_current_agent(uuid) to authenticated;
+
 commit;
