@@ -26,8 +26,12 @@ pub enum Commands {
     Stop,
     /// Show daemon status
     Status,
-    /// First-time setup wizard
-    Init,
+    /// First-time setup wizard. With a join URL, onboards the daemon
+    /// to Supabase via the invite token issued by iOS.
+    Init {
+        /// amux://join?token=...&url=...&anon=... URL from an iOS invite.
+        join_url: Option<String>,
+    },
     /// Generate invite for a new member
     Invite {
         name: String,

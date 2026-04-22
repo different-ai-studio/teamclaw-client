@@ -18,7 +18,20 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init => cli::init::run_init()?,
+        Commands::Init { join_url } => {
+            if let Some(url) = join_url {
+                let rt = tokio::runtime::Runtime::new()?;
+                let outcome = rt.block_on(onboarding::init::run(&url, None))?;
+                println!(
+                    "Daemon onboarded. agent_id={} team_id={} config={}",
+                    outcome.agent_id,
+                    outcome.team_id,
+                    outcome.config_path.display()
+                );
+            } else {
+                cli::init::run_init()?;
+            }
+        }
         Commands::Invite { name, expires, owner } => {
             cli::invite::run_invite(&name, expires, owner)?;
         }
