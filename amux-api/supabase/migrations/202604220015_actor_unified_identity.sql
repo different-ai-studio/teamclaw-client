@@ -67,4 +67,30 @@ create unique index actors_team_user_idx
   on public.actors (team_id, user_id)
   where user_id is not null;
 
+-- ===========================================================================
+-- 3. Tear down the JWT app_metadata daemon-role infrastructure (from _0013_).
+--    RLS for agent writes is re-added in Task 6 using actors.user_id.
+-- ===========================================================================
+drop policy if exists agent_runtimes_daemon_write  on public.agent_runtimes;
+drop policy if exists agent_runtimes_daemon_update on public.agent_runtimes;
+drop policy if exists messages_daemon_write        on public.messages;
+drop policy if exists workspaces_daemon_write      on public.workspaces;
+drop policy if exists workspaces_daemon_update     on public.workspaces;
+drop policy if exists agents_daemon_self_update    on public.agents;
+
+drop function if exists app.is_daemon();
+drop function if exists app.current_jwt_kind();
+drop function if exists app.current_jwt_team_id();
+drop function if exists app.current_jwt_actor_id();
+
+-- 4. Drop legacy columns now that actors owns them.
+alter table public.members drop column user_id;
+alter table public.agents  drop column created_by_member_id;
+
+-- 5. Remove the legacy 'invited' agent status (no rows left after Task 2).
+alter table public.agents drop constraint if exists agents_status_check;
+alter table public.agents
+  add constraint agents_status_check
+  check (status in ('active', 'disabled', 'archived'));
+
 commit;
