@@ -455,8 +455,8 @@ begin
     if v_user_id is null then
       raise exception 'member claim requires authentication' using errcode = '42501';
     end if;
-    if exists (select 1 from public.actors
-                where team_id = v_invite.team_id and user_id = v_user_id) then
+    if exists (select 1 from public.actors act
+                where act.team_id = v_invite.team_id and act.user_id = v_user_id) then
       raise exception 'already a member of this team' using errcode = '23505';
     end if;
 
