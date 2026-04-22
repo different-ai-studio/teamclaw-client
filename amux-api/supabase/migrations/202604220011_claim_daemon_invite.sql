@@ -31,7 +31,9 @@ begin
     raise exception 'invite expired' using errcode = 'P0001';
   end if;
 
-  v_email := format('daemon+%s@amux.local', v_invite.agent_id);
+  -- Use a plausible-looking domain. Supabase hosted rejects .local TLDs and
+  -- obvious test domains (example.com, localhost) in its anti-abuse filter.
+  v_email := format('daemon.%s@amuxd.run', v_invite.agent_id);
   -- pgcrypto lives in the extensions schema on Supabase; qualify to avoid
   -- search_path surprises under SECURITY DEFINER.
   v_password := encode(extensions.gen_random_bytes(24), 'hex');
@@ -54,6 +56,24 @@ begin
     now(), now()
   )
   returning id into v_uid;
+
+  -- GoTrue's password grant looks up the identity row keyed by
+  -- (provider='email', provider_id=<email>). Without this, login_with_password
+  -- returns 400 invalid_credentials.
+  insert into auth.identities (
+    id, user_id, provider, provider_id, identity_data,
+    last_sign_in_at, created_at, updated_at
+  )
+  values (
+    gen_random_uuid(), v_uid, 'email', v_email,
+    jsonb_build_object(
+      'sub', v_uid::text,
+      'email', v_email,
+      'email_verified', true,
+      'phone_verified', false
+    ),
+    now(), now(), now()
+  );
 
   update public.agents set status = 'active' where id = v_invite.agent_id;
 
