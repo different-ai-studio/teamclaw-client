@@ -16,7 +16,7 @@ exception
 end;
 $$;
 
-select plan(44);
+select plan(56);
 
 select has_schema('app');
 select has_table('public', 'teams');
@@ -36,9 +36,11 @@ select has_table('public', 'agent_runtimes');
 select col_type_is('public', 'actors', 'last_active_at', 'timestamp with time zone');
 select col_type_is('public', 'members', 'id', 'uuid');
 select col_type_is('public', 'agents', 'id', 'uuid');
+select col_type_is('public', 'workspaces', 'agent_id', 'uuid');
 
 select fk_ok('public', 'members', 'id', 'public', 'actors', 'id');
 select fk_ok('public', 'agents', 'id', 'public', 'actors', 'id');
+select fk_ok('public', 'workspaces', 'agent_id', 'public', 'agents', 'id');
 select fk_ok('public', 'sessions', 'task_id', 'public', 'tasks', 'id');
 select fk_ok('public', 'messages', 'session_id', 'public', 'sessions', 'id');
 select fk_ok('public', 'agent_runtimes', 'agent_id', 'public', 'agents', 'id');
@@ -89,6 +91,21 @@ values (
   '00000000-0000-0000-0000-000000000001',
   '10000000-0000-0000-0000-000000000002',
   'Workspace One'
+);
+
+insert into public.actors (id, team_id, actor_type, display_name)
+values (
+  '10000000-0000-0000-0000-000000000003',
+  '00000000-0000-0000-0000-000000000002',
+  'agent',
+  'Scoped Agent'
+);
+
+insert into public.agents (id, agent_kind, status)
+values (
+  '10000000-0000-0000-0000-000000000003',
+  'amuxd',
+  'active'
 );
 
 insert into public.tasks (id, team_id, workspace_id, created_by_actor_id, title, status)
@@ -153,6 +170,16 @@ select ok(
 
 select ok(
   pg_temp.raises_sqlstate(
+    $sql$update public.workspaces
+          set agent_id = '10000000-0000-0000-0000-000000000003'
+          where id = '30000000-0000-0000-0000-000000000001'$sql$,
+    '23514'
+  ),
+  'workspaces.agent_id enforces same-team scoping'
+);
+
+select ok(
+  pg_temp.raises_sqlstate(
     $sql$update public.tasks
           set team_id = '00000000-0000-0000-0000-000000000002'
           where id = '40000000-0000-0000-0000-000000000001'$sql$,
@@ -205,6 +232,18 @@ select ok(
   true,
   'workspaces unique constraint is (team_id, agent_id, name)'
 );
+
+-- 202604220015: actor unified identity assertions
+select col_type_is('public', 'actors', 'user_id',             'uuid');
+select col_type_is('public', 'actors', 'invited_by_actor_id', 'uuid');
+select col_is_null('public', 'actors', 'user_id');
+select col_is_null('public', 'actors', 'invited_by_actor_id');
+select fk_ok('public', 'actors', 'invited_by_actor_id', 'public', 'actors', 'id');
+select has_table('public', 'team_invites');
+select hasnt_table('public', 'daemon_invites');
+select has_view('public',  'actor_directory');
+select hasnt_column('public', 'members', 'user_id');
+select hasnt_column('public', 'agents',  'created_by_member_id');
 
 select * from finish();
 rollback;

@@ -36,25 +36,25 @@ values
 insert into public.teams (id, slug, name)
 values ('00000000-0000-0000-0000-000000000001', 'core', 'Core Team');
 
-insert into public.actors (id, team_id, actor_type, display_name, last_active_at)
+insert into public.actors (id, team_id, actor_type, user_id, display_name, last_active_at)
 values
-  ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'member', 'Alice', now()),
-  ('10000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'member', 'Carol', now()),
-  ('20000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'agent', 'Builder', now());
+  ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'member', '90000000-0000-0000-0000-000000000001', 'Alice', now()),
+  ('10000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'member', '90000000-0000-0000-0000-000000000002', 'Carol', now()),
+  ('20000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'agent', null, 'Builder', now());
 
-insert into public.members (id, user_id, status)
+insert into public.members (id, status)
 values
-  ('10000000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-000000000001', 'active'),
-  ('10000000-0000-0000-0000-000000000002', '90000000-0000-0000-0000-000000000002', 'active');
+  ('10000000-0000-0000-0000-000000000001', 'active'),
+  ('10000000-0000-0000-0000-000000000002', 'active');
 
 insert into public.team_members (team_id, member_id, role)
 values
   ('00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'owner'),
   ('00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 'member');
 
-insert into public.workspaces (id, team_id, created_by_member_id, name, path)
+insert into public.workspaces (id, team_id, created_by_member_id, agent_id, name, path)
 values
-  ('30000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'amux', '/workspaces/amux');
+  ('30000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'amux', '/workspaces/amux');
 
 insert into public.agents (id, default_workspace_id, created_by_member_id, agent_kind, capabilities, status)
 values
