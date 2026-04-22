@@ -176,6 +176,31 @@ impl SupabaseClient {
         }
         Ok(resp.json().await?)
     }
+
+    /// Typed wrapper around the `claim_daemon_invite` RPC. Supabase's
+    /// PostgREST always returns a set-returning function as an array, so we
+    /// deserialize into `Vec<ClaimResult>` and pick the first row.
+    pub async fn claim_daemon_invite(
+        &self,
+        token: uuid::Uuid,
+    ) -> SupabaseResult<ClaimResult> {
+        #[derive(Serialize)]
+        struct Req {
+            p_invite_token: uuid::Uuid,
+        }
+        let rows: Vec<ClaimResult> = self
+            .rpc_anon("claim_daemon_invite", &Req { p_invite_token: token })
+            .await?;
+        rows.into_iter().next().ok_or(SupabaseError::InviteInvalid)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ClaimResult {
+    pub agent_id: String,
+    pub team_id: String,
+    pub auth_email: String,
+    pub auth_password: String,
 }
 
 #[cfg(test)]
