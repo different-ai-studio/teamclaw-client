@@ -12,14 +12,17 @@ public struct NewSessionSheet: View {
     let deviceId: String
     let peerId: String
     let teamclawService: TeamclawService?
+    let teamID: String
+    let currentActorID: String?
+    let isAgentAvailable: Bool
 
     let viewModel: SessionListViewModel
     let preselectedTaskId: String?
-    let preselectedCollaborators: [Member]
+    let preselectedCollaborators: [CachedActor]
     @State private var selectedWorkspaceId: String?
     @State private var selectedAgentType: Amux_AgentType = .claudeCode
 
-    @State private var collaborators: [Member] = []
+    @State private var collaborators: [CachedActor] = []
     @State private var selectedTaskId: String?
     @State private var messageText: String = ""
     @State private var showMemberPicker = false
@@ -32,18 +35,27 @@ public struct NewSessionSheet: View {
     private var tasks: [SessionTask]
 
     private var workspaces: [Workspace] { viewModel.workspaces }
+    private var availableTasks: [SessionTask] {
+        guard let selectedWorkspaceId, !selectedWorkspaceId.isEmpty else { return tasks }
+        let scopedTasks = tasks.filter { $0.workspaceId == selectedWorkspaceId }
+        return scopedTasks.isEmpty ? tasks : scopedTasks
+    }
 
     /// Set by parent — called with agentId when session is created
     var onSessionCreated: ((String) -> Void)?
 
-    public init(mqtt: MQTTService, deviceId: String, peerId: String, teamclawService: TeamclawService? = nil, viewModel: SessionListViewModel,
+    public init(mqtt: MQTTService, deviceId: String, peerId: String, teamclawService: TeamclawService? = nil,
+                teamID: String = "", currentActorID: String? = nil, isAgentAvailable: Bool = true, viewModel: SessionListViewModel,
                 preselectedTaskId: String? = nil,
-                preselectedCollaborators: [Member] = [],
+                preselectedCollaborators: [CachedActor] = [],
                 onSessionCreated: ((String) -> Void)? = nil) {
         self.mqtt = mqtt
         self.deviceId = deviceId
         self.peerId = peerId
         self.teamclawService = teamclawService
+        self.teamID = teamID
+        self.currentActorID = currentActorID
+        self.isAgentAvailable = isAgentAvailable
         self.viewModel = viewModel
         self.preselectedTaskId = preselectedTaskId
         self.preselectedCollaborators = preselectedCollaborators
@@ -96,7 +108,7 @@ public struct NewSessionSheet: View {
         }
         .sheet(isPresented: $showMemberPicker) {
             MemberListView(mqtt: mqtt, deviceId: deviceId, peerId: peerId,
-                           selected: Set(collaborators.map(\.memberId))) { selected in
+                           selected: Set(collaborators.map(\.actorId))) { selected in
                 collaborators = selected
             }
         }
@@ -124,6 +136,16 @@ public struct NewSessionSheet: View {
             }
             selectedWorkspaceId = task.workspaceId
         }
+        .onChange(of: selectedWorkspaceId) { _, newWorkspaceId in
+            guard let selectedTaskId,
+                  let task = tasks.first(where: { $0.taskId == selectedTaskId }) else {
+                return
+            }
+            guard let newWorkspaceId, !newWorkspaceId.isEmpty else { return }
+            if !task.workspaceId.isEmpty && task.workspaceId != newWorkspaceId {
+                self.selectedTaskId = nil
+            }
+        }
     }
 
     // MARK: - Workspace & Agent Type row
@@ -135,11 +157,15 @@ public struct NewSessionSheet: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Menu {
-                    ForEach(workspaces, id: \.workspaceId) { ws in
-                        Button {
-                            selectedWorkspaceId = ws.workspaceId
-                        } label: {
-                            Label(ws.displayName, systemImage: selectedWorkspaceId == ws.workspaceId ? "checkmark" : "folder")
+                    if workspaces.isEmpty {
+                        Text("No workspaces available")
+                    } else {
+                        ForEach(workspaces, id: \.workspaceId) { ws in
+                            Button {
+                                selectedWorkspaceId = ws.workspaceId
+                            } label: {
+                                Label(ws.displayName, systemImage: selectedWorkspaceId == ws.workspaceId ? "checkmark" : "folder")
+                            }
                         }
                     }
                 } label: {
@@ -155,22 +181,24 @@ public struct NewSessionSheet: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
 
-            Divider()
+            if isAgentAvailable {
+                Divider()
 
-            HStack {
-                Text("Agent")
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Picker("Agent", selection: $selectedAgentType) {
-                    Text("Claude").tag(Amux_AgentType.claudeCode)
-                    Text("OpenCode").tag(Amux_AgentType.opencode)
-                    Text("Codex").tag(Amux_AgentType.codex)
+                HStack {
+                    Text("Agent")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Picker("Agent", selection: $selectedAgentType) {
+                        Text("Claude").tag(Amux_AgentType.claudeCode)
+                        Text("OpenCode").tag(Amux_AgentType.opencode)
+                        Text("Codex").tag(Amux_AgentType.codex)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 240)
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 240)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
         }
     }
 
@@ -191,9 +219,15 @@ public struct NewSessionSheet: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
-                    ForEach(collaborators, id: \.memberId) { member in
-                        CollaboratorChip(name: member.displayName) {
-                            collaborators.removeAll { $0.memberId == member.memberId }
+                    if collaborators.isEmpty {
+                        Text("Just you")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(collaborators, id: \.actorId) { member in
+                            CollaboratorChip(name: member.displayName) {
+                                collaborators.removeAll { $0.actorId == member.actorId }
+                            }
                         }
                     }
                 }
@@ -227,9 +261,9 @@ public struct NewSessionSheet: View {
                 } label: {
                     Label("None", systemImage: selectedTaskId == nil ? "checkmark" : "circle")
                 }
-                if !tasks.isEmpty {
+                if !availableTasks.isEmpty {
                     Divider()
-                    ForEach(tasks, id: \.taskId) { item in
+                    ForEach(availableTasks, id: \.taskId) { item in
                         Button {
                             selectedTaskId = item.taskId
                         } label: {
@@ -259,6 +293,10 @@ public struct NewSessionSheet: View {
            let item = tasks.first(where: { $0.taskId == id }) {
             return item.displayTitle
         }
+        if let selectedWorkspaceId,
+           tasks.contains(where: { $0.workspaceId == selectedWorkspaceId }) {
+            return "Select…"
+        }
         return "None"
     }
 
@@ -267,16 +305,6 @@ public struct NewSessionSheet: View {
     private var inputBar: some View {
         LiquidGlassContainer(spacing: 8) {
             HStack(alignment: .bottom, spacing: 8) {
-                Button {} label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .frame(width: 40, height: 40)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .liquidGlass(in: Circle())
-
                 HStack(alignment: .bottom, spacing: 4) {
                     TextField("Message", text: $messageText, axis: .vertical)
                         .font(.body)
@@ -339,6 +367,11 @@ public struct NewSessionSheet: View {
 
         isInputFocused = false
         errorMessage = nil
+
+        if !isAgentAvailable {
+            createLocalSession(text: text, title: userText)
+            return
+        }
 
         // Shared-session path also handles the case where a task was picked but no
         // collaborators were added — ACP startAgent has no taskId field,
@@ -413,7 +446,7 @@ public struct NewSessionSheet: View {
             teamId: Self.teamId,
             title: String(title.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines),
             summary: text,
-            inviteActorIds: collaborators.map(\.memberId),
+            inviteActorIds: collaborators.map(\.actorId),
             taskId: selectedTaskId ?? ""
         ) ?? {
             var req = Teamclaw_CreateSessionRequest()
@@ -421,7 +454,7 @@ public struct NewSessionSheet: View {
             req.teamID = Self.teamId
             req.title = String(title.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
             req.summary = text
-            req.inviteActorIds = collaborators.map(\.memberId)
+            req.inviteActorIds = collaborators.map(\.actorId)
             if let taskId = selectedTaskId, !taskId.isEmpty {
                 req.taskID = taskId
             }
@@ -484,6 +517,46 @@ public struct NewSessionSheet: View {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    private func createLocalSession(text: String, title: String) {
+        guard let currentActorID else {
+            errorMessage = "Current actor is not ready yet."
+            return
+        }
+
+        let createdAt = Date()
+        let sessionID = UUID().uuidString
+        let session = Session(
+            sessionId: sessionID,
+            mode: "collab",
+            teamId: teamID,
+            title: String(title.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines),
+            hostDeviceId: "",
+            createdBy: currentActorID,
+            createdAt: createdAt,
+            summary: text,
+            participantCount: max(collaborators.count + 1, 1),
+            lastMessagePreview: text,
+            lastMessageAt: createdAt,
+            taskId: selectedTaskId ?? ""
+        )
+
+        let message = SessionMessage(
+            messageId: UUID().uuidString,
+            sessionId: sessionID,
+            senderActorId: currentActorID,
+            kind: "text",
+            content: text,
+            createdAt: createdAt
+        )
+
+        modelContext.insert(session)
+        modelContext.insert(message)
+        try? modelContext.save()
+        viewModel.reloadSessions(modelContext: modelContext)
+        onSessionCreated?("collab:\(sessionID)")
+        dismiss()
     }
 
     private func makeStartAgentCommand(initialPrompt: String) -> Amux_CommandEnvelope {

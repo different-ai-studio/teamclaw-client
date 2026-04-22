@@ -13,7 +13,7 @@ public struct AgentDetailView: View {
     @State private var showReplySheet = false
     @State private var showSettings = false
     @State private var showMembers = false
-    @State private var collaborators: [Member] = []
+    @State private var collaborators: [CachedActor] = []
     @State private var voiceRecorder = VoiceRecorder(contextualStrings: [
         "Claude", "Claude Code", "Sonnet", "Opus", "Haiku",
         "MQTT", "protobuf", "SwiftUI", "SwiftData",
@@ -295,7 +295,7 @@ public struct AgentDetailView: View {
         }
         .sheet(isPresented: $showMembers) {
             MemberListView(mqtt: viewModel.mqttRef, deviceId: viewModel.deviceIdRef, peerId: viewModel.peerIdRef,
-                           selected: Set(collaborators.map(\.memberId))) { selected in
+                           selected: Set(collaborators.map(\.actorId))) { selected in
                 collaborators = selected
                 if !selected.isEmpty {
                     forkToCollab(members: selected)
@@ -306,7 +306,7 @@ public struct AgentDetailView: View {
         .onDisappear { viewModel.stop() }
     }
 
-    private func forkToCollab(members: [Member]) {
+    private func forkToCollab(members: [CachedActor]) {
         guard let agent = viewModel.agent else { return }
         // Use last output summary or session title as handoff context
         let summary = agent.lastOutputSummary.isEmpty
@@ -318,7 +318,7 @@ public struct AgentDetailView: View {
         createReq.teamID = viewModel.deviceIdRef  // v1: use deviceId as teamId
         createReq.title = agent.sessionTitle.isEmpty ? "Collab: \(agent.worktree.split(separator: "/").last.map(String.init) ?? agent.agentId)" : "Collab: \(agent.sessionTitle)"
         createReq.summary = summary
-        createReq.inviteActorIds = members.map(\.memberId)
+        createReq.inviteActorIds = members.map(\.actorId)
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()

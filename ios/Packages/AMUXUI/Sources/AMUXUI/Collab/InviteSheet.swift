@@ -10,7 +10,7 @@ public struct InviteSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @State private var members: [Member] = []
+    @State private var members: [CachedActor] = []
     @State private var selectedIds: Set<String> = []
 
     public init(session: Session, teamclawService: TeamclawService, teamId: String, deviceId: String) {
@@ -22,21 +22,21 @@ public struct InviteSheet: View {
 
     public var body: some View {
         NavigationStack {
-            List(members, id: \.memberId) { member in
+            List(members, id: \.actorId) { member in
                 HStack {
                     Text(member.displayName)
                     Spacer()
-                    if selectedIds.contains(member.memberId) {
+                    if selectedIds.contains(member.actorId) {
                         Image(systemName: "checkmark")
                             .foregroundStyle(.blue)
                     }
                 }
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    if selectedIds.contains(member.memberId) {
-                        selectedIds.remove(member.memberId)
+                    if selectedIds.contains(member.actorId) {
+                        selectedIds.remove(member.actorId)
                     } else {
-                        selectedIds.insert(member.memberId)
+                        selectedIds.insert(member.actorId)
                     }
                 }
             }
@@ -69,7 +69,10 @@ public struct InviteSheet: View {
     }
 
     private func loadMembers() {
-        let descriptor = FetchDescriptor<Member>(sortBy: [SortDescriptor(\.displayName)])
+        let descriptor = FetchDescriptor<CachedActor>(
+            predicate: #Predicate { $0.actorType == "member" },
+            sortBy: [SortDescriptor(\.displayName)]
+        )
         members = (try? modelContext.fetch(descriptor)) ?? []
     }
 
@@ -82,7 +85,7 @@ public struct InviteSheet: View {
             invite.sessionID = session.sessionId
             invite.teamID = teamId
             invite.hostDeviceID = session.hostDeviceId
-            invite.invitedActorID = memberId
+            invite.invitedActorID = memberId  // memberId here is actorId from CachedActor
             invite.sessionTitle = session.title
             invite.summary = session.summary
             invite.createdAt = Int64(Date().timeIntervalSince1970)

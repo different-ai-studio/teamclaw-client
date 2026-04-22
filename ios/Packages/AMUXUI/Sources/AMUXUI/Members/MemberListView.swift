@@ -7,17 +7,17 @@ import AMUXCore
 public struct MemberListView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @State private var viewModel = MemberListViewModel()
-    @State private var showInvite = false
-    @State private var inviteName = ""
-    @State private var inviteRole: Amux_MemberRole = .member
+    @Query(filter: #Predicate<CachedActor> { $0.actorType == "member" },
+           sort: \CachedActor.displayName)
+    private var members: [CachedActor]
+
     let mqtt: MQTTService
     let deviceId: String
     let peerId: String
 
     private let selectionMode: Bool
     @State private var selectedIDs: Set<String>
-    private let onConfirm: (([Member]) -> Void)?
+    private let onConfirm: (([CachedActor]) -> Void)?
 
     /// Display mode — browse members, tap for detail
     public init(mqtt: MQTTService, deviceId: String, peerId: String) {
@@ -30,7 +30,7 @@ public struct MemberListView: View {
     /// Selection mode — multi-select with confirm callback
     public init(mqtt: MQTTService, deviceId: String, peerId: String,
                 selected: Set<String> = [],
-                onConfirm: @escaping ([Member]) -> Void) {
+                onConfirm: @escaping ([CachedActor]) -> Void) {
         self.mqtt = mqtt; self.deviceId = deviceId; self.peerId = peerId
         self.selectionMode = true
         self._selectedIDs = State(initialValue: selected)
@@ -40,14 +40,14 @@ public struct MemberListView: View {
     public var body: some View {
         NavigationStack {
             List {
-                ForEach(viewModel.members, id: \.memberId) { member in
+                ForEach(members, id: \.actorId) { member in
                     if selectionMode {
                         selectionRow(member)
                     } else {
                         NavigationLink {
                             MemberDetailView(member: member)
                         } label: {
-                            MemberRow(member: member, isOnline: viewModel.isOnline(member))
+                            MemberRow(member: member)
                         }
                     }
                 }
@@ -57,7 +57,7 @@ public struct MemberListView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if selectionMode {
                         Button {
-                            let selected = viewModel.members.filter { selectedIDs.contains($0.memberId) }
+                            let selected = members.filter { selectedIDs.contains($0.actorId) }
                             onConfirm?(selected)
                             dismiss()
                         } label: {
@@ -65,11 +65,6 @@ public struct MemberListView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(selectedIDs.isEmpty)
-                    } else {
-                        Button { showInvite = true } label: {
-                            Image(systemName: "person.badge.plus").font(.title3)
-                        }
-                        .buttonStyle(.plain)
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -81,68 +76,23 @@ public struct MemberListView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .sheet(isPresented: $showInvite) {
-                NavigationStack {
-                    Form {
-                        TextField("Name", text: $inviteName)
-                        Picker("Role", selection: $inviteRole) {
-                            Text("Member").tag(Amux_MemberRole.member)
-                            Text("Owner").tag(Amux_MemberRole.owner)
-                        }
-                    }
-                    .navigationTitle("Invite Member")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarLeading) {
-                            Button {
-                                inviteName = ""; inviteRole = .member; showInvite = false
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.title3)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        ToolbarItem(placement: .navigationBarTrailing) {
-                            Button {
-                                Task {
-                                    try? await viewModel.invite(displayName: inviteName, role: inviteRole, mqtt: mqtt, deviceId: deviceId, peerId: peerId)
-                                    inviteName = ""; inviteRole = .member
-                                }
-                                showInvite = false
-                            } label: {
-                                Text("Invite")
-                                    .font(.subheadline).fontWeight(.medium)
-                                    .foregroundStyle(.primary)
-                                    .padding(.horizontal, 14).padding(.vertical, 6)
-                                    .liquidGlass(in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(inviteName.trimmingCharacters(in: .whitespaces).isEmpty)
-                            .opacity(inviteName.trimmingCharacters(in: .whitespaces).isEmpty ? 0.4 : 1)
-                        }
-                    }
-                }
-                .presentationDetents([.medium])
-            }
         }
-        .task { viewModel.start(mqtt: mqtt, deviceId: deviceId, modelContext: modelContext) }
     }
 
     @ViewBuilder
-    private func selectionRow(_ member: Member) -> some View {
+    private func selectionRow(_ member: CachedActor) -> some View {
         Button {
-            if selectedIDs.contains(member.memberId) {
-                selectedIDs.remove(member.memberId)
+            if selectedIDs.contains(member.actorId) {
+                selectedIDs.remove(member.actorId)
             } else {
-                selectedIDs.insert(member.memberId)
+                selectedIDs.insert(member.actorId)
             }
         } label: {
             HStack {
-                Image(systemName: selectedIDs.contains(member.memberId) ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selectedIDs.contains(member.memberId) ? Color.accentColor : Color.secondary)
+                Image(systemName: selectedIDs.contains(member.actorId) ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(selectedIDs.contains(member.actorId) ? Color.accentColor : Color.secondary)
                     .font(.title3)
-                MemberRow(member: member, isOnline: viewModel.isOnline(member))
+                MemberRow(member: member)
             }
         }
         .tint(.primary)
@@ -152,29 +102,20 @@ public struct MemberListView: View {
 // MARK: - MemberRow
 
 private struct MemberRow: View {
-    let member: Member
-    let isOnline: Bool
+    let member: CachedActor
 
     var body: some View {
         HStack {
             Circle()
-                .fill(isOnline ? Color.green : Color.secondary.opacity(0.4))
+                .fill(member.isOnline ? Color.green : Color.secondary.opacity(0.4))
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 2) {
                 Text(member.displayName).font(.body)
-                HStack(spacing: 6) {
-                    Text(member.roleLabel)
-                    Text("·").foregroundStyle(.tertiary)
-                    Text(departmentLabel(for: member))
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(member.roleLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
-            // Placeholder: wire real count once session-participant mapping lands.
-            Text("0 sessions")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
             if member.isOwner {
                 Image(systemName: "crown.fill").foregroundStyle(.orange).font(.caption)
             }
@@ -182,15 +123,10 @@ private struct MemberRow: View {
     }
 }
 
-private func departmentLabel(for member: Member) -> String {
-    if let dept = member.department, !dept.isEmpty { return dept }
-    return "—"
-}
-
 // MARK: - MemberDetailView
 
 private struct MemberDetailView: View {
-    let member: Member
+    let member: CachedActor
 
     @Query private var allMessages: [SessionMessage]
     @Query(sort: \Session.lastMessageAt, order: .reverse)
@@ -199,7 +135,7 @@ private struct MemberDetailView: View {
     private var memberSessions: [Session] {
         let sessionIds = Set(
             allMessages
-                .filter { $0.senderActorId == member.memberId }
+                .filter { $0.senderActorId == member.actorId }
                 .map(\.sessionId)
         )
         return allSessions.filter { sessionIds.contains($0.sessionId) }
@@ -210,8 +146,7 @@ private struct MemberDetailView: View {
             Section("Info") {
                 LabeledContent("Name", value: member.displayName)
                 LabeledContent("Role", value: member.roleLabel)
-                LabeledContent("Department", value: departmentLabel(for: member))
-                LabeledContent("Joined", value: member.joinedAt.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent("Joined", value: member.createdAt.formatted(date: .abbreviated, time: .shortened))
             }
             Section("Collab Sessions") {
                 if memberSessions.isEmpty {
@@ -233,7 +168,7 @@ private struct MemberDetailView: View {
                 }
             }
             Section("ID") {
-                Text(member.memberId)
+                Text(member.actorId)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)

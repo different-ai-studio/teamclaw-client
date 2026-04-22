@@ -4,15 +4,17 @@ import AMUXCore
 
 public struct SessionView: View {
     let session: Session
-    let teamclawService: TeamclawService
+    let teamclawService: TeamclawService?
+    let currentActorID: String?
 
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel: SessionViewModel
     @State private var promptText = ""
 
-    public init(session: Session, teamclawService: TeamclawService) {
+    public init(session: Session, teamclawService: TeamclawService?, currentActorID: String? = nil) {
         self.session = session
         self.teamclawService = teamclawService
+        self.currentActorID = currentActorID
         self._viewModel = State(initialValue: SessionViewModel(session: session))
     }
 
@@ -25,7 +27,7 @@ public struct SessionView: View {
                         ForEach(viewModel.messages, id: \.messageId) { message in
                             SessionMessageBubble(
                                 message: message,
-                                isMe: message.senderActorId == teamclawService.currentHumanActorId,
+                                isMe: message.senderActorId == (teamclawService?.currentHumanActorId ?? currentActorID),
                                 senderName: resolveName(message.senderActorId)
                             )
                             .id(message.messageId)
@@ -50,7 +52,7 @@ public struct SessionView: View {
         }
         .navigationTitle(session.title.isEmpty ? "Session" : session.title)
         .task {
-            viewModel.start(teamclawService: teamclawService, modelContext: modelContext)
+            viewModel.start(teamclawService: teamclawService, currentActorID: currentActorID, modelContext: modelContext)
         }
         .onDisappear { viewModel.stop() }
     }
@@ -78,7 +80,7 @@ public struct SessionView: View {
     }
 
     private func resolveName(_ actorId: String) -> String {
-        let descriptor = FetchDescriptor<Member>(predicate: #Predicate { $0.memberId == actorId })
+        let descriptor = FetchDescriptor<CachedActor>(predicate: #Predicate { $0.actorId == actorId })
         if let member = (try? modelContext.fetch(descriptor))?.first {
             return member.displayName
         }

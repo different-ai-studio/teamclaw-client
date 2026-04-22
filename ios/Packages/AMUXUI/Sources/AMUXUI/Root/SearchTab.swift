@@ -16,7 +16,9 @@ public struct SearchTab: View {
     @Query(filter: #Predicate<SessionTask> { !$0.archived })
     private var allTasks: [SessionTask]
 
-    @Query private var allMembers: [Member]
+    @Query(filter: #Predicate<CachedActor> { $0.actorType == "member" },
+           sort: \CachedActor.displayName)
+    private var allMembers: [CachedActor]
 
     public init(mqtt: MQTTService,
                 pairing: PairingManager,
@@ -50,7 +52,7 @@ public struct SearchTab: View {
         }
     }
 
-    private var memberMatches: [Member] {
+    private var memberMatches: [CachedActor] {
         allMembers.filter {
             SearchMatcher.matches(haystack: $0.displayName, query: query)
         }
@@ -91,17 +93,10 @@ public struct SearchTab: View {
 
                     if !memberMatches.isEmpty {
                         Section("Members") {
-                            ForEach(memberMatches, id: \.memberId) { member in
+                            ForEach(memberMatches, id: \.actorId) { member in
                                 HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(member.displayName)
-                                            .font(.body)
-                                        if let dept = member.department, !dept.isEmpty {
-                                            Text(dept)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
+                                    Text(member.displayName)
+                                        .font(.body)
                                     Spacer()
                                     Text(member.roleLabel)
                                         .font(.caption)
