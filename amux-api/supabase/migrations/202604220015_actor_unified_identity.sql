@@ -243,4 +243,24 @@ create policy actors_self_heartbeat on public.actors
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
+-- ===========================================================================
+-- 11. actor_directory view (flat read surface for iOS)
+-- ===========================================================================
+create view public.actor_directory
+  with (security_invoker = true)
+as
+select
+  a.id, a.team_id, a.actor_type, a.user_id, a.invited_by_actor_id,
+  a.display_name, a.last_active_at, a.created_at, a.updated_at,
+  m.status      as member_status,
+  tm.role       as team_role,
+  ag.agent_kind as agent_kind,
+  ag.status     as agent_status
+from public.actors a
+left join public.members      m  on m.id         = a.id
+left join public.team_members tm on tm.member_id = a.id
+left join public.agents       ag on ag.id        = a.id;
+
+grant select on public.actor_directory to authenticated;
+
 commit;
