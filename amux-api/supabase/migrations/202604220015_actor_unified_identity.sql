@@ -138,4 +138,43 @@ $$;
 grant execute on function app.current_actor_id_for_team(uuid) to authenticated;
 grant execute on function app.is_current_agent(uuid) to authenticated;
 
+-- ===========================================================================
+-- 7. Agent write RLS, now keyed on actors.user_id via app.is_current_agent
+-- ===========================================================================
+create policy agent_runtimes_agent_write on public.agent_runtimes
+  for insert to authenticated
+  with check (
+    app.is_current_agent(agent_id)
+    and team_id = (select team_id from public.actors where id = agent_id)
+  );
+
+create policy agent_runtimes_agent_update on public.agent_runtimes
+  for update to authenticated
+  using (app.is_current_agent(agent_id))
+  with check (app.is_current_agent(agent_id));
+
+create policy messages_agent_write on public.messages
+  for insert to authenticated
+  with check (
+    app.is_current_agent(sender_actor_id)
+    and team_id = (select team_id from public.actors where id = sender_actor_id)
+  );
+
+create policy workspaces_agent_write on public.workspaces
+  for insert to authenticated
+  with check (
+    app.is_current_agent(agent_id)
+    and team_id = (select team_id from public.actors where id = agent_id)
+  );
+
+create policy workspaces_agent_update on public.workspaces
+  for update to authenticated
+  using (app.is_current_agent(agent_id))
+  with check (app.is_current_agent(agent_id));
+
+create policy agents_self_update on public.agents
+  for update to authenticated
+  using (app.is_current_agent(id))
+  with check (app.is_current_agent(id));
+
 commit;
