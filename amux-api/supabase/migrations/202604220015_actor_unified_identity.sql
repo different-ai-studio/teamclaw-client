@@ -450,4 +450,17 @@ revoke all on function public.claim_team_invite(text) from public;
 -- anon allowed so a daemon without a session can claim via the anon key alone.
 grant execute on function public.claim_team_invite(text) to anon, authenticated;
 
+-- ===========================================================================
+-- 14. RPC: update_actor_last_active (heartbeat)
+-- ===========================================================================
+create or replace function public.update_actor_last_active()
+returns void language sql security definer set search_path = public, auth as $$
+  update public.actors
+     set last_active_at = now(), updated_at = now()
+   where user_id = auth.uid();
+$$;
+
+revoke all on function public.update_actor_last_active() from public;
+grant execute on function public.update_actor_last_active() to authenticated;
+
 commit;
