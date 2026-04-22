@@ -1210,6 +1210,7 @@ mod tests {
             summary: String::new(),
             participants: vec![],
             primary_agent_id: String::new(),
+            task_id: String::new(),
         }
     }
 

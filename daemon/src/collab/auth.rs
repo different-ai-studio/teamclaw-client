@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn proto_member_list_includes_department_when_set() {
-        let auth = make_auth_with(vec![
+        let mut auth = make_auth_with(vec![
             member("alice", Some("Engineering")),
             member("bob", None),
         ]);
