@@ -1,6 +1,6 @@
 begin;
 
-select plan(14);
+select plan(17);
 
 create or replace function pg_temp.as_user(p_user uuid)
 returns void language plpgsql as $$
@@ -61,6 +61,12 @@ create temp table mi as
 select ok((select count(*) = 1 from mi), 'member invite created');
 select like((select deeplink from mi), 'amux://invite?token=%',
             'deeplink format is amux://invite?token=...');
+select like((select deeplink from mi), '%&broker=mqtts://ai.ucar.cc:8883%',
+            'deeplink includes mqtt broker');
+select like((select deeplink from mi), '%&username=teamclaw%',
+            'deeplink includes mqtt username');
+select like((select deeplink from mi), '%&password=teamclaw2026%',
+            'deeplink includes mqtt password');
 
 -- 5. Carol (different auth user) claims → new actor + members + team_members
 select pg_temp.as_user('33333333-3333-3333-3333-333333333333');

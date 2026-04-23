@@ -1,21 +1,15 @@
 import SwiftUI
-import SwiftData
 import AMUXCore
 
 struct ArchivedTasksView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
 
-    let teamclawService: TeamclawService?
-
-    @Query(filter: #Predicate<SessionTask> { $0.archived },
-           sort: \SessionTask.createdAt, order: .reverse)
-    private var archivedItems: [SessionTask]
+    @Bindable var taskStore: TaskStore
 
     var body: some View {
         NavigationStack {
             Group {
-                if archivedItems.isEmpty {
+                if taskStore.archivedTasks.isEmpty {
                     ContentUnavailableView(
                         "Nothing Archived",
                         systemImage: "archivebox",
@@ -23,11 +17,11 @@ struct ArchivedTasksView: View {
                     )
                 } else {
                     List {
-                        ForEach(archivedItems, id: \.taskId) { item in
+                        ForEach(taskStore.archivedTasks) { item in
                             TaskRow(item: item)
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button {
-                                        unarchiveTapped(item)
+                                        Task { await taskStore.setArchived(taskID: item.id, archived: false) }
                                     } label: {
                                         Label("Unarchive", systemImage: "tray.and.arrow.up")
                                     }
@@ -49,13 +43,5 @@ struct ArchivedTasksView: View {
                 }
             }
         }
-    }
-
-    private func unarchiveTapped(_ item: SessionTask) {
-        item.archived = false
-        try? modelContext.save()
-        let id = item.taskId
-        let sessionId = item.sessionId
-        Task { await teamclawService?.archiveTask(taskId: id, sessionId: sessionId, archived: false) }
     }
 }

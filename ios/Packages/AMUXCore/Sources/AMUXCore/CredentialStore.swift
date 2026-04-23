@@ -54,8 +54,6 @@ public final class UserDefaultsCredentialStore: CredentialStore, @unchecked Send
 
     public func load() throws -> PairingCredentials? {
         guard let host = defaults.string(forKey: Keys.brokerHost),
-              let device = defaults.string(forKey: Keys.deviceId),
-              let token = defaults.string(forKey: Keys.authToken),
               !host.isEmpty else {
             return nil
         }
@@ -67,8 +65,8 @@ public final class UserDefaultsCredentialStore: CredentialStore, @unchecked Send
             useTLS: defaults.bool(forKey: Keys.useTLS),
             username: defaults.string(forKey: Keys.username) ?? "",
             password: defaults.string(forKey: Keys.password) ?? "",
-            deviceId: device,
-            authToken: token
+            deviceId: defaults.string(forKey: Keys.deviceId) ?? "",
+            authToken: defaults.string(forKey: Keys.authToken) ?? ""
         )
     }
 

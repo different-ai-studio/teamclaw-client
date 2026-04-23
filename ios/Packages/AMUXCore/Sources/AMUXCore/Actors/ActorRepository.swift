@@ -9,17 +9,23 @@ public struct InviteCreateInput: Equatable, Sendable {
     public let teamRole: TeamRole?
     public let agentKind: String?
     public let ttlSeconds: Int
+    /// When non-nil and `kind == .agent`, the claim rotates credentials on
+    /// this existing actor instead of creating a new one — that's the
+    /// "re-invite" flow from ActorDetailView.
+    public let targetActorID: String?
 
     public init(
         kind: InviteKind,
         displayName: String,
         teamRole: TeamRole? = nil,
         agentKind: String? = nil,
-        ttlSeconds: Int = 604_800
+        ttlSeconds: Int = 604_800,
+        targetActorID: String? = nil
     ) {
         self.kind = kind; self.displayName = displayName
         self.teamRole = teamRole; self.agentKind = agentKind
         self.ttlSeconds = ttlSeconds
+        self.targetActorID = targetActorID
     }
 }
 
@@ -53,4 +59,5 @@ public protocol ActorRepository: Sendable {
     func createInvite(teamID: String, input: InviteCreateInput) async throws -> InviteCreated
     func claimInvite(token: String) async throws -> ClaimResult
     func heartbeat() async throws
+    func removeActor(actorID: String) async throws
 }

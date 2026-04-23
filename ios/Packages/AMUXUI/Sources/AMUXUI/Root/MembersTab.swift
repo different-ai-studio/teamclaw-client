@@ -3,32 +3,40 @@ import AMUXCore
 
 public struct MembersTab: View {
     let pairing: PairingManager
-    let connectionMonitor: ConnectionMonitor
     let mqtt: MQTTService
     let sessionViewModel: SessionListViewModel
     let activeTeam: TeamSummary?
     let store: ActorStore
+    let connectedAgentsStore: ConnectedAgentsStore?
+    var onReconnect: (() -> Void)?
 
     @State private var showSettings = false
     @State private var showInvite   = false
 
     public init(pairing: PairingManager,
-                connectionMonitor: ConnectionMonitor,
                 mqtt: MQTTService,
                 sessionViewModel: SessionListViewModel,
                 activeTeam: TeamSummary?,
-                store: ActorStore) {
+                store: ActorStore,
+                connectedAgentsStore: ConnectedAgentsStore? = nil,
+                onReconnect: (() -> Void)? = nil) {
         self.pairing = pairing
-        self.connectionMonitor = connectionMonitor
         self.mqtt = mqtt
         self.sessionViewModel = sessionViewModel
         self.activeTeam = activeTeam
         self.store = store
+        self.connectedAgentsStore = connectedAgentsStore
+        self.onReconnect = onReconnect
     }
 
     public var body: some View {
         NavigationStack {
-            MemberListContent(store: store)
+            MemberListContent(
+                store: store,
+                pairing: pairing,
+                mqtt: mqtt,
+                sessionViewModel: sessionViewModel
+            )
                 .navigationTitle("Actors")
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {
@@ -48,9 +56,9 @@ public struct MembersTab: View {
                 }
                 .sheet(isPresented: $showSettings) {
                     SettingsView(pairing: pairing,
-                                 connectionMonitor: connectionMonitor,
-                                 mqtt: mqtt,
-                                 sessionViewModel: sessionViewModel)
+                                 connectedAgentsStore: connectedAgentsStore,
+                                 activeTeam: activeTeam,
+                                 onReconnect: onReconnect)
                 }
                 .sheet(isPresented: $showInvite) {
                     MemberInviteSheet(store: store)

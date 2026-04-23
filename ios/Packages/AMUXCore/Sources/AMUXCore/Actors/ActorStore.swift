@@ -73,4 +73,17 @@ public final class ActorStore {
             errorMessage = error.localizedDescription
         }
     }
+
+    /// Returns true on success. On failure the error message is set on the store.
+    @discardableResult
+    public func removeActor(actorID: String) async -> Bool {
+        do {
+            try await repository.removeActor(actorID: actorID)
+            await reload()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
 }

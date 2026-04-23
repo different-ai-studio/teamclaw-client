@@ -12,8 +12,16 @@ pub struct WorkspaceStore {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredWorkspace {
     pub workspace_id: String,
+    #[serde(default)]
+    pub supabase_workspace_id: String,
     pub path: String,
     pub display_name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AddWorkspaceOutcome {
+    pub workspace: StoredWorkspace,
+    pub inserted: bool,
 }
 
 impl WorkspaceStore {
@@ -41,7 +49,7 @@ impl WorkspaceStore {
         Ok(())
     }
 
-    pub fn add(&mut self, dir_path: &str) -> crate::error::Result<StoredWorkspace> {
+    pub fn add(&mut self, dir_path: &str) -> crate::error::Result<AddWorkspaceOutcome> {
         let p = Path::new(dir_path);
         if !p.is_dir() {
             return Err(crate::error::AmuxError::Config(format!(
@@ -57,7 +65,10 @@ impl WorkspaceStore {
         let canonical_str = canonical.to_string_lossy().to_string();
 
         if let Some(existing) = self.workspaces.iter().find(|w| w.path == canonical_str) {
-            return Ok(existing.clone());
+            return Ok(AddWorkspaceOutcome {
+                workspace: existing.clone(),
+                inserted: false,
+            });
         }
 
         let display_name = canonical
@@ -73,11 +84,15 @@ impl WorkspaceStore {
 
         let workspace = StoredWorkspace {
             workspace_id,
+            supabase_workspace_id: String::new(),
             path: canonical_str,
             display_name,
         };
         self.workspaces.push(workspace.clone());
-        Ok(workspace)
+        Ok(AddWorkspaceOutcome {
+            workspace,
+            inserted: true,
+        })
     }
 
     pub fn remove(&mut self, workspace_id: &str) -> bool {
@@ -102,5 +117,24 @@ impl WorkspaceStore {
                 })
                 .collect(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WorkspaceStore;
+
+    #[test]
+    fn add_reports_when_workspace_was_inserted() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = WorkspaceStore { workspaces: vec![] };
+
+        let first = store.add(dir.path().to_str().unwrap()).unwrap();
+        let second = store.add(dir.path().to_str().unwrap()).unwrap();
+
+        assert!(first.inserted);
+        assert!(!second.inserted);
+        assert_eq!(first.workspace.path, second.workspace.path);
+        assert_eq!(store.workspaces.len(), 1);
     }
 }

@@ -14,6 +14,8 @@ pub struct StoredSession {
     pub session_id: String,
     #[serde(default)]
     pub acp_session_id: String,
+    #[serde(default)]
+    pub collab_session_id: String,
     pub agent_type: i32,
     pub workspace_id: String,
     pub worktree: String,

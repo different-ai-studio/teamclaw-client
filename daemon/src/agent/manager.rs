@@ -50,10 +50,13 @@ impl AgentManager {
         worktree: &str,
         prompt: &str,
         workspace_id: &str,
+        supabase_workspace_id: Option<&str>,
+        supabase_session_id: Option<&str>,
     ) -> crate::error::Result<String> {
         let agent_id = Uuid::new_v4().to_string()[..8].to_string();
         let mut handle = AgentHandle::new(agent_id.clone(), agent_type, worktree.into(), workspace_id.into());
         handle.current_prompt = prompt.into();
+        handle.collab_session_id = supabase_session_id.unwrap_or_default().to_string();
 
         let (initial_model_tx, initial_model_rx) = tokio::sync::oneshot::channel::<Option<String>>();
         let (acp_session_id_tx, acp_session_id_rx) = tokio::sync::oneshot::channel::<String>();
@@ -97,8 +100,8 @@ impl AgentManager {
             let row = AgentRuntimeUpsert {
                 team_id: &sb.config().team_id,
                 agent_id: &sb.config().actor_id,
-                session_id: None,
-                workspace_id: if workspace_id.is_empty() { None } else { Some(workspace_id) },
+                session_id: supabase_session_id,
+                workspace_id: supabase_workspace_id,
                 backend_type: "claude",
                 backend_session_id: if acp_sid.is_empty() { None } else { Some(&acp_sid) },
                 status: "starting",
@@ -120,6 +123,8 @@ impl AgentManager {
         agent_type: amux::AgentType,
         worktree: &str,
         workspace_id: &str,
+        supabase_workspace_id: Option<&str>,
+        supabase_session_id: Option<&str>,
         prompt: &str,
     ) -> crate::error::Result<String> {
         let mut handle = AgentHandle::new(
@@ -128,6 +133,7 @@ impl AgentManager {
             worktree.into(),
             workspace_id.into(),
         );
+        handle.collab_session_id = supabase_session_id.unwrap_or_default().to_string();
 
         let (initial_model_tx, initial_model_rx) = tokio::sync::oneshot::channel::<Option<String>>();
         let (acp_session_id_tx, acp_session_id_rx) = tokio::sync::oneshot::channel::<String>();
@@ -169,8 +175,8 @@ impl AgentManager {
             let row = AgentRuntimeUpsert {
                 team_id: &sb.config().team_id,
                 agent_id: &sb.config().actor_id,
-                session_id: None,
-                workspace_id: if workspace_id.is_empty() { None } else { Some(workspace_id) },
+                session_id: supabase_session_id,
+                workspace_id: supabase_workspace_id,
                 backend_type: "claude",
                 backend_session_id: if new_acp_sid.is_empty() { None } else { Some(&new_acp_sid) },
                 status: "starting",

@@ -219,6 +219,11 @@ public struct Amux_CommandEnvelope: Sendable {
 
   public var timestamp: Int64 = 0
 
+  /// Supabase `actors.id` of the iOS user sending this command. The daemon
+  /// uses it to look up `agent_member_access.permission_level` instead of
+  /// the legacy MQTT token-derived role.
+  public var senderActorID: String = String()
+
   /// Agent command (maps to ACP request)
   public var acpCommand: Amux_AcpCommand {
     get {_acpCommand ?? Amux_AcpCommand()}
@@ -249,6 +254,9 @@ public struct Amux_DeviceCommandEnvelope: Sendable {
   public var commandID: String = String()
 
   public var timestamp: Int64 = 0
+
+  /// Same Supabase actor id as `CommandEnvelope.sender_actor_id`.
+  public var senderActorID: String = String()
 
   public var command: Amux_DeviceCollabCommand {
     get {_command ?? Amux_DeviceCollabCommand()}
@@ -707,6 +715,12 @@ public struct Amux_AcpStartAgent: Sendable {
   public var initialPrompt: String = String()
 
   public var workspaceID: String = String()
+
+  /// Supabase sessions.id the spawned agent should be bound to. iOS sets
+  /// this after `create_session` succeeds so daemon's agent_runtimes upsert
+  /// carries the right linkage. Empty for legacy bare-agent spawns that
+  /// live without a Supabase session.
+  public var sessionID: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1547,7 +1561,7 @@ extension Amux_Envelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
 
 extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CommandEnvelope"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agent_id\0\u{3}device_id\0\u{3}peer_id\0\u{3}command_id\0\u{1}timestamp\0\u{4}\u{5}acp_command\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agent_id\0\u{3}device_id\0\u{3}peer_id\0\u{3}command_id\0\u{1}timestamp\0\u{3}sender_actor_id\0\u{4}\u{4}acp_command\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1560,6 +1574,7 @@ extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 3: try { try decoder.decodeSingularStringField(value: &self.peerID) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.commandID) }()
       case 5: try { try decoder.decodeSingularInt64Field(value: &self.timestamp) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.senderActorID) }()
       case 10: try { try decoder.decodeSingularMessageField(value: &self._acpCommand) }()
       default: break
       }
@@ -1586,6 +1601,9 @@ extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if self.timestamp != 0 {
       try visitor.visitSingularInt64Field(value: self.timestamp, fieldNumber: 5)
     }
+    if !self.senderActorID.isEmpty {
+      try visitor.visitSingularStringField(value: self.senderActorID, fieldNumber: 6)
+    }
     try { if let v = self._acpCommand {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
     } }()
@@ -1598,6 +1616,7 @@ extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.peerID != rhs.peerID {return false}
     if lhs.commandID != rhs.commandID {return false}
     if lhs.timestamp != rhs.timestamp {return false}
+    if lhs.senderActorID != rhs.senderActorID {return false}
     if lhs._acpCommand != rhs._acpCommand {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -1606,7 +1625,7 @@ extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
 
 extension Amux_DeviceCommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeviceCommandEnvelope"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}device_id\0\u{3}peer_id\0\u{3}command_id\0\u{1}timestamp\0\u{2}\u{6}command\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}device_id\0\u{3}peer_id\0\u{3}command_id\0\u{1}timestamp\0\u{3}sender_actor_id\0\u{2}\u{5}command\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1618,6 +1637,7 @@ extension Amux_DeviceCommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._Mess
       case 2: try { try decoder.decodeSingularStringField(value: &self.peerID) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.commandID) }()
       case 4: try { try decoder.decodeSingularInt64Field(value: &self.timestamp) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.senderActorID) }()
       case 10: try { try decoder.decodeSingularMessageField(value: &self._command) }()
       default: break
       }
@@ -1641,6 +1661,9 @@ extension Amux_DeviceCommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._Mess
     if self.timestamp != 0 {
       try visitor.visitSingularInt64Field(value: self.timestamp, fieldNumber: 4)
     }
+    if !self.senderActorID.isEmpty {
+      try visitor.visitSingularStringField(value: self.senderActorID, fieldNumber: 5)
+    }
     try { if let v = self._command {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
     } }()
@@ -1652,6 +1675,7 @@ extension Amux_DeviceCommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._Mess
     if lhs.peerID != rhs.peerID {return false}
     if lhs.commandID != rhs.commandID {return false}
     if lhs.timestamp != rhs.timestamp {return false}
+    if lhs.senderActorID != rhs.senderActorID {return false}
     if lhs._command != rhs._command {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -2574,7 +2598,7 @@ extension Amux_AcpDenyPermission: SwiftProtobuf.Message, SwiftProtobuf._MessageI
 
 extension Amux_AcpStartAgent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AcpStartAgent"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agent_type\0\u{1}worktree\0\u{3}initial_prompt\0\u{3}workspace_id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agent_type\0\u{1}worktree\0\u{3}initial_prompt\0\u{3}workspace_id\0\u{3}session_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2586,6 +2610,7 @@ extension Amux_AcpStartAgent: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       case 2: try { try decoder.decodeSingularStringField(value: &self.worktree) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.initialPrompt) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.workspaceID) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
       default: break
       }
     }
@@ -2604,6 +2629,9 @@ extension Amux_AcpStartAgent: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if !self.workspaceID.isEmpty {
       try visitor.visitSingularStringField(value: self.workspaceID, fieldNumber: 4)
     }
+    if !self.sessionID.isEmpty {
+      try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2612,6 +2640,7 @@ extension Amux_AcpStartAgent: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if lhs.worktree != rhs.worktree {return false}
     if lhs.initialPrompt != rhs.initialPrompt {return false}
     if lhs.workspaceID != rhs.workspaceID {return false}
+    if lhs.sessionID != rhs.sessionID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

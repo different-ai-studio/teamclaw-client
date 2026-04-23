@@ -12,31 +12,30 @@ mod supabase;
 mod teamclaw;
 
 use clap::Parser;
-use cli::{Cli, Commands, MemberAction, TestClientAction};
+use cli::{Cli, Commands, TestClientAction};
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Init { join_url } => {
-            if let Some(url) = join_url {
-                let rt = tokio::runtime::Runtime::new()?;
-                let outcome = rt.block_on(onboarding::init::run(&url, None))?;
-                println!(
-                    "Daemon onboarded. actor_id={} team_id={} display_name={} config={}",
-                    outcome.actor_id,
-                    outcome.team_id,
-                    outcome.display_name,
-                    outcome.config_path.display()
-                );
-            } else {
-                cli::init::run_init()?;
-            }
+            let url = match join_url {
+                Some(u) => u,
+                None => prompt_for_invite_url()?,
+            };
+            let rt = tokio::runtime::Runtime::new()?;
+            let outcome = rt.block_on(onboarding::init::run(&url, None))?;
+            println!(
+                "\n✓ Daemon onboarded.\n  actor_id      = {}\n  team_id       = {}\n  display_name  = {}\n  supabase.toml = {}\n\nNext: `amuxd start`",
+                outcome.actor_id,
+                outcome.team_id,
+                outcome.display_name,
+                outcome.config_path.display()
+            );
         }
-        Commands::Members { action } => match action.unwrap_or(MemberAction::List) {
-            MemberAction::List => cli::members::run_list()?,
-            MemberAction::Remove { member_id } => cli::members::run_remove(&member_id)?,
-        },
+        Commands::Clear { force } => {
+            cli::clear::run(force)?;
+        }
         Commands::Start { daemonize: _, config } => {
             tracing_subscriber::fmt()
                 .with_env_filter(
@@ -48,17 +47,26 @@ fn main() -> anyhow::Result<()> {
             let config_path = config.unwrap_or_else(config::DaemonConfig::default_path);
             let daemon_config = config::DaemonConfig::load(&config_path)?;
 
+            cli::process::write_pidfile()?;
+            let _pid_guard = PidfileGuard;
+
             let rt = tokio::runtime::Runtime::new()?;
             rt.block_on(async {
                 let server = daemon::DaemonServer::new(daemon_config, &config_path)?;
-                server.run().await
+                tokio::select! {
+                    res = server.run() => res,
+                    _ = shutdown_signal() => {
+                        tracing::info!("shutdown signal received");
+                        Ok(())
+                    }
+                }
             })?;
         }
         Commands::Stop => {
-            println!("Not yet implemented (requires pidfile)");
+            cli::process::run_stop()?;
         }
         Commands::Status => {
-            println!("Not yet implemented (requires running daemon)");
+            cli::process::run_status()?;
         }
         Commands::TestSpawn { prompt, worktree } => {
             tracing_subscriber::fmt()
@@ -153,4 +161,52 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// RAII guard: removes the pidfile when the daemon's main scope exits
+/// (either from a clean shutdown or a panic that unwinds main).
+struct PidfileGuard;
+impl Drop for PidfileGuard {
+    fn drop(&mut self) {
+        cli::process::remove_pidfile();
+    }
+}
+
+async fn shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut term = signal(SignalKind::terminate()).expect("install SIGTERM handler");
+    let mut int  = signal(SignalKind::interrupt()).expect("install SIGINT handler");
+    tokio::select! {
+        _ = term.recv() => {},
+        _ = int.recv()  => {},
+    }
+}
+
+/// Print onboarding instructions and block on stdin for the deeplink the
+/// user copies from the iOS app's Actors tab.
+fn prompt_for_invite_url() -> anyhow::Result<String> {
+    use std::io::{BufRead, Write};
+
+    println!("amuxd onboarding — register this daemon as an agent on your Supabase team.");
+    println!();
+    println!("  1. Install the AMUX iOS app and sign in.");
+    println!("  2. Create a team (if you haven't already).");
+    println!("  3. Open the Actors tab → tap the + icon in the top right.");
+    println!("  4. Pick kind = Agent, set a display name, tap Confirm.");
+    println!("  5. Copy the generated `amux://invite?...` deeplink.");
+    println!();
+    print!("Paste the deeplink here (or Ctrl-C to abort): ");
+    std::io::stdout().flush()?;
+
+    let stdin = std::io::stdin();
+    let mut line = String::new();
+    stdin.lock().read_line(&mut line)?;
+    let trimmed: String = line
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    if trimmed.is_empty() {
+        anyhow::bail!("no deeplink provided");
+    }
+    Ok(trimmed)
 }

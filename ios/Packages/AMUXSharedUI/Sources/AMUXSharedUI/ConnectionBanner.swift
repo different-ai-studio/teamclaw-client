@@ -1,15 +1,14 @@
 import SwiftUI
 import AMUXCore
 
-/// Stateless top-edge banner that reflects MQTT connection + daemon
-/// liveness. Hosted by platform shells (iOS `ConnectionBannerOverlay`,
-/// Mac `MainWindowView`). `.hidden` collapses the banner to `EmptyView`.
+/// Stateless top-edge banner that reflects MQTT transport state only.
+/// Hosted by platform shells (iOS `ConnectionBannerOverlay`, Mac
+/// `MainWindowView`). `.hidden` collapses the banner to `EmptyView`.
 public struct ConnectionBanner: View {
     public enum State: Equatable {
         case hidden
         case reconnecting
         case disconnected
-        case daemonOffline
     }
 
     let state: State
@@ -31,8 +30,6 @@ public struct ConnectionBanner: View {
                 banner(icon: "bolt.slash.fill", text: "Not Connected \u{00B7} Click to reconnect", color: .red)
             }
             .buttonStyle(.plain)
-        case .daemonOffline:
-            banner(icon: "desktopcomputer", text: "Daemon Offline", color: .orange)
         }
     }
 
@@ -50,14 +47,14 @@ public struct ConnectionBanner: View {
 }
 
 public extension ConnectionBanner.State {
-    /// Maps MQTT + daemon-online state into a single banner state. Reconnecting
-    /// trumps daemon-offline; daemon-offline only shows when MQTT is otherwise
-    /// healthy.
-    static func from(connectionState: ConnectionState, daemonOnline: Bool) -> Self {
+    /// Maps MQTT transport state into a banner state. Nothing is shown when
+    /// we're fully connected — agent availability is surfaced via the Actors
+    /// tab and Settings, not this banner.
+    static func from(connectionState: ConnectionState) -> Self {
         switch connectionState {
         case .reconnecting, .connecting: return .reconnecting
         case .disconnected: return .disconnected
-        case .connected: return daemonOnline ? .hidden : .daemonOffline
+        case .connected: return .hidden
         }
     }
 }

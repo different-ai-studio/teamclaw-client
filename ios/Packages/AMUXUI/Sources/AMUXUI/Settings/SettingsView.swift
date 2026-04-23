@@ -1,22 +1,36 @@
 import SwiftUI
+import UIKit
 import AMUXCore
 import AMUXSharedUI
 
 public struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     let pairing: PairingManager
-    let connectionMonitor: ConnectionMonitor
-    let mqtt: MQTTService
-    let sessionViewModel: SessionListViewModel
+    let connectedAgentsStore: ConnectedAgentsStore?
+    let activeTeam: TeamSummary?
+    let onReconnect: (() -> Void)?
+
+    @State private var mqttHost: String = ""
+    @State private var mqttUser: String = ""
+    @State private var mqttPass: String = ""
+    @State private var daemonDeviceID: String = ""
+    @State private var saveError: String?
+
+    @State private var supaURL: String = ""
+    @State private var supaKey: String = ""
+    @State private var supaSaved: Bool = false
+
+    @State private var teamDetails: TeamDetails?
+    @State private var teamLoadError: String?
 
     public init(pairing: PairingManager,
-                connectionMonitor: ConnectionMonitor,
-                mqtt: MQTTService,
-                sessionViewModel: SessionListViewModel) {
+                connectedAgentsStore: ConnectedAgentsStore?,
+                activeTeam: TeamSummary? = nil,
+                onReconnect: (() -> Void)? = nil) {
         self.pairing = pairing
-        self.connectionMonitor = connectionMonitor
-        self.mqtt = mqtt
-        self.sessionViewModel = sessionViewModel
+        self.connectedAgentsStore = connectedAgentsStore
+        self.activeTeam = activeTeam
+        self.onReconnect = onReconnect
     }
 
     private var appVersion: String {
@@ -27,51 +41,122 @@ public struct SettingsView: View {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
 
-    private var currentWorkspaceName: String? {
-        sessionViewModel.workspaces.first?.displayName
+    private var hasMQTTChanges: Bool {
+        mqttHost != pairing.brokerHost ||
+        mqttUser != pairing.username ||
+        mqttPass != pairing.password ||
+        daemonDeviceID != pairing.deviceId
+    }
+
+    private var hasSupabaseChanges: Bool {
+        supaURL != SupabaseServerStore.currentURL() ||
+        supaKey != SupabaseServerStore.currentKey()
     }
 
     public var body: some View {
         NavigationStack {
             List {
-                Section("Workspace") {
-                    NavigationLink {
-                        WorkspaceManagementView(mqtt: mqtt,
-                                                deviceId: pairing.deviceId,
-                                                peerId: "ios-\(pairing.authToken.prefix(6))",
-                                                viewModel: sessionViewModel)
-                    } label: {
+                Section("Team") {
+                    if let details = teamDetails {
+                        LabeledContent("Name", value: details.name)
+                        LabeledContent("Owner", value: details.ownerDisplayName ?? "—")
+                        LabeledContent(
+                            "Created",
+                            value: details.createdAt.formatted(date: .abbreviated, time: .shortened)
+                        )
                         HStack {
-                            Image(systemName: "folder")
-                            Text("Workspaces")
+                            Text("ID")
                             Spacer()
-                            if let name = currentWorkspaceName {
-                                Text(name)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
+                            Text(details.id)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
                         }
+                    } else if activeTeam == nil {
+                        Text("No team selected.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else if let err = teamLoadError {
+                        Text(err).font(.footnote).foregroundStyle(.red)
+                    } else {
+                        ProgressView().frame(maxWidth: .infinity)
                     }
                 }
 
-                Section("Connection") {
-                    HStack { Text("Daemon"); Spacer(); ConnectionStatusBadge(isOnline: connectionMonitor.daemonOnline, deviceName: connectionMonitor.deviceName) }
-                    HStack { Text("Broker"); Spacer(); Text(pairing.brokerHost).foregroundStyle(.secondary) }
+                Section("MQTT Server") {
+                    LabeledField(label: "Host", text: $mqttHost, placeholder: "ai.ucar.cc")
+                    LabeledField(label: "Username", text: $mqttUser, placeholder: "teamclaw")
+                    LabeledSecureField(label: "Password", text: $mqttPass)
+                    LabeledField(label: "Device ID", text: $daemonDeviceID, placeholder: "mac-mini-4")
+
+                    if let err = saveError {
+                        Text(err).font(.footnote).foregroundStyle(.red)
+                    }
+
                     Button {
-                        UIPasteboard.general.string = pairing.deviceId
+                        save()
                     } label: {
-                        HStack {
-                            Text("Device ID").foregroundStyle(.primary)
-                            Spacer()
-                            Text(String(pairing.deviceId.prefix(12)) + "...")
-                                .foregroundStyle(.secondary)
-                                .font(.caption.monospaced())
-                            Image(systemName: "doc.on.doc")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        Text("Save & Reconnect")
+                            .font(.body.weight(.medium))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!hasMQTTChanges || mqttHost.isEmpty)
+                }
+
+                Section {
+                    LabeledField(label: "URL", text: $supaURL,
+                                 placeholder: "https://<ref>.supabase.co")
+                    LabeledSecureField(label: "Key", text: $supaKey)
+
+                    if supaSaved {
+                        Text("Saved. Relaunch the app to apply.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button {
+                        SupabaseServerStore.save(url: supaURL, key: supaKey)
+                        supaSaved = true
+                    } label: {
+                        Text("Save")
+                            .font(.body.weight(.medium))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!hasSupabaseChanges || supaURL.isEmpty || supaKey.isEmpty)
+                } header: {
+                    Text("Supabase Server")
+                }
+
+                Section("Connected Agents") {
+                    if let store = connectedAgentsStore {
+                        if store.agents.isEmpty && !store.isLoading {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("No agents connected to you yet.")
+                                    .font(.body.weight(.medium))
+                                Text("Ask a teammate with admin access to authorize one, or invite a new daemon from the Actors tab.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 4)
+                        } else {
+                            ForEach(store.agents) { agent in
+                                AgentRow(agent: agent)
+                            }
                         }
+                        if let err = store.errorMessage {
+                            Text(err).font(.footnote).foregroundStyle(.red)
+                        }
+                    } else {
+                        Text("Agent list unavailable.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                 }
+
                 Section("About") {
                     HStack {
                         Text("Version")
@@ -81,23 +166,26 @@ public struct SettingsView: View {
                             .font(.caption.monospaced())
                     }
                 }
-                Section {
-                    Button {
-                        try? pairing.unpair(); dismiss()
-                    } label: {
-                        Text("Unpair Device")
-                            .font(.body).fontWeight(.medium)
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .liquidGlass(in: Capsule(), tint: .red)
-                    }
-                    .buttonStyle(.plain)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                }
             }
             .navigationTitle("Settings").navigationBarTitleDisplayMode(.large)
+            .task {
+                mqttHost = pairing.brokerHost
+                mqttUser = pairing.username
+                mqttPass = pairing.password
+                // Default the device-id field to this iOS device's
+                // `identifierForVendor` the first time around; user is free
+                // to override (e.g. paste a daemon UUID).
+                if pairing.deviceId.isEmpty {
+                    daemonDeviceID = UIDevice.current.identifierForVendor?.uuidString ?? ""
+                } else {
+                    daemonDeviceID = pairing.deviceId
+                }
+                supaURL = SupabaseServerStore.currentURL()
+                supaKey = SupabaseServerStore.currentKey()
+                await loadTeam()
+                await connectedAgentsStore?.reload()
+            }
+            .refreshable { await connectedAgentsStore?.reload() }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { dismiss() } label: {
@@ -108,6 +196,89 @@ public struct SettingsView: View {
                     .buttonStyle(.plain)
                 }
             }
+        }
+    }
+
+    private func save() {
+        do {
+            try pairing.updateMQTTServer(host: mqttHost, username: mqttUser, password: mqttPass)
+            try pairing.updateDaemonDeviceID(daemonDeviceID)
+            saveError = nil
+            onReconnect?()
+            dismiss()
+        } catch {
+            saveError = error.localizedDescription
+        }
+    }
+
+    private func loadTeam() async {
+        guard let team = activeTeam else { return }
+        do {
+            let repo = try SupabaseTeamRepository()
+            teamDetails = try await repo.loadDetails(teamID: team.id)
+            teamLoadError = nil
+        } catch {
+            teamLoadError = error.localizedDescription
+        }
+    }
+}
+
+private struct LabeledField: View {
+    let label: String
+    @Binding var text: String
+    var placeholder: String = ""
+
+    var body: some View {
+        HStack {
+            Text(label).frame(width: 80, alignment: .leading)
+            TextField(placeholder, text: $text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .multilineTextAlignment(.trailing)
+        }
+    }
+}
+
+private struct LabeledSecureField: View {
+    let label: String
+    @Binding var text: String
+
+    var body: some View {
+        HStack {
+            Text(label).frame(width: 80, alignment: .leading)
+            SecureField("", text: $text)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+}
+
+private struct AgentRow: View {
+    let agent: ConnectedAgent
+
+    private var statusColor: Color { agent.isOnline ? .green : .secondary }
+    private var statusText: String { agent.isOnline ? "Online" : "Offline" }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(agent.displayName).font(.body.weight(.medium))
+                HStack(spacing: 6) {
+                    if !agent.agentKind.isEmpty {
+                        Text(agent.agentKind)
+                    }
+                    Text("\u{00B7}")
+                    Text(agent.permissionLevel)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(statusText)
+                .font(.caption)
+                .foregroundStyle(statusColor)
         }
     }
 }

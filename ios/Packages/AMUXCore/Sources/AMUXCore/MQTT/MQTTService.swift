@@ -104,12 +104,18 @@ public final class MQTTService: NSObject, @unchecked Sendable {
     }
 
     public func subscribe(_ topic: String) async throws {
-        mqtt?.subscribe(topic, qos: .qos1)
+        guard let mqtt, connectionState == .connected else {
+            throw MQTTConnectionError.notConnected
+        }
+        mqtt.subscribe(topic, qos: .qos1)
     }
 
     public func publish(topic: String, payload: Data, retain: Bool = false) async throws {
+        guard let mqtt, connectionState == .connected else {
+            throw MQTTConnectionError.notConnected
+        }
         let message = CocoaMQTTMessage(topic: topic, payload: [UInt8](payload), qos: .qos1, retained: retain)
-        mqtt?.publish(message)
+        mqtt.publish(message)
     }
 
     public func messages() -> AsyncStream<MQTTIncoming> {
@@ -153,10 +159,12 @@ public final class MQTTService: NSObject, @unchecked Sendable {
     enum MQTTConnectionError: Error, LocalizedError {
         case connectFailed
         case timeout
+        case notConnected
         var errorDescription: String? {
             switch self {
             case .connectFailed: "MQTT connection initiation failed"
             case .timeout: "MQTT connection timed out"
+            case .notConnected: "MQTT is not connected"
             }
         }
     }

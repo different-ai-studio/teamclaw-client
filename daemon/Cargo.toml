@@ -30,15 +30,13 @@ toml = "0.8"
 dirs = "6"
 
 # Utilities
+libc = "0.2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 thiserror = "2"
-
-# QR code generation
-qrcode = "0.14"
 
 # TLS (match rumqttc 0.24's rustls version)
 rustls = "0.22"

@@ -1,7 +1,14 @@
-use crate::onboarding::invite_url;
+use crate::config::{
+    AgentsConfig, DaemonConfig, DeviceConfig, MqttConfig,
+};
+use crate::onboarding::invite_url::{self, ParsedInvite};
 use crate::supabase::error::SupabaseResult;
 use crate::supabase::{SupabaseClient, SupabaseConfig, SUPABASE_ANON_KEY, SUPABASE_URL};
 use std::path::{Path, PathBuf};
+
+const DEFAULT_MQTT_BROKER_URL: &str = "mqtts://ai.ucar.cc:8883";
+const DEFAULT_MQTT_USERNAME: &str = "teamclaw";
+const DEFAULT_MQTT_PASSWORD: &str = "teamclaw2026";
 
 pub struct InitOutcome {
     pub actor_id: String,
@@ -12,9 +19,11 @@ pub struct InitOutcome {
 
 /// Execute `amuxd init <amux://invite?token=...>`:
 ///  1. parse token
-///  2. anon-RPC claim_team_invite → mint daemon auth.users + refresh_token
+///  2. anon-RPC `claim_team_invite` → mint daemon auth.users + refresh_token
 ///  3. verify by trading refresh_token for an access_token
-///  4. persist config to disk
+///  4. persist `supabase.toml`
+///  5. write `daemon.toml` with the shared-broker defaults if absent, or
+///     preserve the existing one's device.id while refreshing team_id
 pub async fn run(raw_url: &str, config_path: Option<&Path>) -> SupabaseResult<InitOutcome> {
     let invite = invite_url::parse(raw_url)?;
 
@@ -43,7 +52,6 @@ pub async fn run(raw_url: &str, config_path: Option<&Path>) -> SupabaseResult<In
         actor_id: claim.actor_id.clone(),
     };
 
-    // Smoke-verify the refresh token
     let verify_client = SupabaseClient::new(cfg.clone())?;
     verify_client.access_token().await?;
 
@@ -53,10 +61,142 @@ pub async fn run(raw_url: &str, config_path: Option<&Path>) -> SupabaseResult<In
     };
     cfg.save(&path)?;
 
+    let daemon_path = DaemonConfig::default_path();
+    let existing_daemon_cfg = DaemonConfig::load(&daemon_path).ok();
+    let daemon_cfg = daemon_config_for_invite(
+        existing_daemon_cfg,
+        &claim.display_name,
+        &claim.team_id,
+        &invite,
+    );
+    daemon_cfg.save(&daemon_path).map_err(|e| {
+        crate::supabase::error::SupabaseError::Config(format!("write daemon.toml: {e}"))
+    })?;
+
     Ok(InitOutcome {
         actor_id: claim.actor_id,
         team_id: claim.team_id,
         display_name: claim.display_name,
         config_path: path,
     })
+}
+
+fn default_daemon_config(display_name: &str) -> DaemonConfig {
+    DaemonConfig {
+        device: DeviceConfig {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: display_name.to_string(),
+        },
+        mqtt: MqttConfig {
+            broker_url: DEFAULT_MQTT_BROKER_URL.to_string(),
+            username: DEFAULT_MQTT_USERNAME.to_string(),
+            password: DEFAULT_MQTT_PASSWORD.to_string(),
+        },
+        agents: AgentsConfig::default(),
+        team_id: None,
+        is_team_host: None,
+        team_host_device_id: None,
+    }
+}
+
+fn daemon_config_for_invite(
+    existing: Option<DaemonConfig>,
+    display_name: &str,
+    team_id: &str,
+    invite: &ParsedInvite,
+) -> DaemonConfig {
+    let mut daemon_cfg = existing.unwrap_or_else(|| default_daemon_config(display_name));
+    daemon_cfg.team_id = Some(team_id.to_string());
+    daemon_cfg.mqtt.broker_url = invite
+        .broker_url
+        .clone()
+        .unwrap_or_else(|| DEFAULT_MQTT_BROKER_URL.to_string());
+    daemon_cfg.mqtt.username = invite
+        .username
+        .clone()
+        .unwrap_or_else(|| DEFAULT_MQTT_USERNAME.to_string());
+    daemon_cfg.mqtt.password = invite
+        .password
+        .clone()
+        .unwrap_or_else(|| DEFAULT_MQTT_PASSWORD.to_string());
+    daemon_cfg
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invite_mqtt_settings_override_defaults() {
+        let cfg = daemon_config_for_invite(
+            None,
+            "macmini-5",
+            "team-1",
+            &ParsedInvite {
+                token: "tok".into(),
+                broker_url: Some("mqtts://broker.example.com:8883".into()),
+                username: Some("alice".into()),
+                password: Some("secret".into()),
+            },
+        );
+
+        assert_eq!(cfg.team_id.as_deref(), Some("team-1"));
+        assert_eq!(cfg.device.name, "macmini-5");
+        assert_eq!(cfg.mqtt.broker_url, "mqtts://broker.example.com:8883");
+        assert_eq!(cfg.mqtt.username, "alice");
+        assert_eq!(cfg.mqtt.password, "secret");
+    }
+
+    #[test]
+    fn legacy_invite_uses_default_mqtt_settings() {
+        let cfg = daemon_config_for_invite(
+            None,
+            "macmini-5",
+            "team-1",
+            &ParsedInvite {
+                token: "tok".into(),
+                broker_url: None,
+                username: None,
+                password: None,
+            },
+        );
+
+        assert_eq!(cfg.mqtt.broker_url, DEFAULT_MQTT_BROKER_URL);
+        assert_eq!(cfg.mqtt.username, DEFAULT_MQTT_USERNAME);
+        assert_eq!(cfg.mqtt.password, DEFAULT_MQTT_PASSWORD);
+    }
+
+    #[test]
+    fn existing_device_identity_is_preserved() {
+        let cfg = daemon_config_for_invite(
+            Some(DaemonConfig {
+                device: DeviceConfig {
+                    id: "device-123".into(),
+                    name: "existing-device".into(),
+                },
+                mqtt: MqttConfig {
+                    broker_url: "mqtts://old.example.com:8883".into(),
+                    username: "old-user".into(),
+                    password: "old-pass".into(),
+                },
+                agents: AgentsConfig::default(),
+                team_id: Some("team-old".into()),
+                is_team_host: Some(true),
+                team_host_device_id: Some("device-123".into()),
+            }),
+            "new-display-name",
+            "team-2",
+            &ParsedInvite {
+                token: "tok".into(),
+                broker_url: Some("mqtts://broker.example.com:8883".into()),
+                username: Some("alice".into()),
+                password: Some("secret".into()),
+            },
+        );
+
+        assert_eq!(cfg.device.id, "device-123");
+        assert_eq!(cfg.device.name, "existing-device");
+        assert_eq!(cfg.team_id.as_deref(), Some("team-2"));
+        assert_eq!(cfg.mqtt.broker_url, "mqtts://broker.example.com:8883");
+    }
 }

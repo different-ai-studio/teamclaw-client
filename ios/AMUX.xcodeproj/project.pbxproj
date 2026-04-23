@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		15AE54E5F6CE826C9D3884B5 /* AMUXCore in Frameworks */ = {isa = PBXBuildFile; productRef = E240150FE27A7C45F36DE38D /* AMUXCore */; };
 		16C83AF390462FDDFA5ABAEE /* AMUXApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 499D508CBB7FB4FD1F584D9D /* AMUXApp.swift */; };
+		29C3F045A406DBA4AD7D1F32 /* OnboardingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A57443CB6DA7A01B751BBA00 /* OnboardingViews.swift */; };
 		2C36DC72B69CF16E00B4ECB5 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F467BD534BE686B6EACBD702 /* ContentView.swift */; };
 		3203553BEAE4D5D79B881582 /* SentrySwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5821CF422126708735E13341 /* SentrySwiftUI */; };
 		48A4F0655EACAE64B0B0232B /* AMUXUI in Frameworks */ = {isa = PBXBuildFile; productRef = 984FDD5CB983CACB65198166 /* AMUXUI */; };
@@ -23,6 +24,7 @@
 		5A17336F2708FD5E2A0C62C8 /* AMUXSharedUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AMUXSharedUI; path = Packages/AMUXSharedUI; sourceTree = SOURCE_ROOT; };
 		913DCF0E3CEDD1823F52E8D6 /* AMUXUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AMUXUI; path = Packages/AMUXUI; sourceTree = SOURCE_ROOT; };
 		92EC5FA726FD730FCA929AD0 /* AMUX.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AMUX.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A57443CB6DA7A01B751BBA00 /* OnboardingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingViews.swift; sourceTree = "<group>"; };
 		F467BD534BE686B6EACBD702 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		FDEFC0BF7C8A215582AF7257 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -66,6 +68,7 @@
 				25D67C6EB2C2948CCFE684D1 /* Assets.xcassets */,
 				F467BD534BE686B6EACBD702 /* ContentView.swift */,
 				FDEFC0BF7C8A215582AF7257 /* Info.plist */,
+				A57443CB6DA7A01B751BBA00 /* OnboardingViews.swift */,
 			);
 			path = AMUXApp;
 			sourceTree = "<group>";
@@ -163,6 +166,7 @@
 			files = (
 				16C83AF390462FDDFA5ABAEE /* AMUXApp.swift in Sources */,
 				2C36DC72B69CF16E00B4ECB5 /* ContentView.swift in Sources */,
+				29C3F045A406DBA4AD7D1F32 /* OnboardingViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -237,7 +241,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.5;
+				MARKETING_VERSION = 1.0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = tech.teamclaw.mobile;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
@@ -257,7 +261,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.5;
+				MARKETING_VERSION = 1.0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = tech.teamclaw.mobile;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;

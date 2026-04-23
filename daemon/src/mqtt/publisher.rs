@@ -17,12 +17,6 @@ impl<'a> Publisher<'a> {
             .await
     }
 
-    pub async fn publish_member_list(&self, list: &amux::MemberList) -> Result<(), rumqttc::ClientError> {
-        self.client.client
-            .publish(self.client.topics.members(), QoS::AtLeastOnce, true, list.encode_to_vec())
-            .await
-    }
-
     pub async fn publish_agent_event(&self, agent_id: &str, envelope: &amux::Envelope) -> Result<(), rumqttc::ClientError> {
         self.client.client
             .publish(self.client.topics.agent_events(agent_id), QoS::AtLeastOnce, false, envelope.encode_to_vec())

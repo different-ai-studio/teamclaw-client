@@ -6,10 +6,13 @@ use url::Url;
 /// (currently ~32 chars of base64url).
 pub struct ParsedInvite {
     pub token: String,
+    pub broker_url: Option<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
 }
 
-/// Accepts `amux://invite?token=<opaque>`. Previously also accepted url/anon
-/// query params — those are now compile-time constants in the daemon binary.
+/// Accepts `amux://invite?token=<opaque>` and optionally MQTT settings in the
+/// deeplink query string.
 pub fn parse(raw: &str) -> SupabaseResult<ParsedInvite> {
     let url = Url::parse(raw)
         .map_err(|e| SupabaseError::Config(format!("parse invite url: {e}")))?;
@@ -36,7 +39,28 @@ pub fn parse(raw: &str) -> SupabaseResult<ParsedInvite> {
         return Err(SupabaseError::Config("invite token is empty".into()));
     }
 
-    Ok(ParsedInvite { token })
+    let broker_url = url
+        .query_pairs()
+        .find(|(k, _)| k == "broker")
+        .map(|(_, v)| v.into_owned())
+        .filter(|v| !v.is_empty());
+    let username = url
+        .query_pairs()
+        .find(|(k, _)| k == "username")
+        .map(|(_, v)| v.into_owned())
+        .filter(|v| !v.is_empty());
+    let password = url
+        .query_pairs()
+        .find(|(k, _)| k == "password")
+        .map(|(_, v)| v.into_owned())
+        .filter(|v| !v.is_empty());
+
+    Ok(ParsedInvite {
+        token,
+        broker_url,
+        username,
+        password,
+    })
 }
 
 #[cfg(test)]
@@ -47,6 +71,21 @@ mod tests {
     fn parses_valid_invite_url() {
         let p = parse("amux://invite?token=ABCDEF-12345_xyz").unwrap();
         assert_eq!(p.token, "ABCDEF-12345_xyz");
+        assert_eq!(p.broker_url, None);
+        assert_eq!(p.username, None);
+        assert_eq!(p.password, None);
+    }
+
+    #[test]
+    fn parses_invite_with_mqtt_config() {
+        let p = parse(
+            "amux://invite?token=tok-123&broker=mqtts://ai.ucar.cc:8883&username=teamclaw&password=teamclaw2026",
+        )
+        .unwrap();
+        assert_eq!(p.token, "tok-123");
+        assert_eq!(p.broker_url.as_deref(), Some("mqtts://ai.ucar.cc:8883"));
+        assert_eq!(p.username.as_deref(), Some("teamclaw"));
+        assert_eq!(p.password.as_deref(), Some("teamclaw2026"));
     }
 
     #[test]

@@ -77,6 +77,7 @@ public struct MainWindowView: View {
         .overlay(alignment: .top) {
             ConnectionBanner(
                 state: .from(
+                    isPaired: true,
                     connectionState: shared.mqtt?.connectionState ?? .disconnected,
                     daemonOnline: shared.monitor?.daemonOnline ?? true
                 ),

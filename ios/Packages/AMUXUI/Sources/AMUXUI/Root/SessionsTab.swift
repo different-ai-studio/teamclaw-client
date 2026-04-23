@@ -5,9 +5,12 @@ import AMUXCore
 public struct SessionsTab: View {
     let mqtt: MQTTService
     let pairing: PairingManager
-    let connectionMonitor: ConnectionMonitor
     let teamclawService: TeamclawService?
+    let activeTeam: TeamSummary?
+    let currentActorID: String?
     @Bindable var viewModel: SessionListViewModel
+    let connectedAgentsStore: ConnectedAgentsStore?
+    var onReconnect: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
 
@@ -22,16 +25,22 @@ public struct SessionsTab: View {
 
     public init(mqtt: MQTTService,
                 pairing: PairingManager,
-                connectionMonitor: ConnectionMonitor,
                 teamclawService: TeamclawService?,
+                activeTeam: TeamSummary?,
+                currentActorID: String?,
                 viewModel: SessionListViewModel,
-                navigationPath: Binding<[String]>) {
+                navigationPath: Binding<[String]>,
+                connectedAgentsStore: ConnectedAgentsStore? = nil,
+                onReconnect: (() -> Void)? = nil) {
         self.mqtt = mqtt
         self.pairing = pairing
-        self.connectionMonitor = connectionMonitor
         self.teamclawService = teamclawService
+        self.activeTeam = activeTeam
+        self.currentActorID = currentActorID
         self.viewModel = viewModel
         self._navigationPath = navigationPath
+        self.connectedAgentsStore = connectedAgentsStore
+        self.onReconnect = onReconnect
     }
 
     public var body: some View {
@@ -68,11 +77,20 @@ public struct SessionsTab: View {
                         predicate: #Predicate { $0.sessionId == sessionId }
                     )
                     if let session = (try? modelContext.fetch(descriptor))?.first {
-                        AgentDetailView(session: session, mqtt: mqtt,
-                                        deviceId: pairing.deviceId,
-                                        peerId: "ios-\(pairing.authToken.prefix(6))",
-                                        teamclawService: teamclawService,
-                                        navigationPath: $navigationPath)
+                        if session.primaryAgentId == nil || !pairing.isPaired {
+                            SessionView(
+                                session: session,
+                                teamclawService: teamclawService,
+                                currentActorID: currentActorID
+                            )
+                        } else {
+                            AgentDetailView(session: session, mqtt: mqtt,
+                                            deviceId: pairing.deviceId,
+                                            peerId: "ios-\(pairing.authToken.prefix(6))",
+                                            teamclawService: teamclawService,
+                                            navigationPath: $navigationPath,
+                                            connectedAgentsStore: connectedAgentsStore)
+                        }
                     } else {
                         Text("Session not found")
                     }
@@ -81,21 +99,26 @@ public struct SessionsTab: View {
                                     deviceId: pairing.deviceId,
                                     peerId: "ios-\(pairing.authToken.prefix(6))",
                                     allAgentIds: viewModel.agents.map(\.agentId),
-                                    navigationPath: $navigationPath)
+                                    navigationPath: $navigationPath,
+                                    connectedAgentsStore: connectedAgentsStore)
                 } else {
                     Text("Agent not found")
                 }
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView(pairing: pairing,
-                             connectionMonitor: connectionMonitor,
-                             mqtt: mqtt,
-                             sessionViewModel: viewModel)
+                             connectedAgentsStore: connectedAgentsStore,
+                             activeTeam: activeTeam,
+                             onReconnect: onReconnect)
             }
             .sheet(isPresented: $showNewSession) {
                 NewSessionSheet(mqtt: mqtt, deviceId: pairing.deviceId,
                                peerId: "ios-\(pairing.authToken.prefix(6))",
                                teamclawService: teamclawService,
+                               teamID: activeTeam?.id ?? "",
+                               currentActorID: currentActorID,
+                               isAgentAvailable: pairing.isPaired,
+                               connectedAgentsStore: connectedAgentsStore,
                                viewModel: viewModel) { agentId in
                     navigationPath.append(agentId)
                 }

@@ -7,6 +7,7 @@ use super::adapter::AcpCommand;
 pub struct AgentHandle {
     pub agent_id: String,
     pub acp_session_id: String,
+    pub collab_session_id: String,
     pub agent_type: amux::AgentType,
     pub worktree: String,
     pub workspace_id: String,
@@ -30,6 +31,7 @@ impl AgentHandle {
         Self {
             agent_id,
             acp_session_id: String::new(),
+            collab_session_id: String::new(),
             agent_type,
             worktree,
             workspace_id,

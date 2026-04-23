@@ -1,7 +1,6 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
-import PhotosUI
 
 #if os(iOS)
 
@@ -9,333 +8,99 @@ public struct TaskSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let pairing: PairingManager
-    let connectionMonitor: ConnectionMonitor
     let teamclawService: TeamclawService?
 
-    @State private var showCreate = false
-
-    public init(pairing: PairingManager, connectionMonitor: ConnectionMonitor, teamclawService: TeamclawService? = nil) {
+    public init(pairing: PairingManager, teamclawService: TeamclawService? = nil) {
         self.pairing = pairing
-        self.connectionMonitor = connectionMonitor
         self.teamclawService = teamclawService
     }
 
     public var body: some View {
         NavigationStack {
-            TaskListView(pairing: pairing,
-                         connectionMonitor: connectionMonitor,
-                         teamclawService: teamclawService,
-                         showCreate: $showCreate)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button { showCreate = true } label: {
-                            Image(systemName: "plus").font(.title3)
-                        }
+            ContentUnavailableView(
+                "Tasks Live In The Tasks Tab",
+                systemImage: "checklist",
+                description: Text("Use the dedicated Tasks tab for Supabase-backed task management.")
+            )
+            .navigationTitle("Tasks")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark").font(.title3)
                     }
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark").font(.title3)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    .buttonStyle(.plain)
                 }
+            }
         }
-    }
-}
-
-// MARK: - CreateTaskSheet
-
-private struct AttachedImage: Identifiable {
-    let id = UUID()
-    let image: UIImage
-    let fileName: String
-}
-
-/// Downscales a picked image to a preview size suitable for the chip strip.
-/// The original bytes are discarded when the sheet dismisses; storing only
-/// a thumbnail keeps peak memory ≪ 1 MB per chip instead of tens of MB.
-private func downscaleForChip(_ image: UIImage) -> UIImage {
-    let maxDim: CGFloat = 256
-    let size = image.size
-    let scale = min(maxDim / size.width, maxDim / size.height, 1)
-    if scale >= 1 { return image }
-    let newSize = CGSize(width: size.width * scale, height: size.height * scale)
-    let renderer = UIGraphicsImageRenderer(size: newSize)
-    return renderer.image { _ in
-        image.draw(in: CGRect(origin: .zero, size: newSize))
     }
 }
 
 struct CreateTaskSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let teamclawService: TeamclawService?
+
+    @Bindable var taskStore: TaskStore
     let onCreated: () -> Void
 
-    @Query(sort: \Workspace.displayName) private var workspaces: [Workspace]
+    @State private var title = ""
+    @State private var isSaving = false
+    @FocusState private var titleFocused: Bool
 
-    @State private var text = ""
-    @State private var isSending = false
-    @State private var selectedWorkspaceId: String = ""
-    @FocusState private var isFocused: Bool
-
-    @State private var voiceRecorder = VoiceRecorder(contextualStrings: [
-        "AMUX", "agent", "workitem", "claude", "tool", "MQTT", "daemon"
-    ])
-
-    @State private var attachedImages: [AttachedImage] = []
-    @State private var photoPickerItems: [PhotosPickerItem] = []
-
-    private var canSend: Bool {
-        let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return (hasText || !attachedImages.isEmpty) && !isSending
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !isSaving
     }
-
-    private var isRecording: Bool { voiceRecorder.state == .recording }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                workspaceRow
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: $text)
-                        .focused($isFocused)
-                        .disabled(isRecording)
-                        .font(.body)
-                        .scrollContentBackground(.hidden)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                        .overlay(alignment: .topLeading) {
-                            if text.isEmpty && !isRecording {
-                                Text("Describe the task…")
-                                    .foregroundStyle(.tertiary)
-                                    .padding(.horizontal, 21)
-                                    .padding(.top, 20)
-                                    .allowsHitTesting(false)
-                            }
-                        }
-
-                    if isRecording {
-                        voiceBanner
-                    }
+            Form {
+                Section("Title") {
+                    TextField("Ship task", text: $title)
+                        .focused($titleFocused)
+                        .onSubmit { save() }
                 }
 
-                if !attachedImages.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(attachedImages) { chip in
-                                imageChip(chip)
-                            }
-                        }
-                        .padding(.horizontal, 16)
+                if let errorMessage = taskStore.errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
                     }
-                    .frame(height: 76)
                 }
-
-                HStack(spacing: 12) {
-                    Button {
-                        toggleRecording()
-                    } label: {
-                        Image(systemName: isRecording ? "mic.fill" : "mic")
-                            .font(.body)
-                            .foregroundStyle(isRecording ? .red : .primary)
-                            .frame(width: 40, height: 40)
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .liquidGlass(in: Circle())
-
-                    PhotosPicker(selection: $photoPickerItems, maxSelectionCount: 5, matching: .images) {
-                        Image(systemName: "photo.on.rectangle")
-                            .font(.body)
-                            .foregroundStyle(.primary)
-                            .frame(width: 40, height: 40)
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .liquidGlass(in: Circle())
-
-                    Spacer()
-
-                    Button {
-                        send()
-                    } label: {
-                        if isSending {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.up")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(.primary)
-                                .frame(width: 40, height: 40)
-                                .contentShape(Circle())
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .liquidGlass(in: Circle())
-                    .disabled(!canSend)
-                    .opacity(canSend ? 1 : 0.4)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
             }
             .navigationTitle("New Task")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button { dismiss() } label: {
-                        Image(systemName: "xmark").font(.title3).foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .onAppear {
-                isFocused = true
-                if selectedWorkspaceId.isEmpty, workspaces.count == 1 {
-                    selectedWorkspaceId = workspaces[0].workspaceId
-                }
-            }
-            .onChange(of: photoPickerItems) { _, newItems in
-                Task {
-                    // Load all selections into a local buffer, then append
-                    // atomically on the main actor. Prevents out-of-order
-                    // interleaving if the picker is reopened rapidly.
-                    var loaded: [AttachedImage] = []
-                    for item in newItems {
-                        guard let data = try? await item.loadTransferable(type: Data.self),
-                              let img = UIImage(data: data) else { continue }
-                        let thumb = downscaleForChip(img)
-                        let name = "img-\(UUID().uuidString.prefix(6).lowercased()).png"
-                        loaded.append(AttachedImage(image: thumb, fileName: name))
-                    }
-                    await MainActor.run {
-                        attachedImages.append(contentsOf: loaded)
-                        photoPickerItems.removeAll()
+                        Image(systemName: "xmark")
                     }
                 }
-            }
-        }
-    }
-
-    private var workspaceRow: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Text("Workspace")
-                .foregroundStyle(.secondary)
-            Spacer()
-            Menu {
-                Button {
-                    selectedWorkspaceId = ""
-                } label: {
-                    Label("None", systemImage: selectedWorkspaceId.isEmpty ? "checkmark" : "circle")
-                }
-                if !workspaces.isEmpty {
-                    Divider()
-                    ForEach(workspaces, id: \.workspaceId) { workspace in
-                        Button {
-                            selectedWorkspaceId = workspace.workspaceId
-                        } label: {
-                            Label(
-                                workspace.displayName,
-                                systemImage: selectedWorkspaceId == workspace.workspaceId ? "checkmark" : "circle"
-                            )
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { save() } label: {
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "checkmark")
                         }
                     }
+                    .disabled(!canSave)
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(selectedWorkspaceLabel)
-                        .font(.body)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption)
-                }
-                .foregroundStyle(selectedWorkspaceId.isEmpty ? .secondary : .primary)
             }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
-
-    private var selectedWorkspaceLabel: String {
-        guard let workspace = workspaces.first(where: { $0.workspaceId == selectedWorkspaceId }) else {
-            return "None"
-        }
-        return workspace.displayName
-    }
-
-    private func imageChip(_ chip: AttachedImage) -> some View {
-        Image(uiImage: chip.image)
-            .resizable()
-            .scaledToFill()
-            .frame(width: 60, height: 60)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(alignment: .topTrailing) {
-                Button {
-                    attachedImages.removeAll { $0.id == chip.id }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white, .black.opacity(0.7))
-                        .padding(4)
-                }
-                .buttonStyle(.plain)
-            }
-    }
-
-    private var voiceBanner: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "mic.fill")
-                    .foregroundStyle(.red)
-                Text("Listening…")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            Text(voiceRecorder.transcript.isEmpty ? "Speak now" : voiceRecorder.transcript)
-                .font(.body)
-                .foregroundStyle(voiceRecorder.transcript.isEmpty ? .tertiary : .primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal, 12)
-        .padding(.top, 12)
-    }
-
-    private func toggleRecording() {
-        switch voiceRecorder.state {
-        case .recording:
-            voiceRecorder.toggle()   // stops; leaves transcript in place
-            let t = voiceRecorder.transcript
-            if !t.isEmpty {
-                if !text.isEmpty && !text.hasSuffix(" ") && !text.hasSuffix("\n") {
-                    text += " "
-                }
-                text += t
-            }
-            voiceRecorder.cancel()   // clears transcript, returns to .idle
-            isFocused = true
-        case .idle, .done, .denied, .error:
-            isFocused = false
-            voiceRecorder.toggle()
+            .onAppear { titleFocused = true }
         }
     }
 
-    private func send() {
-        var finalDesc = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !attachedImages.isEmpty {
-            let refs = attachedImages.map { "![\($0.fileName)](placeholder://\($0.fileName))" }
-            if !finalDesc.isEmpty { finalDesc += "\n\n" }
-            finalDesc += refs.joined(separator: "\n")
-        }
-        isSending = true
+    private func save() {
+        guard !isSaving, canSave else { return }
+        isSaving = true
         Task {
-            let ok = await teamclawService?.createTask(
-                description: finalDesc,
-                workspaceId: selectedWorkspaceId
-            ) ?? false
-            isSending = false
+            let ok = await taskStore.createTask(
+                title: title,
+                description: "",
+                workspaceID: ""
+            )
+            isSaving = false
             if ok {
                 onCreated()
                 dismiss()
@@ -344,11 +109,126 @@ struct CreateTaskSheet: View {
     }
 }
 
-// MARK: - TaskRow
+struct EditTaskSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @Bindable var taskStore: TaskStore
+    let task: TaskRecord
+
+    @State private var title: String
+    @State private var description: String
+    @State private var status: String
+    @State private var isSaving = false
+
+    init(taskStore: TaskStore, task: TaskRecord) {
+        self.taskStore = taskStore
+        self.task = task
+        _title = State(initialValue: task.title)
+        _description = State(initialValue: task.description)
+        _status = State(initialValue: task.status)
+    }
+
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !isSaving
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Title") {
+                    TextField("Task title", text: $title)
+                }
+
+                Section("Description") {
+                    TextField("Optional context", text: $description, axis: .vertical)
+                        .lineLimit(4...8)
+                }
+
+                Section("Status") {
+                    Picker("Status", selection: $status) {
+                        Text("Open").tag("open")
+                        Text("In Progress").tag("in_progress")
+                        Text("Done").tag("done")
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                if let errorMessage = taskStore.errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Edit Task")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        save()
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                    .disabled(!canSave)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        guard !isSaving else { return }
+        isSaving = true
+        Task {
+            let ok = await taskStore.updateTask(
+                taskID: task.id,
+                title: title,
+                description: description,
+                status: status,
+                workspaceID: task.workspaceID
+            )
+            isSaving = false
+            if ok {
+                dismiss()
+            }
+        }
+    }
+}
 
 struct TaskRow: View {
-    let item: SessionTask
+    let item: TaskRecord
     var creatorName: String? = nil
+
+    init(item: TaskRecord, creatorName: String? = nil) {
+        self.item = item
+        self.creatorName = creatorName
+    }
+
+    init(item: SessionTask, creatorName: String? = nil) {
+        self.item = TaskRecord(
+            id: item.taskId,
+            teamID: "",
+            workspaceID: item.workspaceId,
+            createdByActorID: item.createdBy,
+            title: item.title,
+            description: item.taskDescription,
+            status: item.status,
+            archived: item.archived,
+            createdAt: item.createdAt,
+            updatedAt: item.createdAt
+        )
+        self.creatorName = creatorName
+    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -386,7 +266,7 @@ struct TaskRow: View {
 }
 #else
 public struct TaskSheet: View {
-    public init(pairing: PairingManager, connectionMonitor: ConnectionMonitor, teamclawService: TeamclawService? = nil) {}
+    public init(pairing: PairingManager, teamclawService: TeamclawService? = nil) {}
 
     public var body: some View {
         ContentUnavailableView("Tasks", systemImage: "checklist")
@@ -394,7 +274,7 @@ public struct TaskSheet: View {
 }
 
 struct CreateTaskSheet: View {
-    let teamclawService: TeamclawService?
+    @Bindable var taskStore: TaskStore
     let onCreated: () -> Void
 
     var body: some View {
@@ -402,8 +282,17 @@ struct CreateTaskSheet: View {
     }
 }
 
+struct EditTaskSheet: View {
+    @Bindable var taskStore: TaskStore
+    let task: TaskRecord
+
+    var body: some View {
+        ContentUnavailableView("Edit Task", systemImage: "pencil")
+    }
+}
+
 struct TaskRow: View {
-    let item: SessionTask
+    let item: TaskRecord
     var creatorName: String? = nil
 
     var body: some View {

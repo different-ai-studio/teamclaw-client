@@ -17,12 +17,33 @@ public final class PairingManager {
     public init(store: CredentialStore = UserDefaultsCredentialStore()) {
         self.store = store
         loadFromStore()
+        if brokerHost.isEmpty {
+            applyDefaults()
+        }
     }
 
+    /// Legacy MQTT pairing deeplink flow. iOS no longer invokes this — use
+    /// `updateMQTTServer(...)` via Settings instead. Kept for the macOS shell
+    /// which still presents a paste-a-deeplink UI.
     public func pair(from url: URL) throws {
         let credentials = try Self.parse(url: url)
         try store.save(credentials)
         apply(credentials)
+    }
+
+    public func updateMQTTServer(host: String, username: String, password: String) throws {
+        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedUser = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.brokerHost = trimmedHost
+        self.username = trimmedUser
+        self.password = password
+        self.isPaired = !trimmedHost.isEmpty
+        try store.save(currentCredentials())
+    }
+
+    public func updateDaemonDeviceID(_ deviceID: String) throws {
+        self.deviceId = deviceID.trimmingCharacters(in: .whitespacesAndNewlines)
+        try store.save(currentCredentials())
     }
 
     public func unpair() throws {
@@ -37,6 +58,20 @@ public final class PairingManager {
         try store.clear()
     }
 
+    private func applyDefaults() {
+        let defaults = PairingCredentials(
+            brokerHost: "ai.ucar.cc",
+            brokerPort: 8883,
+            useTLS: true,
+            username: "teamclaw",
+            password: "teamclaw2026",
+            deviceId: deviceId,
+            authToken: authToken
+        )
+        try? store.save(defaults)
+        apply(defaults)
+    }
+
     private func apply(_ c: PairingCredentials) {
         brokerHost = c.brokerHost
         brokerPort = c.brokerPort
@@ -45,7 +80,19 @@ public final class PairingManager {
         password = c.password
         deviceId = c.deviceId
         authToken = c.authToken
-        isPaired = true
+        isPaired = !c.brokerHost.isEmpty
+    }
+
+    private func currentCredentials() -> PairingCredentials {
+        PairingCredentials(
+            brokerHost: brokerHost,
+            brokerPort: brokerPort,
+            useTLS: useTLS,
+            username: username,
+            password: password,
+            deviceId: deviceId,
+            authToken: authToken
+        )
     }
 
     private func loadFromStore() {
@@ -63,9 +110,6 @@ public final class PairingManager {
             throw PairingError.invalidURL
         }
         let params = Dictionary(uniqueKeysWithValues: items.compactMap { item in
-            // Strip whitespace/newlines from query values. Terminal copy-paste
-            // often wraps long URLs across lines and leaves \n plus indentation
-            // inside the token — the daemon then rejects it as invalid.
             item.value.map { (item.name, $0.filter { !$0.isWhitespace && !$0.isNewline }) }
         })
         guard let broker = params["broker"],

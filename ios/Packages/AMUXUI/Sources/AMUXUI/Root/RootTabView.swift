@@ -4,7 +4,6 @@ import AMUXCore
 public struct RootTabView: View {
     let mqtt: MQTTService
     let pairing: PairingManager
-    let connectionMonitor: ConnectionMonitor
     let teamclawService: TeamclawService?
     let activeTeam: TeamSummary?
     let currentActorID: String?
@@ -15,17 +14,17 @@ public struct RootTabView: View {
     @SceneStorage("rootTab") private var selection: AppTab = .sessions
     @State private var sessionsPath: [String] = []
     @State private var actorStore: ActorStore?
+    @State private var connectedAgentsStore: ConnectedAgentsStore?
+    @State private var sessionIDsRepo: SupabaseSessionIDsRepository?
 
     public init(mqtt: MQTTService,
                 pairing: PairingManager,
-                connectionMonitor: ConnectionMonitor,
                 teamclawService: TeamclawService?,
                 activeTeam: TeamSummary? = nil,
                 currentActorID: String? = nil,
                 onReconnect: (() -> Void)? = nil) {
         self.mqtt = mqtt
         self.pairing = pairing
-        self.connectionMonitor = connectionMonitor
         self.teamclawService = teamclawService
         self.activeTeam = activeTeam
         self.currentActorID = currentActorID
@@ -37,29 +36,32 @@ public struct RootTabView: View {
             Tab("Sessions", systemImage: "bubble.left.and.bubble.right", value: AppTab.sessions) {
                 SessionsTab(mqtt: mqtt,
                             pairing: pairing,
-                            connectionMonitor: connectionMonitor,
                             teamclawService: teamclawService,
                             activeTeam: activeTeam,
                             currentActorID: currentActorID,
                             viewModel: viewModel,
-                            navigationPath: $sessionsPath)
+                            navigationPath: $sessionsPath,
+                            connectedAgentsStore: connectedAgentsStore,
+                            onReconnect: onReconnect)
             }
             Tab("Tasks", systemImage: "checklist", value: AppTab.tasks) {
                 TasksTab(mqtt: mqtt,
                          pairing: pairing,
-                         connectionMonitor: connectionMonitor,
                          teamclawService: teamclawService,
                          activeTeam: activeTeam,
-                         sessionViewModel: viewModel)
+                         sessionViewModel: viewModel,
+                         connectedAgentsStore: connectedAgentsStore,
+                         onReconnect: onReconnect)
             }
             Tab("Actors", systemImage: "person.2", value: AppTab.members) {
                 if let actorStore {
                     MembersTab(pairing: pairing,
-                               connectionMonitor: connectionMonitor,
                                mqtt: mqtt,
                                sessionViewModel: viewModel,
                                activeTeam: activeTeam,
-                               store: actorStore)
+                               store: actorStore,
+                               connectedAgentsStore: connectedAgentsStore,
+                               onReconnect: onReconnect)
                 } else {
                     ContentUnavailableView("No Team Selected",
                                           systemImage: "person.2",
@@ -77,16 +79,13 @@ public struct RootTabView: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         .overlay(alignment: .top) {
-            ConnectionBannerOverlay(mqtt: mqtt,
-                                    pairing: pairing,
-                                    connectionMonitor: connectionMonitor,
-                                    onReconnect: onReconnect)
+            ConnectionBannerOverlay(mqtt: mqtt, onReconnect: onReconnect)
         }
         .task {
             viewModel.start(mqtt: mqtt, deviceId: pairing.deviceId, modelContext: modelContext)
         }
         .task(id: activeTeam?.id) {
-            await configureActorStore()
+            await configureStores()
         }
         .onReceive(NotificationCenter.default.publisher(for: .amuxInviteTokenReceived)) { note in
             guard let token = note.userInfo?["token"] as? String,
@@ -96,16 +95,41 @@ public struct RootTabView: View {
     }
 
     @MainActor
-    private func configureActorStore() async {
+    private func configureStores() async {
         guard let activeTeam else {
             actorStore = nil
+            connectedAgentsStore = nil
+            sessionIDsRepo = nil
+            viewModel.validSessionIDs = nil
             return
         }
         if actorStore == nil {
             if let repo = try? SupabaseActorRepository() {
-                actorStore = ActorStore(teamID: activeTeam.id,
+                let store = ActorStore(teamID: activeTeam.id,
                                        repository: repo,
                                        modelContext: modelContext)
+                actorStore = store
+                // Populate CachedActor eagerly so pickers opened from any tab
+                // (New Session collaborators, session detail members, etc.)
+                // have rows to show without needing to visit the Actors tab
+                // first.
+                await store.reload()
+            }
+        }
+        if connectedAgentsStore == nil {
+            if let repo = try? SupabaseAgentAccessRepository() {
+                let store = ConnectedAgentsStore(teamID: activeTeam.id, repository: repo)
+                connectedAgentsStore = store
+                await store.reload()
+            }
+        }
+        if sessionIDsRepo == nil {
+            sessionIDsRepo = try? SupabaseSessionIDsRepository()
+        }
+        if let repo = sessionIDsRepo {
+            if let ids = try? await repo.listSessionIDs(teamID: activeTeam.id) {
+                viewModel.validSessionIDs = ids
+                viewModel.reloadSessions(modelContext: modelContext)
             }
         }
     }

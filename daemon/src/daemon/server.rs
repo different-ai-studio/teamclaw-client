@@ -55,20 +55,6 @@ impl DaemonServer {
             .join("sessions.toml");
         let sessions = SessionStore::load(&sessions_path)?;
 
-        let teamclaw = if let Some(team_id) = &config.team_id {
-            let is_team_host = config.is_team_host.unwrap_or(false);
-            Some(crate::teamclaw::SessionManager::new(
-                mqtt.client.clone(),
-                team_id,
-                &config.device.id,
-                crate::config::DaemonConfig::config_dir(),
-                is_team_host,
-                config.team_host_device_id.clone(),
-            )?)
-        } else {
-            None
-        };
-
         let history_dir = config_path.parent()
             .unwrap_or(std::path::Path::new("."))
             .join("history");
@@ -99,6 +85,21 @@ impl DaemonServer {
         };
 
         let agents = AgentManager::new(binary, flags, supabase.clone());
+
+        let teamclaw = if let Some(team_id) = &config.team_id {
+            let is_team_host = config.is_team_host.unwrap_or(false);
+            Some(crate::teamclaw::SessionManager::new(
+                mqtt.client.clone(),
+                team_id,
+                &config.device.id,
+                supabase.as_ref().map(|c| c.config().actor_id.clone()),
+                crate::config::DaemonConfig::config_dir(),
+                is_team_host,
+                config.team_host_device_id.clone(),
+            )?)
+        } else {
+            None
+        };
 
         Ok(Self { config, mqtt, agents, auth, peers, permissions, workspaces, workspaces_path, sessions, sessions_path, history, teamclaw, supabase })
     }
@@ -131,16 +132,27 @@ impl DaemonServer {
             tc.subscribe_all().await.expect("teamclaw subscribe failed");
         }
 
+        self.register_startup_workspace().await;
+
         let publisher = Publisher::new(&self.mqtt);
         publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await
-            .map_err(crate::error::AmuxError::Mqtt)?;
-        publisher.publish_member_list(&self.auth.to_proto_member_list()).await
             .map_err(crate::error::AmuxError::Mqtt)?;
         publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await
             .map_err(crate::error::AmuxError::Mqtt)?;
         self.publish_all_agent_states().await;
 
         info!(device_id = %self.config.device.id, "MQTT connected, listening for commands");
+
+        // Register our MQTT device_id on the agents row so iOS clients can
+        // route publishes at `amux/{device_id}/…` without typing the UUID.
+        if let Some(sb) = self.supabase.clone() {
+            let device_id = self.config.device.id.clone();
+            tokio::spawn(async move {
+                if let Err(e) = sb.set_agent_device_id(&device_id).await {
+                    warn!("supabase agents.device_id upsert failed: {e}");
+                }
+            });
+        }
 
         // Spawn 60s Supabase heartbeat task (no-op when supabase is None)
         if let Some(sb) = self.supabase.clone() {
@@ -179,7 +191,6 @@ impl DaemonServer {
                     }
                     let publisher = Publisher::new(&self.mqtt);
                     let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
-                    let _ = publisher.publish_member_list(&self.auth.to_proto_member_list()).await;
                     let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
                     self.publish_all_agent_states().await;
                 }
@@ -194,6 +205,78 @@ impl DaemonServer {
                     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 }
                 Err(_) => {} // Timeout — no MQTT event, loop back to check agents
+            }
+        }
+    }
+
+    async fn register_startup_workspace(&mut self) {
+        let current_dir = match std::env::current_dir() {
+            Ok(path) => path,
+            Err(e) => {
+                warn!("workspace auto-registration skipped: current_dir failed: {}", e);
+                return;
+            }
+        };
+
+        let startup_path = current_dir.to_string_lossy().to_string();
+        match self.workspaces.add(&startup_path) {
+            Ok(outcome) => {
+                let mut workspace = outcome.workspace;
+                let mut should_save = outcome.inserted;
+
+                if self.sync_workspace_to_supabase(&mut workspace).await {
+                    should_save = true;
+                }
+
+                if let Some(existing) = self.workspaces.workspaces.iter_mut().find(|w| w.workspace_id == workspace.workspace_id) {
+                    *existing = workspace.clone();
+                }
+
+                if !should_save {
+                    return;
+                }
+
+                if let Err(e) = self.workspaces.save(&self.workspaces_path) {
+                    warn!(path = %startup_path, "workspace auto-registration save failed: {}", e);
+                    return;
+                }
+
+                info!(
+                    workspace_id = %workspace.workspace_id,
+                    path = %workspace.path,
+                    "startup workspace registered"
+                );
+            }
+            Err(e) => {
+                warn!(path = %startup_path, "workspace auto-registration failed: {}", e);
+            }
+        }
+    }
+
+    async fn sync_workspace_to_supabase(&self, workspace: &mut crate::config::StoredWorkspace) -> bool {
+        let Some(sb) = &self.supabase else {
+            return false;
+        };
+
+        let row = crate::supabase::WorkspaceUpsert {
+            team_id: &sb.config().team_id,
+            agent_id: &sb.config().actor_id,
+            name: &workspace.display_name,
+            path: if workspace.path.is_empty() { None } else { Some(workspace.path.as_str()) },
+            archived: false,
+        };
+
+        match sb.upsert_workspace(&row).await {
+            Ok(remote) => {
+                if workspace.supabase_workspace_id == remote.id {
+                    return false;
+                }
+                workspace.supabase_workspace_id = remote.id;
+                true
+            }
+            Err(e) => {
+                warn!(path = %workspace.path, "workspace supabase sync failed: {}", e);
+                false
             }
         }
     }
@@ -327,9 +410,14 @@ impl DaemonServer {
                 let acp_sid = self.agents.get_handle(agent_id)
                     .map(|h| h.acp_session_id.clone())
                     .unwrap_or_default();
+                let collab_session_id = self.agents.get_handle(agent_id)
+                    .map(|h| h.collab_session_id.clone())
+                    .unwrap_or_default();
                 let ws_id = self.agents.get_handle(agent_id)
                     .map(|h| h.workspace_id.clone())
                     .unwrap_or_default();
+                let supabase_ws_id = self.workspaces.find_by_id(&ws_id)
+                    .and_then(|w| (!w.supabase_workspace_id.is_empty()).then_some(w.supabase_workspace_id.clone()));
                 let current_model = self.agents.current_model(agent_id).cloned();
                 let team_id = sb.config().team_id.clone();
                 let actor_id = sb.config().actor_id.clone();
@@ -339,8 +427,8 @@ impl DaemonServer {
                     let row = crate::supabase::AgentRuntimeUpsert {
                         team_id: &team_id,
                         agent_id: &actor_id,
-                        session_id: None,
-                        workspace_id: if ws_id.is_empty() { None } else { Some(ws_id.as_str()) },
+                        session_id: (!collab_session_id.is_empty()).then_some(collab_session_id.as_str()),
+                        workspace_id: supabase_ws_id.as_deref(),
                         backend_type: "claude",
                         backend_session_id: if acp_sid.is_empty() { None } else { Some(acp_sid.as_str()) },
                         status: supabase_status,
@@ -491,6 +579,17 @@ impl DaemonServer {
                     }
                 }
             }
+            subscriber::IncomingMessage::TeamclawSessionMeta { session_id: _, payload } => {
+                if let Ok(envelope) = crate::proto::teamclaw::SessionMetaEnvelope::decode(payload.as_slice()) {
+                    if let Some(info) = &envelope.session {
+                        if let Some(tc) = &mut self.teamclaw {
+                            if let Err(err) = tc.apply_session_meta(info).await {
+                                warn!(?err, session_id = %info.session_id, "failed to apply session meta");
+                            }
+                        }
+                    }
+                }
+            }
             subscriber::IncomingMessage::TeamclawTaskEvent { session_id, payload } => {
                 if let Ok(event) = crate::proto::teamclaw::TaskEvent::decode(payload.as_slice()) {
                     if let Some(tc) = &self.teamclaw {
@@ -511,24 +610,49 @@ impl DaemonServer {
         }
     }
 
-    async fn handle_agent_command(&mut self, agent_id: &str, envelope: amux::CommandEnvelope) {
-        let peer_id = envelope.peer_id.clone();
-        let command_id = envelope.command_id.clone();
+    /// Derive the caller's MemberRole, preferring a Supabase
+    /// `agent_member_access` lookup keyed on (our own agent actor id,
+    /// envelope's sender_actor_id) and falling back to the MQTT-era
+    /// peer/token role when the Supabase side isn't available.
+    async fn resolve_role(&mut self, sender_actor_id: &str, peer_id: &str) -> amux::MemberRole {
+        if !sender_actor_id.is_empty() {
+            if let Some(sb) = &self.supabase {
+                let my_agent_id = sb.config().actor_id.clone();
+                match sb.check_agent_permission(&my_agent_id, sender_actor_id).await {
+                    Ok(Some(level)) => {
+                        return match level.as_str() {
+                            "admin" => amux::MemberRole::Owner,
+                            "write" => amux::MemberRole::Member,
+                            _ => amux::MemberRole::Member,
+                        };
+                    }
+                    Ok(None) => {
+                        warn!(actor_id = %sender_actor_id, "no agent_member_access grant");
+                        return amux::MemberRole::Member;
+                    }
+                    Err(e) => {
+                        warn!(%e, "supabase permission check failed; falling back to peer role");
+                    }
+                }
+            }
+        }
 
-        let role = self.peers.get_peer(&peer_id)
+        self.peers.get_peer(peer_id)
             .map(|p| p.role)
             .unwrap_or_else(|| {
-                // Peer not in memory (daemon restarted?) — try to match by token prefix.
-                // peer_id format: "{platform}-{token_prefix}" where token_prefix is
-                // first 6 chars of auth token. Strip both ios- and mac- so either
-                // platform recovers its role without requiring re-announce.
                 let token_prefix = peer_id
                     .strip_prefix("ios-")
                     .or_else(|| peer_id.strip_prefix("mac-"))
-                    .unwrap_or(&peer_id);
+                    .unwrap_or(peer_id);
                 self.auth.find_role_by_token_prefix(token_prefix)
                     .unwrap_or(amux::MemberRole::Member)
-            });
+            })
+    }
+
+    async fn handle_agent_command(&mut self, agent_id: &str, envelope: amux::CommandEnvelope) {
+        let peer_id = envelope.peer_id.clone();
+        let command_id = envelope.command_id.clone();
+        let sender_actor_id = envelope.sender_actor_id.clone();
 
         let acp_command = match envelope.acp_command {
             Some(c) => c,
@@ -539,7 +663,13 @@ impl DaemonServer {
             None => return,
         };
 
-        // Check role permissions
+        // Permission check.
+        // Preferred path: iOS sets `sender_actor_id` on the envelope, daemon
+        // looks up `agent_member_access.permission_level` in Supabase and
+        // reduces that to a MemberRole. Legacy path: fall back to the
+        // peer's MQTT-era role when the Supabase lookup is unavailable.
+        let role = self.resolve_role(&sender_actor_id, &peer_id).await;
+
         if let Err(reason) = self.permissions.check_command_permission(role, &cmd) {
             warn!(peer_id, %reason, "command rejected");
             // Publish rejection to device-level collab topic so all clients see it
@@ -559,21 +689,54 @@ impl DaemonServer {
             amux::acp_command::Command::StartAgent(start) => {
                 let at = amux::AgentType::try_from(start.agent_type).unwrap_or(amux::AgentType::ClaudeCode);
 
-                // Resolve workspace path
-                let (worktree, ws_id) = if !start.workspace_id.is_empty() {
-                    match self.workspaces.find_by_id(&start.workspace_id) {
-                        Some(ws) => (ws.path.clone(), ws.workspace_id.clone()),
-                        None => {
-                            error!(workspace_id = %start.workspace_id, "workspace not found");
+                // Resolve workspace path. Two sources in order of priority:
+                //   1. Local workspaces.toml lookup by legacy MQTT id (id set,
+                //      path comes from the registry).
+                //   2. Supabase-sourced envelope: id is the Supabase UUID and
+                //      `worktree` carries the checkout path. The daemon uses
+                //      the path directly and keeps the UUID around for
+                //      `agent_runtimes.workspace_id`.
+                let start_workspace_id = start.workspace_id.clone();
+                let start_worktree = start.worktree.clone();
+                let start_session_id = start.session_id.clone();
+                info!(
+                    workspace_id = %start_workspace_id,
+                    worktree = %start_worktree,
+                    peer_id,
+                    "received startAgent envelope"
+                );
+                let (worktree, ws_id, supabase_ws_id_owned): (String, String, Option<String>) =
+                    if !start_workspace_id.is_empty() {
+                        if let Some(ws) = self.workspaces.find_by_id(&start_workspace_id) {
+                            (
+                                ws.path.clone(),
+                                ws.workspace_id.clone(),
+                                (!ws.supabase_workspace_id.is_empty())
+                                    .then_some(ws.supabase_workspace_id.clone()),
+                            )
+                        } else if !start_worktree.is_empty() {
+                            (start_worktree.clone(), String::new(), Some(start_workspace_id.clone()))
+                        } else {
+                            error!(
+                                workspace_id = %start_workspace_id,
+                                "workspace not found and no worktree path provided in envelope"
+                            );
                             return;
                         }
-                    }
-                } else {
-                    let wt = if start.worktree.is_empty() { ".".to_string() } else { start.worktree.clone() };
-                    (wt, String::new())
-                };
+                    } else {
+                        let wt = if start_worktree.is_empty() { ".".to_string() } else { start_worktree.clone() };
+                        (wt, String::new(), None)
+                    };
+                let supabase_ws_id = supabase_ws_id_owned.as_deref();
 
-                match self.agents.spawn_agent(at, &worktree, &start.initial_prompt, &ws_id).await {
+                match self.agents.spawn_agent(
+                    at,
+                    &worktree,
+                    &start.initial_prompt,
+                    &ws_id,
+                    supabase_ws_id,
+                    (!start_session_id.is_empty()).then_some(start_session_id.as_str()),
+                ).await {
                     Ok(new_id) => {
                         info!(agent_id = %new_id, peer_id, "agent started");
                         // Persist session
@@ -583,6 +746,7 @@ impl DaemonServer {
                         let stored = StoredSession {
                             session_id: new_id.clone(),
                             acp_session_id: acp_sid,
+                            collab_session_id: start_session_id.clone(),
                             agent_type: at as i32,
                             workspace_id: ws_id.clone(),
                             worktree: worktree.clone(),
@@ -623,9 +787,19 @@ impl DaemonServer {
                         let worktree = stored.worktree.clone();
                         let ws_id = stored.workspace_id.clone();
                         let acp_sid = stored.acp_session_id.clone();
+                        let collab_session_id = stored.collab_session_id.clone();
                         info!(agent_id, "lazy-resuming historical session");
+                        let supabase_ws_id = self.workspaces.find_by_id(&ws_id)
+                            .and_then(|w| (!w.supabase_workspace_id.is_empty()).then_some(w.supabase_workspace_id.as_str()));
                         match self.agents.resume_agent(
-                            agent_id, &acp_sid, at, &worktree, &ws_id, &prompt.text,
+                            agent_id,
+                            &acp_sid,
+                            at,
+                            &worktree,
+                            &ws_id,
+                            supabase_ws_id,
+                            (!collab_session_id.is_empty()).then_some(collab_session_id.as_str()),
+                            &prompt.text,
                         ).await {
                             Ok(new_acp_sid) => {
                                 // Forward model_id if the client requested one
@@ -643,6 +817,7 @@ impl DaemonServer {
                                 // Update stored session with potentially new acp_session_id
                                 if let Some(s) = self.sessions.find_by_id_mut(agent_id) {
                                     s.acp_session_id = new_acp_sid;
+                                    s.collab_session_id = collab_session_id.clone();
                                     s.status = amux::AgentStatus::Active as i32;
                                     s.last_prompt = prompt.text.clone();
                                 }
@@ -836,7 +1011,6 @@ impl DaemonServer {
                         // peer receives them via its wildcard subscription without us
                         // needing to re-publish here.
                         let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
-                        let _ = publisher.publish_member_list(&self.auth.to_proto_member_list()).await;
                         let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
                     }
                     AuthResult::Rejected { reason } => {
@@ -867,13 +1041,22 @@ impl DaemonServer {
                         info!(peer_id = %p.peer_id, "peer kicked");
                     }
                     let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
-                    let _ = publisher.publish_member_list(&self.auth.to_proto_member_list()).await;
                 }
             }
             amux::device_collab_command::Command::AddWorkspace(add) => {
                 match self.workspaces.add(&add.path) {
-                    Ok(ws) => {
-                        let _ = self.workspaces.save(&self.workspaces_path);
+                    Ok(outcome) => {
+                        let mut ws = outcome.workspace;
+                        let mut should_save = outcome.inserted;
+                        if self.sync_workspace_to_supabase(&mut ws).await {
+                            should_save = true;
+                        }
+                        if let Some(existing) = self.workspaces.workspaces.iter_mut().find(|w| w.workspace_id == ws.workspace_id) {
+                            *existing = ws.clone();
+                        }
+                        if should_save {
+                            let _ = self.workspaces.save(&self.workspaces_path);
+                        }
                         let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
                         info!(workspace_id = %ws.workspace_id, path = %ws.path, "workspace added");
                         let event = amux::DeviceCollabEvent {

@@ -1,5 +1,5 @@
-pub mod init;
-pub mod members;
+pub mod clear;
+pub mod process;
 pub mod test_client;
 
 use clap::{Parser, Subcommand};
@@ -14,27 +14,31 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Start the daemon
+    /// Start the daemon (writes ~/.config/amux/amuxd.pid while running).
     Start {
         #[arg(short, long)]
         daemonize: bool,
         #[arg(long)]
         config: Option<PathBuf>,
     },
-    /// Stop the running daemon
+    /// Stop the running daemon (SIGTERM via pidfile).
     Stop,
-    /// Show daemon status
+    /// Show daemon status (reads the pidfile).
     Status,
-    /// First-time setup wizard. With a join URL, onboards the daemon
-    /// to Supabase via the invite token issued by iOS.
+    /// Onboard this daemon. Without args, walks you through the iOS side
+    /// and prompts you to paste the deeplink. Pass the URL to skip the
+    /// interactive prompt (useful for scripts).
     Init {
-        /// amux://join?token=...&url=...&anon=... URL from an iOS invite.
+        /// `amux://invite?token=...` URL from the iOS Actors tab.
         join_url: Option<String>,
     },
-    /// Manage members
-    Members {
-        #[command(subcommand)]
-        action: Option<MemberAction>,
+    /// Delete local daemon state (daemon.toml, members.toml, sessions.toml,
+    /// supabase.toml, workspaces.toml). Use before running `init` against a
+    /// different team or after revoking access.
+    Clear {
+        /// Skip the interactive confirmation prompt.
+        #[arg(long)]
+        force: bool,
     },
     /// Test: spawn claude and print parsed events (for development)
     TestSpawn {
@@ -73,10 +77,4 @@ pub enum TestClientAction {
         worktree: String,
         prompt: String,
     },
-}
-
-#[derive(Subcommand)]
-pub enum MemberAction {
-    List,
-    Remove { member_id: String },
 }

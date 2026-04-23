@@ -126,4 +126,7 @@ private actor MockActorRepository: ActorRepository {
                            displayName: "", refreshToken: nil)
     }
     func heartbeat() async throws { heartbeatCallCount += 1 }
+    func removeActor(actorID: String) async throws {
+        if let e = nextError { nextError = nil; throw e }
+    }
 }

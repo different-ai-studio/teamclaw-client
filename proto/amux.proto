@@ -26,6 +26,10 @@ message CommandEnvelope {
   string peer_id = 3;
   string command_id = 4;          // For response correlation
   int64 timestamp = 5;
+  // Supabase `actors.id` of the iOS user sending this command. The daemon
+  // uses it to look up `agent_member_access.permission_level` instead of
+  // the legacy MQTT token-derived role.
+  string sender_actor_id = 6;
 
   AcpCommand acp_command = 10;    // Agent command (maps to ACP request)
 }
@@ -36,6 +40,8 @@ message DeviceCommandEnvelope {
   string peer_id = 2;
   string command_id = 3;
   int64 timestamp = 4;
+  // Same Supabase actor id as `CommandEnvelope.sender_actor_id`.
+  string sender_actor_id = 5;
 
   DeviceCollabCommand command = 10;
 }
@@ -163,6 +169,11 @@ message AcpStartAgent {
   string worktree = 2;
   string initial_prompt = 3;
   string workspace_id = 4;
+  // Supabase sessions.id the spawned agent should be bound to. iOS sets
+  // this after `create_session` succeeds so daemon's agent_runtimes upsert
+  // carries the right linkage. Empty for legacy bare-agent spawns that
+  // live without a Supabase session.
+  string session_id = 5;
 }
 
 message AcpStopAgent {}

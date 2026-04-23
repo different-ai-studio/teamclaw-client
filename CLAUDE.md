@@ -33,6 +33,22 @@ Open `ios/AMUX.xcodeproj` in Xcode, or regenerate the project from `ios/project.
 ```
 Generated Swift files go to `ios/Proto/Generated/`. Always regenerate after editing `proto/amux.proto`.
 
+## Concept Glossary
+
+Naming is inconsistent across layers — use this as the source of truth:
+
+| Concept | Supabase | MQTT | Daemon code |
+|---------|----------|------|-------------|
+| Developer machine running amuxd | `agents` row (`actor_type='agent'`) | `device_id` in topic path | `config.device` |
+| Individual Claude Code subprocess | `agent_runtimes` row | `agent/{agent_id}` in topic path | `AgentHandle` (called "agent" internally) |
+
+**Key identifiers:**
+- `agents.id` — Supabase UUID for the daemon identity; used as FK in `agent_runtimes.agent_id`
+- `agents.device_id` — short string from `daemon.toml`; used in MQTT topic paths as `{device_id}`; stored in Supabase so iOS can resolve the daemon without knowing its UUID
+- `AgentHandle.agent_id` — 8-char UUID generated at spawn; used in MQTT topic paths as `{agent_id}` under the device; maps to an `agent_runtimes` row (keyed on `agents.id` + `backend_session_id`)
+
+**The naming trap:** The daemon's internal code (AgentManager, AgentHandle) calls each Claude Code subprocess an "agent". In the Supabase schema, "agent" means the daemon itself; each subprocess is an `agent_runtime`. When reading daemon code, mentally substitute "agent" → "runtime".
+
 ## Architecture Details
 
 ### Daemon Modules (`daemon/src/`)
@@ -48,15 +64,36 @@ Generated Swift files go to `ios/Proto/Generated/`. Always regenerate after edit
 - **AMUXUI** (`ios/Packages/AMUXUI/`) -- MVVM views: SessionList, AgentDetail (event feed), Members, Settings
 
 ### MQTT Topic Structure
+
+AMUX uses team-scoped MQTT topics with two main categories:
+
+**Device-scoped topics** (device management, agents):
 ```
-amux/{deviceId}/agent/{agentId}/state         # AgentInfo per session (retained)
-amux/{deviceId}/agent/{agentId}/events        # AcpEvent stream
-amux/{deviceId}/agent/{agentId}/commands      # Client commands
-amux/{deviceId}/status                        # DeviceStatus (LWT, retained)
+amux/{team_id}/device/{device_id}/status                    # DeviceStatus (LWT, retained)
+amux/{team_id}/device/{device_id}/peers                     # PeerList (retained)
+amux/{team_id}/device/{device_id}/workspaces                # WorkspaceList (retained)
+amux/{team_id}/device/{device_id}/collab                    # DeviceCollabEvent
+amux/{team_id}/device/{device_id}/agent/{agent_id}/state    # AgentInfo per session (retained)
+amux/{team_id}/device/{device_id}/agent/{agent_id}/events   # AcpEvent stream
+amux/{team_id}/device/{device_id}/agent/{agent_id}/commands # Client commands
 ```
+
+**Team-scoped topics** (collaboration, sessions):
+```
+amux/{team_id}/sessions                                      # Team session list
+amux/{team_id}/session/{session_id}/messages                # Session messages
+amux/{team_id}/session/{session_id}/tasks                   # Session tasks
+amux/{team_id}/session/{session_id}/presence                # Session presence
+amux/{team_id}/actor/{actor_id}/session/{session_id}/meta   # Actor session metadata
+amux/{team_id}/user/{user_id}/invites                       # User invites
+amux/{team_id}/tasks                                         # Global tasks (not session-tied)
+amux/{team_id}/device/{device_id}/rpc/{request_id}/req      # RPC requests
+amux/{team_id}/device/{device_id}/rpc/{request_id}/res      # RPC responses
+```
+
 Sessions are fanned out to per-agent retained topics (not a single AgentList) so
-no publish exceeds the broker's 10 KB packet cap. Clients subscribe to the
-wildcard `amux/{deviceId}/agent/+/state` and aggregate locally.
+no publish exceeds the broker's 10 KB packet cap. Clients subscribe to wildcard
+patterns like `amux/{team_id}/device/{device_id}/agent/+/state` and aggregate locally.
 
 ### CLI Subcommands
 `init`, `start`, `invite {name}`, `members [list|remove]`, `test-spawn`, `test-client [watch|start-agent|announce|e2e]`

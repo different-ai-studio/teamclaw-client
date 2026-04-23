@@ -41,7 +41,7 @@ public struct TaskListView: View {
             } else {
                 List {
                     ForEach(taskStore.tasks) { item in
-                        NavigationLink(value: item) {
+                        NavigationLink(value: "task:\(item.id)") {
                             TaskRow(item: item, creatorName: creatorLabel(for: item))
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {

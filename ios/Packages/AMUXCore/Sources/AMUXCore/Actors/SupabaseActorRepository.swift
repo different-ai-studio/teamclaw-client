@@ -67,7 +67,8 @@ public actor SupabaseActorRepository: ActorRepository {
                 displayName: displayName,
                 teamRole: input.teamRole?.rawValue,
                 agentKind: input.agentKind,
-                ttlSeconds: input.ttlSeconds))
+                ttlSeconds: input.ttlSeconds,
+                targetActorID: input.targetActorID))
             .execute()
             .value
 
@@ -91,6 +92,17 @@ public actor SupabaseActorRepository: ActorRepository {
     public func heartbeat() async throws {
         _ = try await client.rpc("update_actor_last_active").execute()
     }
+
+    public func removeActor(actorID: String) async throws {
+        _ = try await client
+            .rpc("remove_team_actor", params: RemoveActorParams(actorID: actorID))
+            .execute()
+    }
+}
+
+private struct RemoveActorParams: Encodable {
+    let actorID: String
+    enum CodingKeys: String, CodingKey { case actorID = "p_actor_id" }
 }
 
 // MARK: - Wire types
@@ -98,9 +110,11 @@ public actor SupabaseActorRepository: ActorRepository {
 private struct CreateInviteParams: Encodable {
     let teamID: String; let kind: String; let displayName: String
     let teamRole: String?; let agentKind: String?; let ttlSeconds: Int
+    let targetActorID: String?
     enum CodingKeys: String, CodingKey {
         case teamID = "p_team_id", kind = "p_kind", displayName = "p_display_name"
         case teamRole = "p_team_role", agentKind = "p_agent_kind", ttlSeconds = "p_ttl_seconds"
+        case targetActorID = "p_target_actor_id"
     }
 }
 

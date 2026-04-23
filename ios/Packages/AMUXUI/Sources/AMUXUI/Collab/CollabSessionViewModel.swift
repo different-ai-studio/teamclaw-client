@@ -10,15 +10,19 @@ public final class SessionViewModel {
     public var session: Session
 
     private var teamclawService: TeamclawService?
+    private var currentActorID: String?
+    private var modelContext: ModelContext?
     private var listenerTask: Task<Void, Never>?
 
     public init(session: Session) {
         self.session = session
     }
 
-    public func start(teamclawService: TeamclawService, modelContext: ModelContext) {
+    public func start(teamclawService: TeamclawService?, currentActorID: String?, modelContext: ModelContext) {
         self.teamclawService = teamclawService
-        teamclawService.subscribeToSession(session.sessionId)
+        self.currentActorID = currentActorID
+        self.modelContext = modelContext
+        teamclawService?.subscribeToSession(session.sessionId)
 
         listenerTask?.cancel()
         listenerTask = Task { [weak self] in
@@ -48,9 +52,33 @@ public final class SessionViewModel {
     }
 
     public func sendMessage(_ text: String) {
-        teamclawService?.sendMessage(
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if let teamclawService {
+            teamclawService.sendMessage(
+                sessionId: session.sessionId,
+                content: trimmed
+            )
+            return
+        }
+
+        guard let currentActorID else { return }
+
+        guard let modelContext else { return }
+
+        let message = SessionMessage(
+            messageId: UUID().uuidString,
             sessionId: session.sessionId,
-            content: text
+            senderActorId: currentActorID,
+            kind: "text",
+            content: trimmed,
+            createdAt: .now
         )
+        modelContext.insert(message)
+        session.lastMessagePreview = trimmed
+        session.lastMessageAt = message.createdAt
+        try? modelContext.save()
+        messages.append(message)
     }
 }
