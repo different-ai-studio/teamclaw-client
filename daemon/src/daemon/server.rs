@@ -540,10 +540,18 @@ impl DaemonServer {
             subscriber::IncomingMessage::TeamclawSessionMessage { session_id, payload } => {
                 if let Ok(envelope) = crate::proto::teamclaw::SessionMessageEnvelope::decode(payload.as_slice()) {
                     if let Some(msg) = &envelope.message {
+                        if let Some(tc) = &mut self.teamclaw {
+                            if !tc.should_process_message(&session_id, &msg.message_id) {
+                                return;
+                            }
+                        }
                         // Host persists the message
                         if let Some(tc) = &self.teamclaw {
                             if tc.is_host_for(&session_id) {
                                 let _ = tc.persist_message(&session_id, msg).await;
+                                if self.agents.get_handle(&msg.sender_actor_id).is_none() {
+                                    let _ = tc.publish_live_message(&session_id, msg).await;
+                                }
                             }
                         }
                         // Route to local agents
@@ -579,6 +587,80 @@ impl DaemonServer {
                     }
                 }
             }
+            subscriber::IncomingMessage::TeamclawSessionLive { session_id, payload } => {
+                if let Ok(envelope) = crate::proto::teamclaw::LiveEventEnvelope::decode(payload.as_slice()) {
+                    match envelope.event_type.as_str() {
+                        "message.created" => {
+                            if let Ok(message_envelope) =
+                                crate::proto::teamclaw::SessionMessageEnvelope::decode(envelope.body.as_slice())
+                            {
+                                if let Some(msg) = &message_envelope.message {
+                                    if let Some(tc) = &mut self.teamclaw {
+                                        if !tc.should_process_message(&session_id, &msg.message_id) {
+                                            return;
+                                        }
+                                    }
+                                    if let Some(tc) = &self.teamclaw {
+                                        if tc.is_host_for(&session_id) {
+                                            let _ = tc.persist_message(&session_id, msg).await;
+                                        }
+                                    }
+                                    if let Some(tc) = &self.teamclaw {
+                                        let activated = tc.agents_to_activate(&session_id, msg);
+                                        let desired_model = msg.model.clone();
+                                        for agent_actor_id in activated {
+                                            if msg.sender_actor_id == agent_actor_id { continue; }
+                                            if self.agents.get_handle(&agent_actor_id).is_some() {
+                                                if !desired_model.is_empty() {
+                                                    let current = self.agents.current_model(&agent_actor_id).cloned().unwrap_or_default();
+                                                    if desired_model != current {
+                                                        if let Err(e) = self.agents.send_set_model(&agent_actor_id, &desired_model).await {
+                                                            warn!(?e, "send_set_model from live message failed");
+                                                        } else {
+                                                            self.agents.set_current_model(&agent_actor_id, &desired_model);
+                                                            self.publish_agent_state_by_id(&agent_actor_id).await;
+                                                        }
+                                                    }
+                                                }
+                                                let prompt = format!(
+                                                    "[Collab session: {}] {} says:\n{}",
+                                                    session_id, msg.sender_actor_id, msg.content
+                                                );
+                                                if let Err(e) = self.agents.send_prompt(&agent_actor_id, &prompt).await {
+                                                    warn!("Failed to route live message to agent {}: {}", agent_actor_id, e);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        "task.created" | "task.updated" => {
+                            if let Ok(event) = crate::proto::teamclaw::TaskEvent::decode(envelope.body.as_slice()) {
+                                if let Some(tc) = &mut self.teamclaw {
+                                    if !tc.should_process_task_event(&session_id, &event) {
+                                        return;
+                                    }
+                                }
+                                if let Some(tc) = &self.teamclaw {
+                                    let activated = tc.agents_to_activate_for_work_item(&session_id, &event);
+                                    for agent_actor_id in activated {
+                                        if self.agents.get_handle(&agent_actor_id).is_some() {
+                                            let prompt = format_task_prompt(&session_id, &event);
+                                            if !prompt.is_empty() {
+                                                if let Err(e) = self.agents.send_prompt(&agent_actor_id, &prompt).await {
+                                                    warn!("Failed to route live task to agent {}: {}", agent_actor_id, e);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
             subscriber::IncomingMessage::TeamclawSessionMeta { session_id: _, payload } => {
                 if let Ok(envelope) = crate::proto::teamclaw::SessionMetaEnvelope::decode(payload.as_slice()) {
                     if let Some(info) = &envelope.session {
@@ -590,8 +672,24 @@ impl DaemonServer {
                     }
                 }
             }
+            subscriber::IncomingMessage::TeamclawNotify { device_id: _, payload } => {
+                if let Ok(envelope) = crate::proto::teamclaw::NotifyEnvelope::decode(payload.as_slice()) {
+                    if envelope.event_type == "membership.refresh" && !envelope.session_id.is_empty() {
+                        if let Some(tc) = &self.teamclaw {
+                            if let Err(err) = tc.ensure_session_subscription(&envelope.session_id).await {
+                                warn!(?err, session_id = %envelope.session_id, "failed to subscribe after notify");
+                            }
+                        }
+                    }
+                }
+            }
             subscriber::IncomingMessage::TeamclawTaskEvent { session_id, payload } => {
                 if let Ok(event) = crate::proto::teamclaw::TaskEvent::decode(payload.as_slice()) {
+                    if let Some(tc) = &mut self.teamclaw {
+                        if !tc.should_process_task_event(&session_id, &event) {
+                            return;
+                        }
+                    }
                     if let Some(tc) = &self.teamclaw {
                         let activated = tc.agents_to_activate_for_work_item(&session_id, &event);
                         for agent_actor_id in activated {

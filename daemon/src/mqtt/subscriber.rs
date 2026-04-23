@@ -16,6 +16,14 @@ pub enum IncomingMessage {
         topic: String,
         payload: Vec<u8>,
     },
+    TeamclawNotify {
+        device_id: String,
+        payload: Vec<u8>,
+    },
+    TeamclawSessionLive {
+        session_id: String,
+        payload: Vec<u8>,
+    },
     TeamclawSessionMessage {
         session_id: String,
         payload: Vec<u8>,
@@ -44,11 +52,26 @@ pub fn parse_incoming(publish: &Publish) -> Option<IncomingMessage> {
 
     // Team-scoped collaboration topics are matched before device-scoped topics.
     if topic.starts_with("amux/") && !topic.contains("/device/") {
-        // amux/{team_id}/session/{session_id}/messages or /tasks
         let parts: Vec<&str> = topic.split('/').collect();
+
+        // amux/{team_id}/tasks
+        if parts.len() == 3 && parts[2] == "tasks" {
+            return Some(IncomingMessage::TeamclawTaskEvent {
+                session_id: String::new(),
+                payload: publish.payload.to_vec(),
+            });
+        }
+
+        // amux/{team_id}/session/{session_id}/messages or /tasks
         if parts.len() == 5 && parts[2] == "session" {
             let session_id = parts[3].to_string();
             match parts[4] {
+                "live" => {
+                    return Some(IncomingMessage::TeamclawSessionLive {
+                        session_id,
+                        payload: publish.payload.to_vec(),
+                    });
+                }
                 "messages" => {
                     return Some(IncomingMessage::TeamclawSessionMessage {
                         session_id,
@@ -74,6 +97,16 @@ pub fn parse_incoming(publish: &Publish) -> Option<IncomingMessage> {
         if parts.len() == 7 && parts[2] == "actor" && parts[4] == "session" && parts[6] == "meta" {
             return Some(IncomingMessage::TeamclawSessionMeta {
                 session_id: parts[5].to_string(),
+                payload: publish.payload.to_vec(),
+            });
+        }
+    }
+
+    if topic.starts_with("amux/") && topic.contains("/device/") {
+        let parts: Vec<&str> = topic.split('/').collect();
+        if parts.len() == 5 && parts[2] == "device" && parts[4] == "notify" {
+            return Some(IncomingMessage::TeamclawNotify {
+                device_id: parts[3].to_string(),
                 payload: publish.payload.to_vec(),
             });
         }
