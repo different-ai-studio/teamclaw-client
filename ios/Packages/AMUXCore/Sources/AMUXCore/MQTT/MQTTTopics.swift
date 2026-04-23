@@ -69,6 +69,28 @@ public enum MQTTTopics {
         "\(deviceBase(teamID: teamID, deviceID: deviceID))/rpc/\(requestID)/req"
     }
 
+    /// Fixed device-scoped request channel for the MQTT rearchitecture.
+    /// Legacy per-request topics remain in use until the daemon/client RPC
+    /// runtime switches over in later tasks.
+    public static func deviceRpcRequest(teamID: String, deviceID: String) -> String {
+        "\(deviceBase(teamID: teamID, deviceID: deviceID))/rpc/req"
+    }
+
+    /// Fixed device-scoped response channel for the MQTT rearchitecture.
+    public static func deviceRpcResponse(teamID: String, deviceID: String) -> String {
+        "\(deviceBase(teamID: teamID, deviceID: deviceID))/rpc/res"
+    }
+
+    /// Targeted device notification channel used to invalidate local state.
+    public static func deviceNotify(teamID: String, deviceID: String) -> String {
+        "\(deviceBase(teamID: teamID, deviceID: deviceID))/notify"
+    }
+
+    /// Single realtime stream for live session events in the new contract.
+    public static func sessionLive(teamID: String, sessionID: String) -> String {
+        "\(teamclawBase(teamID: teamID))/session/\(sessionID)/live"
+    }
+
     public static func rpcResponseWildcard(teamID: String, deviceID: String) -> String {
         "\(deviceBase(teamID: teamID, deviceID: deviceID))/rpc/+/res"
     }

@@ -57,6 +57,28 @@ impl TeamclawTopics {
         format!("{}/device/{}/rpc/{}/res", self.base(), target_device_id, request_id)
     }
 
+    /// Fixed device-scoped request channel for the MQTT rearchitecture.
+    /// Legacy request/response flows still use per-request topics until the
+    /// runtime parser and publisher switch over.
+    pub fn device_rpc_req(&self) -> String {
+        format!("{}/device/{}/rpc/req", self.base(), self.device_id)
+    }
+
+    /// Fixed device-scoped response channel for the MQTT rearchitecture.
+    pub fn device_rpc_res(&self) -> String {
+        format!("{}/device/{}/rpc/res", self.base(), self.device_id)
+    }
+
+    /// Targeted device notification channel used to invalidate local state.
+    pub fn device_notify(&self) -> String {
+        format!("{}/device/{}/notify", self.base(), self.device_id)
+    }
+
+    /// Single realtime stream for live session events in the new contract.
+    pub fn session_live(&self, session_id: &str) -> String {
+        format!("{}/session/{}/live", self.base(), session_id)
+    }
+
     /// Subscribe pattern for incoming RPC requests targeted at this device.
     pub fn rpc_incoming_requests(&self) -> String {
         format!("{}/device/{}/rpc/+/req", self.base(), self.device_id)
