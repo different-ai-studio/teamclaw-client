@@ -14,8 +14,16 @@ public struct MQTTIncoming: Sendable {
 
 @Observable
 public final class MQTTService: NSObject, @unchecked Sendable {
+    typealias TopicHook = @Sendable (String) async throws -> Void
+
     public private(set) var connectionState: ConnectionState = .disconnected
     private var mqtt: CocoaMQTT?
+    private let subscribeHook: TopicHook?
+    private let unsubscribeHook: TopicHook?
+    private let publishHook: (@Sendable (String, Data, Bool) async throws -> Void)?
+    private let recordTopicOperations: Bool
+    internal private(set) var subscribedTopics: [String] = []
+    internal private(set) var unsubscribedTopics: [String] = []
 
     /// Serialises access to `continuations` and `connectContinuation`.
     /// Previously an `NSLock`, which deadlocked the main thread on back-button
@@ -30,7 +38,28 @@ public final class MQTTService: NSObject, @unchecked Sendable {
     private var continuations: [UUID: AsyncStream<MQTTIncoming>.Continuation] = [:]
     private var connectContinuation: CheckedContinuation<Void, Error>?
 
-    public override init() { super.init() }
+    public override init() {
+        subscribeHook = nil
+        unsubscribeHook = nil
+        publishHook = nil
+        recordTopicOperations = false
+        super.init()
+    }
+
+    internal init(
+        subscribeHook: TopicHook? = nil,
+        unsubscribeHook: TopicHook? = nil,
+        publishHook: (@Sendable (String, Data, Bool) async throws -> Void)? = nil
+    ) {
+        self.subscribeHook = subscribeHook
+        self.unsubscribeHook = unsubscribeHook
+        self.publishHook = publishHook
+        self.recordTopicOperations = true
+        super.init()
+        if subscribeHook != nil || unsubscribeHook != nil || publishHook != nil {
+            connectionState = .connected
+        }
+    }
 
     public func connect(
         host: String, port: Int,
@@ -104,13 +133,63 @@ public final class MQTTService: NSObject, @unchecked Sendable {
     }
 
     public func subscribe(_ topic: String) async throws {
+        if let subscribeHook {
+            try await subscribeHook(topic)
+            if recordTopicOperations {
+                subscribedTopics.append(topic)
+            }
+            return
+        }
         guard let mqtt, connectionState == .connected else {
             throw MQTTConnectionError.notConnected
         }
         mqtt.subscribe(topic, qos: .qos1)
+        if recordTopicOperations {
+            subscribedTopics.append(topic)
+        }
+    }
+
+    public func unsubscribe(_ topic: String) async throws {
+        if let unsubscribeHook {
+            try await unsubscribeHook(topic)
+            if recordTopicOperations {
+                unsubscribedTopics.append(topic)
+            }
+            return
+        }
+        guard let mqtt, connectionState == .connected else {
+            throw MQTTConnectionError.notConnected
+        }
+        mqtt.unsubscribe(topic)
+        if recordTopicOperations {
+            unsubscribedTopics.append(topic)
+        }
+    }
+
+    internal func unsubscribeForLifecycleStop(_ topic: String) {
+        if let unsubscribeHook {
+            Task {
+                try? await unsubscribeHook(topic)
+                if self.recordTopicOperations {
+                    self.unsubscribedTopics.append(topic)
+                }
+            }
+            return
+        }
+        guard let mqtt, connectionState == .connected else {
+            return
+        }
+        mqtt.unsubscribe(topic)
+        if recordTopicOperations {
+            unsubscribedTopics.append(topic)
+        }
     }
 
     public func publish(topic: String, payload: Data, retain: Bool = false) async throws {
+        if let publishHook {
+            try await publishHook(topic, payload, retain)
+            return
+        }
         guard let mqtt, connectionState == .connected else {
             throw MQTTConnectionError.notConnected
         }
