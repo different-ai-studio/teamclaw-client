@@ -9,10 +9,6 @@ pub struct DaemonConfig {
     pub agents: AgentsConfig,
     #[serde(default)]
     pub team_id: Option<String>,
-    #[serde(default)]
-    pub is_team_host: Option<bool>,
-    #[serde(default)]
-    pub team_host_device_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

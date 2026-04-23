@@ -202,8 +202,6 @@ public struct Teamclaw_Actor: Sendable {
 
   public var ownerMemberID: String = String()
 
-  public var hostDeviceID: String = String()
-
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -221,8 +219,6 @@ public struct Teamclaw_SessionInfo: Sendable {
   public var teamID: String = String()
 
   public var title: String = String()
-
-  public var hostDeviceID: String = String()
 
   public var createdBy: String = String()
 
@@ -257,44 +253,6 @@ public struct Teamclaw_Participant: Sendable {
   public var displayName: String = String()
 
   public var joinedAt: Int64 = 0
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-}
-
-public struct Teamclaw_SessionIndexEntry: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var sessionID: String = String()
-
-  public var sessionType: Teamclaw_SessionType = .unknown
-
-  public var title: String = String()
-
-  public var hostDeviceID: String = String()
-
-  public var createdAt: Int64 = 0
-
-  public var participantCount: Int32 = 0
-
-  public var lastMessagePreview: String = String()
-
-  public var lastMessageAt: Int64 = 0
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-}
-
-public struct Teamclaw_SessionIndex: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var sessions: [Teamclaw_SessionIndexEntry] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -401,34 +359,6 @@ public struct Teamclaw_Submission: Sendable {
   public init() {}
 }
 
-public struct Teamclaw_Invite: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var inviteID: String = String()
-
-  public var sessionID: String = String()
-
-  public var teamID: String = String()
-
-  public var hostDeviceID: String = String()
-
-  public var invitedBy: String = String()
-
-  public var invitedActorID: String = String()
-
-  public var sessionTitle: String = String()
-
-  public var summary: String = String()
-
-  public var createdAt: Int64 = 0
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-}
-
 public struct Teamclaw_SessionMessageEnvelope: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -448,27 +378,6 @@ public struct Teamclaw_SessionMessageEnvelope: Sendable {
   public init() {}
 
   fileprivate var _message: Teamclaw_Message? = nil
-}
-
-public struct Teamclaw_SessionMetaEnvelope: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var session: Teamclaw_SessionInfo {
-    get {_session ?? Teamclaw_SessionInfo()}
-    set {_session = newValue}
-  }
-  /// Returns true if `session` has been explicitly set.
-  public var hasSession: Bool {self._session != nil}
-  /// Clears the value of `session`. Subsequent reads from it will return its default value.
-  public mutating func clearSession() {self._session = nil}
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-
-  fileprivate var _session: Teamclaw_SessionInfo? = nil
 }
 
 public struct Teamclaw_TaskEvent: Sendable {
@@ -519,69 +428,6 @@ public struct Teamclaw_TaskEvent: Sendable {
     case submitted(Teamclaw_Submission)
 
   }
-
-  public init() {}
-}
-
-public struct Teamclaw_PresenceList: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var entries: [Teamclaw_PresenceEntry] = []
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-}
-
-public struct Teamclaw_PresenceEntry: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var actorID: String = String()
-
-  public var online: Bool = false
-
-  public var lastSeen: Int64 = 0
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-}
-
-public struct Teamclaw_InviteEnvelope: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var invite: Teamclaw_Invite {
-    get {_invite ?? Teamclaw_Invite()}
-    set {_invite = newValue}
-  }
-  /// Returns true if `invite` has been explicitly set.
-  public var hasInvite: Bool {self._invite != nil}
-  /// Clears the value of `invite`. Subsequent reads from it will return its default value.
-  public mutating func clearInvite() {self._invite = nil}
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-
-  fileprivate var _invite: Teamclaw_Invite? = nil
-}
-
-public struct Teamclaw_TeamMemberList: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var teamID: String = String()
-
-  public var members: [Teamclaw_Actor] = []
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 }
@@ -713,14 +559,6 @@ public struct Teamclaw_RpcRequest: Sendable {
     set {method = .updateTask(newValue)}
   }
 
-  public var registerSession: Teamclaw_RegisterSessionRequest {
-    get {
-      if case .registerSession(let v)? = method {return v}
-      return Teamclaw_RegisterSessionRequest()
-    }
-    set {method = .registerSession(newValue)}
-  }
-
   public var fetchSessionMessages: Teamclaw_FetchSessionMessagesRequest {
     get {
       if case .fetchSessionMessages(let v)? = method {return v}
@@ -741,7 +579,6 @@ public struct Teamclaw_RpcRequest: Sendable {
     case claimTask(Teamclaw_ClaimTaskRequest)
     case submitTask(Teamclaw_SubmitTaskRequest)
     case updateTask(Teamclaw_UpdateTaskRequest)
-    case registerSession(Teamclaw_RegisterSessionRequest)
     case fetchSessionMessages(Teamclaw_FetchSessionMessagesRequest)
 
   }
@@ -1041,27 +878,6 @@ public struct Teamclaw_UpdateTaskRequest: Sendable {
   fileprivate var _archived: Bool? = nil
 }
 
-public struct Teamclaw_RegisterSessionRequest: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var entry: Teamclaw_SessionIndexEntry {
-    get {_entry ?? Teamclaw_SessionIndexEntry()}
-    set {_entry = newValue}
-  }
-  /// Returns true if `entry` has been explicitly set.
-  public var hasEntry: Bool {self._entry != nil}
-  /// Clears the value of `entry`. Subsequent reads from it will return its default value.
-  public mutating func clearEntry() {self._entry = nil}
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-
-  fileprivate var _entry: Teamclaw_SessionIndexEntry? = nil
-}
-
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate let _protobuf_package = "teamclaw"
@@ -1084,7 +900,7 @@ extension Teamclaw_TaskStatus: SwiftProtobuf._ProtoNameProviding {
 
 extension Teamclaw_Actor: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Actor"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}actor_id\0\u{3}actor_type\0\u{3}display_name\0\u{3}owner_member_id\0\u{3}host_device_id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}actor_id\0\u{3}actor_type\0\u{3}display_name\0\u{3}owner_member_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1096,7 +912,6 @@ extension Teamclaw_Actor: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
       case 2: try { try decoder.decodeSingularEnumField(value: &self.actorType) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.displayName) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.ownerMemberID) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.hostDeviceID) }()
       default: break
       }
     }
@@ -1115,9 +930,6 @@ extension Teamclaw_Actor: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
     if !self.ownerMemberID.isEmpty {
       try visitor.visitSingularStringField(value: self.ownerMemberID, fieldNumber: 4)
     }
-    if !self.hostDeviceID.isEmpty {
-      try visitor.visitSingularStringField(value: self.hostDeviceID, fieldNumber: 5)
-    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1126,7 +938,6 @@ extension Teamclaw_Actor: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
     if lhs.actorType != rhs.actorType {return false}
     if lhs.displayName != rhs.displayName {return false}
     if lhs.ownerMemberID != rhs.ownerMemberID {return false}
-    if lhs.hostDeviceID != rhs.hostDeviceID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1134,7 +945,7 @@ extension Teamclaw_Actor: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
 
 extension Teamclaw_SessionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SessionInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}session_type\0\u{3}team_id\0\u{1}title\0\u{3}host_device_id\0\u{3}created_by\0\u{3}created_at\0\u{1}participants\0\u{1}summary\0\u{3}primary_agent_id\0\u{3}task_id\0\u{3}last_message_preview\0\u{3}last_message_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}session_type\0\u{3}team_id\0\u{1}title\0\u{3}created_by\0\u{3}created_at\0\u{1}participants\0\u{1}summary\0\u{3}primary_agent_id\0\u{3}task_id\0\u{3}last_message_preview\0\u{3}last_message_at\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1146,15 +957,14 @@ extension Teamclaw_SessionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 2: try { try decoder.decodeSingularEnumField(value: &self.sessionType) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.teamID) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.title) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.hostDeviceID) }()
-      case 6: try { try decoder.decodeSingularStringField(value: &self.createdBy) }()
-      case 7: try { try decoder.decodeSingularInt64Field(value: &self.createdAt) }()
-      case 8: try { try decoder.decodeRepeatedMessageField(value: &self.participants) }()
-      case 9: try { try decoder.decodeSingularStringField(value: &self.summary) }()
-      case 10: try { try decoder.decodeSingularStringField(value: &self.primaryAgentID) }()
-      case 11: try { try decoder.decodeSingularStringField(value: &self.taskID) }()
-      case 12: try { try decoder.decodeSingularStringField(value: &self.lastMessagePreview) }()
-      case 13: try { try decoder.decodeSingularInt64Field(value: &self.lastMessageAt) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.createdBy) }()
+      case 6: try { try decoder.decodeSingularInt64Field(value: &self.createdAt) }()
+      case 7: try { try decoder.decodeRepeatedMessageField(value: &self.participants) }()
+      case 8: try { try decoder.decodeSingularStringField(value: &self.summary) }()
+      case 9: try { try decoder.decodeSingularStringField(value: &self.primaryAgentID) }()
+      case 10: try { try decoder.decodeSingularStringField(value: &self.taskID) }()
+      case 11: try { try decoder.decodeSingularStringField(value: &self.lastMessagePreview) }()
+      case 12: try { try decoder.decodeSingularInt64Field(value: &self.lastMessageAt) }()
       default: break
       }
     }
@@ -1173,32 +983,29 @@ extension Teamclaw_SessionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if !self.title.isEmpty {
       try visitor.visitSingularStringField(value: self.title, fieldNumber: 4)
     }
-    if !self.hostDeviceID.isEmpty {
-      try visitor.visitSingularStringField(value: self.hostDeviceID, fieldNumber: 5)
-    }
     if !self.createdBy.isEmpty {
-      try visitor.visitSingularStringField(value: self.createdBy, fieldNumber: 6)
+      try visitor.visitSingularStringField(value: self.createdBy, fieldNumber: 5)
     }
     if self.createdAt != 0 {
-      try visitor.visitSingularInt64Field(value: self.createdAt, fieldNumber: 7)
+      try visitor.visitSingularInt64Field(value: self.createdAt, fieldNumber: 6)
     }
     if !self.participants.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.participants, fieldNumber: 8)
+      try visitor.visitRepeatedMessageField(value: self.participants, fieldNumber: 7)
     }
     if !self.summary.isEmpty {
-      try visitor.visitSingularStringField(value: self.summary, fieldNumber: 9)
+      try visitor.visitSingularStringField(value: self.summary, fieldNumber: 8)
     }
     if !self.primaryAgentID.isEmpty {
-      try visitor.visitSingularStringField(value: self.primaryAgentID, fieldNumber: 10)
+      try visitor.visitSingularStringField(value: self.primaryAgentID, fieldNumber: 9)
     }
     if !self.taskID.isEmpty {
-      try visitor.visitSingularStringField(value: self.taskID, fieldNumber: 11)
+      try visitor.visitSingularStringField(value: self.taskID, fieldNumber: 10)
     }
     if !self.lastMessagePreview.isEmpty {
-      try visitor.visitSingularStringField(value: self.lastMessagePreview, fieldNumber: 12)
+      try visitor.visitSingularStringField(value: self.lastMessagePreview, fieldNumber: 11)
     }
     if self.lastMessageAt != 0 {
-      try visitor.visitSingularInt64Field(value: self.lastMessageAt, fieldNumber: 13)
+      try visitor.visitSingularInt64Field(value: self.lastMessageAt, fieldNumber: 12)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -1208,7 +1015,6 @@ extension Teamclaw_SessionInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.sessionType != rhs.sessionType {return false}
     if lhs.teamID != rhs.teamID {return false}
     if lhs.title != rhs.title {return false}
-    if lhs.hostDeviceID != rhs.hostDeviceID {return false}
     if lhs.createdBy != rhs.createdBy {return false}
     if lhs.createdAt != rhs.createdAt {return false}
     if lhs.participants != rhs.participants {return false}
@@ -1262,101 +1068,6 @@ extension Teamclaw_Participant: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.actorType != rhs.actorType {return false}
     if lhs.displayName != rhs.displayName {return false}
     if lhs.joinedAt != rhs.joinedAt {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension Teamclaw_SessionIndexEntry: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".SessionIndexEntry"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}session_type\0\u{1}title\0\u{3}host_device_id\0\u{3}created_at\0\u{3}participant_count\0\u{3}last_message_preview\0\u{3}last_message_at\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
-      case 2: try { try decoder.decodeSingularEnumField(value: &self.sessionType) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self.title) }()
-      case 4: try { try decoder.decodeSingularStringField(value: &self.hostDeviceID) }()
-      case 5: try { try decoder.decodeSingularInt64Field(value: &self.createdAt) }()
-      case 6: try { try decoder.decodeSingularInt32Field(value: &self.participantCount) }()
-      case 7: try { try decoder.decodeSingularStringField(value: &self.lastMessagePreview) }()
-      case 8: try { try decoder.decodeSingularInt64Field(value: &self.lastMessageAt) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.sessionID.isEmpty {
-      try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 1)
-    }
-    if self.sessionType != .unknown {
-      try visitor.visitSingularEnumField(value: self.sessionType, fieldNumber: 2)
-    }
-    if !self.title.isEmpty {
-      try visitor.visitSingularStringField(value: self.title, fieldNumber: 3)
-    }
-    if !self.hostDeviceID.isEmpty {
-      try visitor.visitSingularStringField(value: self.hostDeviceID, fieldNumber: 4)
-    }
-    if self.createdAt != 0 {
-      try visitor.visitSingularInt64Field(value: self.createdAt, fieldNumber: 5)
-    }
-    if self.participantCount != 0 {
-      try visitor.visitSingularInt32Field(value: self.participantCount, fieldNumber: 6)
-    }
-    if !self.lastMessagePreview.isEmpty {
-      try visitor.visitSingularStringField(value: self.lastMessagePreview, fieldNumber: 7)
-    }
-    if self.lastMessageAt != 0 {
-      try visitor.visitSingularInt64Field(value: self.lastMessageAt, fieldNumber: 8)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Teamclaw_SessionIndexEntry, rhs: Teamclaw_SessionIndexEntry) -> Bool {
-    if lhs.sessionID != rhs.sessionID {return false}
-    if lhs.sessionType != rhs.sessionType {return false}
-    if lhs.title != rhs.title {return false}
-    if lhs.hostDeviceID != rhs.hostDeviceID {return false}
-    if lhs.createdAt != rhs.createdAt {return false}
-    if lhs.participantCount != rhs.participantCount {return false}
-    if lhs.lastMessagePreview != rhs.lastMessagePreview {return false}
-    if lhs.lastMessageAt != rhs.lastMessageAt {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension Teamclaw_SessionIndex: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".SessionIndex"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}sessions\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.sessions) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.sessions.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.sessions, fieldNumber: 1)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Teamclaw_SessionIndex, rhs: Teamclaw_SessionIndex) -> Bool {
-    if lhs.sessions != rhs.sessions {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1612,76 +1323,6 @@ extension Teamclaw_Submission: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
   }
 }
 
-extension Teamclaw_Invite: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".Invite"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}invite_id\0\u{3}session_id\0\u{3}team_id\0\u{3}host_device_id\0\u{3}invited_by\0\u{3}invited_actor_id\0\u{3}session_title\0\u{1}summary\0\u{3}created_at\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.inviteID) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self.teamID) }()
-      case 4: try { try decoder.decodeSingularStringField(value: &self.hostDeviceID) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.invitedBy) }()
-      case 6: try { try decoder.decodeSingularStringField(value: &self.invitedActorID) }()
-      case 7: try { try decoder.decodeSingularStringField(value: &self.sessionTitle) }()
-      case 8: try { try decoder.decodeSingularStringField(value: &self.summary) }()
-      case 9: try { try decoder.decodeSingularInt64Field(value: &self.createdAt) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.inviteID.isEmpty {
-      try visitor.visitSingularStringField(value: self.inviteID, fieldNumber: 1)
-    }
-    if !self.sessionID.isEmpty {
-      try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 2)
-    }
-    if !self.teamID.isEmpty {
-      try visitor.visitSingularStringField(value: self.teamID, fieldNumber: 3)
-    }
-    if !self.hostDeviceID.isEmpty {
-      try visitor.visitSingularStringField(value: self.hostDeviceID, fieldNumber: 4)
-    }
-    if !self.invitedBy.isEmpty {
-      try visitor.visitSingularStringField(value: self.invitedBy, fieldNumber: 5)
-    }
-    if !self.invitedActorID.isEmpty {
-      try visitor.visitSingularStringField(value: self.invitedActorID, fieldNumber: 6)
-    }
-    if !self.sessionTitle.isEmpty {
-      try visitor.visitSingularStringField(value: self.sessionTitle, fieldNumber: 7)
-    }
-    if !self.summary.isEmpty {
-      try visitor.visitSingularStringField(value: self.summary, fieldNumber: 8)
-    }
-    if self.createdAt != 0 {
-      try visitor.visitSingularInt64Field(value: self.createdAt, fieldNumber: 9)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Teamclaw_Invite, rhs: Teamclaw_Invite) -> Bool {
-    if lhs.inviteID != rhs.inviteID {return false}
-    if lhs.sessionID != rhs.sessionID {return false}
-    if lhs.teamID != rhs.teamID {return false}
-    if lhs.hostDeviceID != rhs.hostDeviceID {return false}
-    if lhs.invitedBy != rhs.invitedBy {return false}
-    if lhs.invitedActorID != rhs.invitedActorID {return false}
-    if lhs.sessionTitle != rhs.sessionTitle {return false}
-    if lhs.summary != rhs.summary {return false}
-    if lhs.createdAt != rhs.createdAt {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
 extension Teamclaw_SessionMessageEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SessionMessageEnvelope"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}message\0")
@@ -1711,40 +1352,6 @@ extension Teamclaw_SessionMessageEnvelope: SwiftProtobuf.Message, SwiftProtobuf.
 
   public static func ==(lhs: Teamclaw_SessionMessageEnvelope, rhs: Teamclaw_SessionMessageEnvelope) -> Bool {
     if lhs._message != rhs._message {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension Teamclaw_SessionMetaEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".SessionMetaEnvelope"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}session\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularMessageField(value: &self._session) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._session {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-    } }()
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Teamclaw_SessionMetaEnvelope, rhs: Teamclaw_SessionMetaEnvelope) -> Bool {
-    if lhs._session != rhs._session {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1846,145 +1453,6 @@ extension Teamclaw_TaskEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
 
   public static func ==(lhs: Teamclaw_TaskEvent, rhs: Teamclaw_TaskEvent) -> Bool {
     if lhs.event != rhs.event {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension Teamclaw_PresenceList: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".PresenceList"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}entries\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.entries) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.entries.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.entries, fieldNumber: 1)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Teamclaw_PresenceList, rhs: Teamclaw_PresenceList) -> Bool {
-    if lhs.entries != rhs.entries {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension Teamclaw_PresenceEntry: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".PresenceEntry"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}actor_id\0\u{1}online\0\u{3}last_seen\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.actorID) }()
-      case 2: try { try decoder.decodeSingularBoolField(value: &self.online) }()
-      case 3: try { try decoder.decodeSingularInt64Field(value: &self.lastSeen) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.actorID.isEmpty {
-      try visitor.visitSingularStringField(value: self.actorID, fieldNumber: 1)
-    }
-    if self.online != false {
-      try visitor.visitSingularBoolField(value: self.online, fieldNumber: 2)
-    }
-    if self.lastSeen != 0 {
-      try visitor.visitSingularInt64Field(value: self.lastSeen, fieldNumber: 3)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Teamclaw_PresenceEntry, rhs: Teamclaw_PresenceEntry) -> Bool {
-    if lhs.actorID != rhs.actorID {return false}
-    if lhs.online != rhs.online {return false}
-    if lhs.lastSeen != rhs.lastSeen {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension Teamclaw_InviteEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".InviteEnvelope"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}invite\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularMessageField(value: &self._invite) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._invite {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-    } }()
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Teamclaw_InviteEnvelope, rhs: Teamclaw_InviteEnvelope) -> Bool {
-    if lhs._invite != rhs._invite {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension Teamclaw_TeamMemberList: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".TeamMemberList"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}team_id\0\u{1}members\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.teamID) }()
-      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.members) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.teamID.isEmpty {
-      try visitor.visitSingularStringField(value: self.teamID, fieldNumber: 1)
-    }
-    if !self.members.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.members, fieldNumber: 2)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Teamclaw_TeamMemberList, rhs: Teamclaw_TeamMemberList) -> Bool {
-    if lhs.teamID != rhs.teamID {return false}
-    if lhs.members != rhs.members {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2102,7 +1570,7 @@ extension Teamclaw_NotifyEnvelope: SwiftProtobuf.Message, SwiftProtobuf._Message
 
 extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".RpcRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{3}sender_device_id\0\u{4}\u{8}create_session\0\u{3}join_session\0\u{3}fetch_session\0\u{3}add_participant\0\u{3}remove_participant\0\u{3}create_task\0\u{3}claim_task\0\u{3}submit_task\0\u{3}update_task\0\u{3}register_session\0\u{3}fetch_session_messages\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{3}sender_device_id\0\u{4}\u{8}create_session\0\u{3}join_session\0\u{3}fetch_session\0\u{3}add_participant\0\u{3}remove_participant\0\u{3}create_task\0\u{3}claim_task\0\u{3}submit_task\0\u{3}update_task\0\u{4}\u{2}fetch_session_messages\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2229,19 +1697,6 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
           self.method = .updateTask(v)
         }
       }()
-      case 19: try {
-        var v: Teamclaw_RegisterSessionRequest?
-        var hadOneofValue = false
-        if let current = self.method {
-          hadOneofValue = true
-          if case .registerSession(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.method = .registerSession(v)
-        }
-      }()
       case 20: try {
         var v: Teamclaw_FetchSessionMessagesRequest?
         var hadOneofValue = false
@@ -2307,10 +1762,6 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     case .updateTask?: try {
       guard case .updateTask(let v)? = self.method else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 18)
-    }()
-    case .registerSession?: try {
-      guard case .registerSession(let v)? = self.method else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 19)
     }()
     case .fetchSessionMessages?: try {
       guard case .fetchSessionMessages(let v)? = self.method else { preconditionFailure() }
@@ -2945,40 +2396,6 @@ extension Teamclaw_UpdateTaskRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
     if lhs.title != rhs.title {return false}
     if lhs.description_p != rhs.description_p {return false}
     if lhs._archived != rhs._archived {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension Teamclaw_RegisterSessionRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".RegisterSessionRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}entry\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularMessageField(value: &self._entry) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._entry {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-    } }()
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Teamclaw_RegisterSessionRequest, rhs: Teamclaw_RegisterSessionRequest) -> Bool {
-    if lhs._entry != rhs._entry {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

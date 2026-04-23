@@ -488,8 +488,10 @@ public struct NewSessionSheet: View {
                     payload: data
                 )
             } catch {
-                isSending = false
-                errorMessage = "Failed to send: \(error.localizedDescription)"
+                await MainActor.run {
+                    isSending = false
+                    errorMessage = "Failed to send: \(error.localizedDescription)"
+                }
                 return
             }
 
@@ -503,8 +505,10 @@ public struct NewSessionSheet: View {
                 if msg.topic == collabTopic,
                    let dce = try? ProtoMQTTCoder.decode(Amux_DeviceCollabEvent.self, from: msg.payload),
                    !dce.commandRejected.reason.isEmpty {
-                    isSending = false
-                    errorMessage = dce.commandRejected.reason
+                    await MainActor.run {
+                        isSending = false
+                        errorMessage = dce.commandRejected.reason
+                    }
                     return
                 }
 
@@ -514,16 +518,20 @@ public struct NewSessionSheet: View {
                    let info = try? ProtoMQTTCoder.decode(Amux_AgentInfo.self, from: msg.payload),
                    info.currentPrompt == text {
                     let agentId = info.agentID
-                    isSending = false
-                    onSessionCreated?(agentId)
-                    dismiss()
+                    await MainActor.run {
+                        isSending = false
+                        onSessionCreated?(agentId)
+                        dismiss()
+                    }
                     return
                 }
             }
 
             // Timeout
-            isSending = false
-            errorMessage = "Session creation timed out. Check daemon logs."
+            await MainActor.run {
+                isSending = false
+                errorMessage = "Session creation timed out. Check daemon logs."
+            }
         }
     }
 
@@ -584,7 +592,6 @@ public struct NewSessionSheet: View {
                         primaryAgentID: primaryAgentID,
                         title: trimmedTitle,
                         summary: text,
-                        hostDeviceID: effectiveDeviceID,
                         participants: participantActors.map { SessionParticipantInput(actorID: $0.actorId) }
                     )
                 )
@@ -595,7 +602,6 @@ public struct NewSessionSheet: View {
                 try? modelContext.save()
                 viewModel.reloadSessions(modelContext: modelContext)
 
-                try await publishSessionCreated(info, participants: participantActors)
                 if let primaryAgentID, !primaryAgentID.isEmpty {
                     _ = try await startAgentAndWaitForState(
                         initialPrompt: text,
@@ -604,12 +610,16 @@ public struct NewSessionSheet: View {
                 }
                 teamclawService?.sendMessage(sessionId: sessionID, content: text)
 
-                isSending = false
-                onSessionCreated?("collab:\(sessionID)")
-                dismiss()
+                await MainActor.run {
+                    isSending = false
+                    onSessionCreated?("collab:\(sessionID)")
+                    dismiss()
+                }
             } catch {
-                isSending = false
-                errorMessage = error.localizedDescription
+                await MainActor.run {
+                    isSending = false
+                    errorMessage = error.localizedDescription
+                }
             }
         }
     }
@@ -627,7 +637,6 @@ public struct NewSessionSheet: View {
             mode: "collab",
             teamId: teamID,
             title: String(title.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines),
-            hostDeviceId: "",
             createdBy: currentActorID,
             createdAt: createdAt,
             summary: text,
@@ -700,7 +709,6 @@ public struct NewSessionSheet: View {
                 mode: "collab",
                 teamId: info.teamID,
                 title: info.title,
-                hostDeviceId: info.hostDeviceID,
                 createdBy: info.createdBy,
                 createdAt: Date(timeIntervalSince1970: TimeInterval(info.createdAt)),
                 summary: info.summary,
@@ -718,7 +726,6 @@ public struct NewSessionSheet: View {
         session.mode = "collab"
         session.teamId = info.teamID
         session.title = info.title
-        session.hostDeviceId = info.hostDeviceID
         session.createdBy = info.createdBy
         session.createdAt = Date(timeIntervalSince1970: TimeInterval(info.createdAt))
         session.summary = info.summary
@@ -823,86 +830,6 @@ public struct NewSessionSheet: View {
         throw SessionCreationError.rpc("Agent startup timed out. Check daemon logs.")
     }
 
-    private func addLocalHumanParticipantIfNeeded(sessionId: String, hostDeviceId: String) async throws {
-        guard let service = teamclawService,
-              let actorId = service.currentHumanActorId else { return }
-        let displayName = service.localDisplayName.isEmpty ? actorId : service.localDisplayName
-        try await addParticipant(
-            sessionId: sessionId,
-            hostDeviceId: hostDeviceId,
-            actorId: actorId,
-            actorType: .human,
-            displayName: displayName
-        )
-    }
-
-    private func addAgentParticipant(sessionId: String, hostDeviceId: String, agentId: String) async throws {
-        try await addParticipant(
-            sessionId: sessionId,
-            hostDeviceId: hostDeviceId,
-            actorId: agentId,
-            actorType: .personalAgent,
-            displayName: agentId
-        )
-    }
-
-    private func addParticipant(
-        sessionId: String,
-        hostDeviceId: String,
-        actorId: String,
-        actorType: Teamclaw_ActorType,
-        displayName: String
-    ) async throws {
-        var participant = Teamclaw_Participant()
-        participant.actorID = actorId
-        participant.actorType = actorType
-        participant.displayName = displayName
-        participant.joinedAt = Int64(Date().timeIntervalSince1970)
-
-        var req = Teamclaw_AddParticipantRequest()
-        req.sessionID = sessionId
-        req.participant = participant
-
-        let routeTeam = effectiveTeamID
-        let routeDevice = effectiveDeviceID
-        var rpcReq = Teamclaw_RpcRequest()
-        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = routeDevice
-        rpcReq.method = .addParticipant(req)
-
-        guard let data = try? rpcReq.serializedData() else {
-            throw SessionCreationError.rpc("Failed to encode participant request")
-        }
-
-        let responseTopic = MQTTTopics.rpcResponseWildcard(teamID: routeTeam, deviceID: routeDevice)
-        try? await mqtt.subscribe(responseTopic)
-        let stream = mqtt.messages()
-        try await mqtt.publish(
-            topic: MQTTTopics.rpcRequest(teamID: routeTeam, deviceID: hostDeviceId, requestID: rpcReq.requestID),
-            payload: data,
-            retain: false
-        )
-
-        let deadline = Date().addingTimeInterval(10)
-        for await msg in stream {
-            if Date() > deadline {
-                throw SessionCreationError.rpc("Participant update timed out")
-            }
-            guard msg.topic.contains("/rpc/"),
-                  msg.topic.hasSuffix("/res"),
-                  let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
-                  response.requestID == rpcReq.requestID else {
-                continue
-            }
-            if !response.success {
-                throw SessionCreationError.rpc(response.error.isEmpty ? "Participant update failed" : response.error)
-            }
-            return
-        }
-
-        throw SessionCreationError.rpc("Participant update timed out")
-    }
-
     private enum SessionCreationError: LocalizedError {
         case rpc(String)
 
@@ -969,7 +896,6 @@ public struct NewSessionSheet: View {
         info.sessionType = .collab
         info.teamID = effectiveTeamID
         info.title = title
-        info.hostDeviceID = effectiveDeviceID
         info.createdBy = currentActorID
         info.createdAt = Int64(createdAt.timeIntervalSince1970)
         info.participants = participants
@@ -977,16 +903,6 @@ public struct NewSessionSheet: View {
         info.primaryAgentID = primaryAgentID ?? ""
         info.taskID = selectedTaskId ?? ""
         return info
-    }
-
-    private func publishSessionCreated(_ info: Teamclaw_SessionInfo, participants: [CachedActor]) async throws {
-        var envelope = Teamclaw_SessionMetaEnvelope()
-        envelope.session = info
-        let payload = try envelope.serializedData()
-        for participant in participants {
-            let topic = MQTTTopics.actorSessionMeta(teamID: info.teamID, actorID: participant.actorId, sessionID: info.sessionID)
-            try await mqtt.publish(topic: topic, payload: payload, retain: true)
-        }
     }
 }
 

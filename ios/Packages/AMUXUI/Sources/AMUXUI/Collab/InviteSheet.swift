@@ -12,6 +12,7 @@ public struct InviteSheet: View {
     @Environment(\.modelContext) private var modelContext
     @State private var members: [CachedActor] = []
     @State private var selectedIds: Set<String> = []
+    @State private var isSending = false
 
     public init(session: Session, teamclawService: TeamclawService, teamId: String, deviceId: String) {
         self.session = session
@@ -60,8 +61,8 @@ public struct InviteSheet: View {
                             .liquidGlass(in: Capsule())
                     }
                     .buttonStyle(.plain)
-                    .disabled(selectedIds.isEmpty)
-                    .opacity(selectedIds.isEmpty ? 0.4 : 1)
+                    .disabled(selectedIds.isEmpty || isSending)
+                    .opacity(selectedIds.isEmpty || isSending ? 0.4 : 1)
                 }
             }
             .task { loadMembers() }
@@ -77,30 +78,24 @@ public struct InviteSheet: View {
     }
 
     private func sendInvites() {
-        guard let mqtt = teamclawService.mqttRef else { return }
+        isSending = true
 
-        for memberId in selectedIds {
-            var invite = Teamclaw_Invite()
-            invite.inviteID = String(UUID().uuidString.prefix(8).lowercased())
-            invite.sessionID = session.sessionId
-            invite.teamID = teamId
-            invite.hostDeviceID = session.hostDeviceId
-            invite.invitedActorID = memberId  // memberId here is actorId from CachedActor
-            invite.sessionTitle = session.title
-            invite.summary = session.summary
-            invite.createdAt = Int64(Date().timeIntervalSince1970)
-
-            var envelope = Teamclaw_InviteEnvelope()
-            envelope.invite = invite
-
-            let topic = MQTTTopics.userInvites(teamID: teamId, actorID: memberId)
-            if let data = try? envelope.serializedData() {
-                Task {
-                    try? await mqtt.publish(topic: topic, payload: data, retain: false)
+        Task {
+            do {
+                let repository = try SupabaseSessionRepository()
+                try await repository.addParticipants(
+                    sessionID: session.sessionId,
+                    actorIDs: Array(selectedIds)
+                )
+                await MainActor.run {
+                    isSending = false
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    isSending = false
                 }
             }
         }
-
-        dismiss()
     }
 }

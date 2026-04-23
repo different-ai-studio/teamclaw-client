@@ -16,7 +16,7 @@ exception
 end;
 $$;
 
-select plan(56);
+select plan(58);
 
 select has_schema('app');
 select has_table('public', 'teams');
@@ -128,6 +128,16 @@ values (
   'Session One'
 );
 
+insert into public.sessions (id, team_id, task_id, created_by_actor_id, mode, title)
+values (
+  '50000000-0000-0000-0000-000000000002',
+  '00000000-0000-0000-0000-000000000001',
+  null,
+  '10000000-0000-0000-0000-000000000002',
+  'collab',
+  'Session Without Task'
+);
+
 insert into public.messages (id, team_id, session_id, sender_actor_id, kind, content)
 values (
   '60000000-0000-0000-0000-000000000001',
@@ -138,6 +148,15 @@ values (
   'Hello'
 );
 
+insert into public.agent_runtimes (team_id, agent_id, session_id, backend_type, status)
+values (
+  '00000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000003',
+  '50000000-0000-0000-0000-000000000001',
+  'claude',
+  'idle'
+);
+
 select ok(
   pg_temp.raises_sqlstate(
     $sql$update public.actors
@@ -146,6 +165,26 @@ select ok(
     '23514'
   ),
   'actors.actor_type update is rejected when a members row exists'
+);
+
+select ok(
+  exists(
+    select 1
+    from public.sessions
+    where id = '50000000-0000-0000-0000-000000000002'
+      and task_id is null
+  ),
+  'sessions.task_id may be null'
+);
+
+select ok(
+  exists(
+    select 1
+    from public.agent_runtimes
+    where agent_id = '10000000-0000-0000-0000-000000000003'
+      and status = 'idle'
+  ),
+  'agent_runtimes.status accepts idle'
 );
 
 select ok(

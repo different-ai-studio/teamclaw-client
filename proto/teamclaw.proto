@@ -37,7 +37,6 @@ message Actor {
   ActorType actor_type = 2;
   string display_name = 3;
   string owner_member_id = 4;
-  string host_device_id = 5;
 }
 
 message SessionInfo {
@@ -45,15 +44,14 @@ message SessionInfo {
   SessionType session_type = 2;
   string team_id = 3;
   string title = 4;
-  string host_device_id = 5;
-  string created_by = 6;
-  int64 created_at = 7;
-  repeated Participant participants = 8;
-  string summary = 9;
-  string primary_agent_id = 10;
-  string task_id = 11;
-  string last_message_preview = 12;
-  int64 last_message_at = 13;
+  string created_by = 5;
+  int64 created_at = 6;
+  repeated Participant participants = 7;
+  string summary = 8;
+  string primary_agent_id = 9;
+  string task_id = 10;
+  string last_message_preview = 11;
+  int64 last_message_at = 12;
 }
 
 message Participant {
@@ -61,21 +59,6 @@ message Participant {
   ActorType actor_type = 2;
   string display_name = 3;
   int64 joined_at = 4;
-}
-
-message SessionIndexEntry {
-  string session_id = 1;
-  SessionType session_type = 2;
-  string title = 3;
-  string host_device_id = 4;
-  int64 created_at = 5;
-  int32 participant_count = 6;
-  string last_message_preview = 7;
-  int64 last_message_at = 8;
-}
-
-message SessionIndex {
-  repeated SessionIndexEntry sessions = 1;
 }
 
 message Message {
@@ -120,26 +103,10 @@ message Submission {
   int64 submitted_at = 5;
 }
 
-message Invite {
-  string invite_id = 1;
-  string session_id = 2;
-  string team_id = 3;
-  string host_device_id = 4;
-  string invited_by = 5;
-  string invited_actor_id = 6;
-  string session_title = 7;
-  string summary = 8;
-  int64 created_at = 9;
-}
-
 // --- MQTT Messages ---
 
 message SessionMessageEnvelope {
   Message message = 1;
-}
-
-message SessionMetaEnvelope {
-  SessionInfo session = 1;
 }
 
 message TaskEvent {
@@ -149,25 +116,6 @@ message TaskEvent {
     Claim claimed = 3;
     Submission submitted = 4;
   }
-}
-
-message PresenceList {
-  repeated PresenceEntry entries = 1;
-}
-
-message PresenceEntry {
-  string actor_id = 1;
-  bool online = 2;
-  int64 last_seen = 3;
-}
-
-message InviteEnvelope {
-  Invite invite = 1;
-}
-
-message TeamMemberList {
-  string team_id = 1;
-  repeated Actor members = 2;
 }
 
 message LiveEventEnvelope {
@@ -203,7 +151,6 @@ message RpcRequest {
     ClaimTaskRequest claim_task = 16;
     SubmitTaskRequest submit_task = 17;
     UpdateTaskRequest update_task = 18;
-    RegisterSessionRequest register_session = 19;
     FetchSessionMessagesRequest fetch_session_messages = 20;
   }
 }
@@ -300,8 +247,4 @@ message UpdateTaskRequest {
   string title = 4;
   string description = 5;
   optional bool archived = 6;
-}
-
-message RegisterSessionRequest {
-  SessionIndexEntry entry = 1;
 }

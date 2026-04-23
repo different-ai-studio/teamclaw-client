@@ -49,29 +49,7 @@ public enum MQTTTopics {
         "\(deviceBase(teamID: teamID, deviceID: deviceID))/agent/\(agentID)/commands"
     }
 
-    public static func teamSessions(teamID: String) -> String {
-        "\(teamclawBase(teamID: teamID))/sessions"
-    }
-
-    public static func teamMembers(teamID: String) -> String {
-        "\(teamclawBase(teamID: teamID))/members"
-    }
-
-    public static func teamTasks(teamID: String) -> String {
-        "\(teamclawBase(teamID: teamID))/tasks"
-    }
-
-    public static func userInvites(teamID: String, actorID: String) -> String {
-        "\(teamclawBase(teamID: teamID))/user/\(actorID)/invites"
-    }
-
-    public static func rpcRequest(teamID: String, deviceID: String, requestID: String) -> String {
-        "\(deviceBase(teamID: teamID, deviceID: deviceID))/rpc/\(requestID)/req"
-    }
-
     /// Fixed device-scoped request channel for the MQTT rearchitecture.
-    /// Legacy per-request topics remain in use until the daemon/client RPC
-    /// runtime switches over in later tasks.
     public static func deviceRpcRequest(teamID: String, deviceID: String) -> String {
         "\(deviceBase(teamID: teamID, deviceID: deviceID))/rpc/req"
     }
@@ -89,29 +67,5 @@ public enum MQTTTopics {
     /// Single realtime stream for live session events in the new contract.
     public static func sessionLive(teamID: String, sessionID: String) -> String {
         "\(teamclawBase(teamID: teamID))/session/\(sessionID)/live"
-    }
-
-    public static func rpcResponseWildcard(teamID: String, deviceID: String) -> String {
-        "\(deviceBase(teamID: teamID, deviceID: deviceID))/rpc/+/res"
-    }
-
-    public static func sessionMessages(teamID: String, sessionID: String) -> String {
-        "\(teamclawBase(teamID: teamID))/session/\(sessionID)/messages"
-    }
-
-    public static func sessionTasks(teamID: String, sessionID: String) -> String {
-        "\(teamclawBase(teamID: teamID))/session/\(sessionID)/tasks"
-    }
-
-    public static func sessionPresence(teamID: String, sessionID: String) -> String {
-        "\(teamclawBase(teamID: teamID))/session/\(sessionID)/presence"
-    }
-
-    public static func actorSessionMeta(teamID: String, actorID: String, sessionID: String) -> String {
-        "\(teamclawBase(teamID: teamID))/actor/\(actorID)/session/\(sessionID)/meta"
-    }
-
-    public static func actorSessionMetaWildcard(teamID: String, actorID: String) -> String {
-        "\(teamclawBase(teamID: teamID))/actor/\(actorID)/session/+/meta"
     }
 }

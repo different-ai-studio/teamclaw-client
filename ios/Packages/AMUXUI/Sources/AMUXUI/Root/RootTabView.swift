@@ -16,6 +16,7 @@ public struct RootTabView: View {
     @State private var actorStore: ActorStore?
     @State private var connectedAgentsStore: ConnectedAgentsStore?
     @State private var sessionIDsRepo: SupabaseSessionIDsRepository?
+    @State private var sessionsRepo: SupabaseSessionsRepository?
 
     public init(mqtt: MQTTService,
                 pairing: PairingManager,
@@ -40,6 +41,7 @@ public struct RootTabView: View {
                             activeTeam: activeTeam,
                             currentActorID: currentActorID,
                             viewModel: viewModel,
+                            refreshSessionsFromBackend: refreshSessionsFromBackend,
                             navigationPath: $sessionsPath,
                             connectedAgentsStore: connectedAgentsStore,
                             onReconnect: onReconnect)
@@ -100,6 +102,7 @@ public struct RootTabView: View {
             actorStore = nil
             connectedAgentsStore = nil
             sessionIDsRepo = nil
+            sessionsRepo = nil
             viewModel.validSessionIDs = nil
             return
         }
@@ -126,11 +129,26 @@ public struct RootTabView: View {
         if sessionIDsRepo == nil {
             sessionIDsRepo = try? SupabaseSessionIDsRepository()
         }
-        if let repo = sessionIDsRepo {
-            if let ids = try? await repo.listSessionIDs(teamID: activeTeam.id) {
-                viewModel.validSessionIDs = ids
-                viewModel.reloadSessions(modelContext: modelContext)
-            }
+        if sessionsRepo == nil {
+            sessionsRepo = try? SupabaseSessionsRepository()
+        }
+        await refreshSessionsFromBackend()
+    }
+
+    @MainActor
+    private func refreshSessionsFromBackend() async {
+        guard let activeTeam else { return }
+
+        if let repo = sessionsRepo,
+           let records = try? await repo.listSessions(teamID: activeTeam.id) {
+            viewModel.syncSessionRecords(records, modelContext: modelContext)
+            return
+        }
+
+        if let repo = sessionIDsRepo,
+           let ids = try? await repo.listSessionIDs(teamID: activeTeam.id) {
+            viewModel.validSessionIDs = ids
+            viewModel.reloadSessions(modelContext: modelContext)
         }
     }
 }

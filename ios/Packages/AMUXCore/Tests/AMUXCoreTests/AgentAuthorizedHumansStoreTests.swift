@@ -76,6 +76,10 @@ private actor InMemoryAgentAccessRepository: AgentAccessRepository {
         canManageValue
     }
 
+    func deviceID(for agentID: String) async throws -> String? {
+        nil
+    }
+
     func grantAuthorizedHuman(agentID: String, memberID: String, permissionLevel: String) async throws {
         lastGrantedMemberID = memberID
         authorizedHumans.append(

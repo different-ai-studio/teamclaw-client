@@ -43,11 +43,8 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         XCTAssertEqual(
             restartedMQTT.subscribedTopics,
             [
-                MQTTTopics.teamMembers(teamID: "team1"),
                 MQTTTopics.deviceNotify(teamID: "team1", deviceID: "device1"),
-                MQTTTopics.userInvites(teamID: "team1", actorID: "peer1"),
-                MQTTTopics.rpcResponseWildcard(teamID: "team1", deviceID: "device1"),
-                MQTTTopics.teamTasks(teamID: "team1"),
+                MQTTTopics.deviceRpcResponse(teamID: "team1", deviceID: "device1"),
                 MQTTTopics.devicePeers(teamID: "team1", deviceID: "device1"),
                 MQTTTopics.sessionLive(teamID: "team1", sessionID: "sess-1"),
             ]
@@ -192,6 +189,48 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
             [MQTTTopics.sessionLive(teamID: "team1", sessionID: "sess-1")]
         )
         XCTAssertEqual(service.fetchRecentMessagesCalls, ["sess-1"])
+    }
+
+    func testSendMessagePublishesLiveEventTopic() async throws {
+        var published: [(String, Data, Bool)] = []
+        let mqtt = MQTTService(
+            subscribeHook: { _ in },
+            unsubscribeHook: { _ in },
+            publishHook: { topic, payload, retain in
+                published.append((topic, payload, retain))
+            }
+        )
+        let service = TeamclawService()
+        let container = try makeModelContainer()
+
+        service.configureRuntimeForTesting(
+            mqtt: mqtt,
+            teamId: "team1",
+            deviceId: "device1",
+            peerId: "peer1",
+            modelContainer: container
+        )
+
+        var peers = Amux_PeerList()
+        var mine = Amux_PeerInfo()
+        mine.peerID = "peer1"
+        mine.memberID = "member1"
+        peers.peers = [mine]
+
+        await service.handleIncomingForTesting(
+            MQTTIncoming(
+                topic: MQTTTopics.devicePeers(teamID: "team1", deviceID: "device1"),
+                payload: try peers.serializedData(),
+                retained: false
+            )
+        )
+
+        service.sendMessage(sessionId: "sess-1", content: "hello")
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(published.count, 1)
+        XCTAssertEqual(published[0].0, MQTTTopics.sessionLive(teamID: "team1", sessionID: "sess-1"))
+        XCTAssertFalse(published[0].2)
     }
 
     func testEndForegroundSessionUnsubscribesLiveTopic() async throws {

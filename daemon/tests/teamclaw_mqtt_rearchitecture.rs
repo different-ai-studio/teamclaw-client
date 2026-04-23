@@ -45,32 +45,30 @@ async fn parse_session_live_and_device_notify_topics() {
 }
 
 #[test]
-fn parse_global_tasks_topic() {
+fn reject_legacy_teamclaw_topics_after_rearchitecture() {
     let global_tasks = rumqttc::Publish::new(
         "amux/team1/tasks",
         rumqttc::QoS::AtLeastOnce,
         vec![7, 8, 9],
     );
-
-    assert!(matches!(
-        subscriber::parse_incoming(&global_tasks),
-        Some(subscriber::IncomingMessage::TeamclawTaskEvent { session_id, .. }) if session_id.is_empty()
-    ));
-}
-
-#[test]
-fn mixed_legacy_and_live_topics_parse_during_rollout() {
-    let legacy = rumqttc::Publish::new(
+    let legacy_message = rumqttc::Publish::new(
         "amux/team1/session/sess-1/messages",
         rumqttc::QoS::AtLeastOnce,
         vec![],
     );
-    let live = rumqttc::Publish::new(
-        "amux/team1/session/sess-1/live",
+    let legacy_task = rumqttc::Publish::new(
+        "amux/team1/session/sess-1/tasks",
+        rumqttc::QoS::AtLeastOnce,
+        vec![],
+    );
+    let legacy_meta = rumqttc::Publish::new(
+        "amux/team1/actor/member-a/session/sess-1/meta",
         rumqttc::QoS::AtLeastOnce,
         vec![],
     );
 
-    assert!(subscriber::parse_incoming(&legacy).is_some());
-    assert!(subscriber::parse_incoming(&live).is_some());
+    assert!(subscriber::parse_incoming(&global_tasks).is_none());
+    assert!(subscriber::parse_incoming(&legacy_message).is_none());
+    assert!(subscriber::parse_incoming(&legacy_task).is_none());
+    assert!(subscriber::parse_incoming(&legacy_meta).is_none());
 }

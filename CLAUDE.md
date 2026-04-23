@@ -78,17 +78,12 @@ amux/{team_id}/device/{device_id}/agent/{agent_id}/events   # AcpEvent stream
 amux/{team_id}/device/{device_id}/agent/{agent_id}/commands # Client commands
 ```
 
-**Team-scoped topics** (collaboration, sessions):
+**Teamclaw topics** (session realtime, notifications):
 ```
-amux/{team_id}/sessions                                      # Team session list
-amux/{team_id}/session/{session_id}/messages                # Session messages
-amux/{team_id}/session/{session_id}/tasks                   # Session tasks
-amux/{team_id}/session/{session_id}/presence                # Session presence
-amux/{team_id}/actor/{actor_id}/session/{session_id}/meta   # Actor session metadata
-amux/{team_id}/user/{user_id}/invites                       # User invites
-amux/{team_id}/tasks                                         # Global tasks (not session-tied)
-amux/{team_id}/device/{device_id}/rpc/{request_id}/req      # RPC requests
-amux/{team_id}/device/{device_id}/rpc/{request_id}/res      # RPC responses
+amux/{team_id}/device/{device_id}/rpc/req                   # Teamclaw RPC requests
+amux/{team_id}/device/{device_id}/rpc/res                   # Teamclaw RPC responses
+amux/{team_id}/device/{device_id}/notify                    # Membership refresh / targeted notify
+amux/{team_id}/session/{session_id}/live                    # Session live event stream
 ```
 
 Sessions are fanned out to per-agent retained topics (not a single AgentList) so

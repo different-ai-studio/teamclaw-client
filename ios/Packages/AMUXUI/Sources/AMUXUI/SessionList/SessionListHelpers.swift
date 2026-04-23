@@ -9,6 +9,7 @@ import AMUXSharedUI
 
 struct SessionListContent: View {
     @Bindable var viewModel: SessionListViewModel
+    let refreshSessionsFromBackend: () async -> Void
     @Binding var navigationPath: [String]
     @Binding var isEditing: Bool
     @Binding var selectedIDs: Set<String>
@@ -57,7 +58,7 @@ struct SessionListContent: View {
                 }
                 .listStyle(.plain)
                 .refreshable {
-                    viewModel.reloadSessions(modelContext: modelContext)
+                    await refreshSessionsFromBackend()
                 }
             }
         }

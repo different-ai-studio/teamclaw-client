@@ -94,8 +94,6 @@ fn default_daemon_config(display_name: &str) -> DaemonConfig {
         },
         agents: AgentsConfig::default(),
         team_id: None,
-        is_team_host: None,
-        team_host_device_id: None,
     }
 }
 
@@ -181,8 +179,6 @@ mod tests {
                 },
                 agents: AgentsConfig::default(),
                 team_id: Some("team-old".into()),
-                is_team_host: Some(true),
-                team_host_device_id: Some("device-123".into()),
             }),
             "new-display-name",
             "team-2",

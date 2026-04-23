@@ -17,7 +17,6 @@ pub struct StoredSession {
     pub session_type: String,
     pub team_id: String,
     pub title: String,
-    pub host_device_id: String,
     pub created_by: String,
     pub created_at: DateTime<Utc>,
     pub summary: String,
@@ -88,26 +87,6 @@ impl TeamclawSessionStore {
         self.sessions.len() < len
     }
 
-    pub fn hosted_sessions(&self, device_id: &str) -> Vec<&StoredSession> {
-        self.sessions.iter().filter(|s| s.host_device_id == device_id).collect()
-    }
-
-    pub fn to_proto_index(&self) -> teamclaw::SessionIndex {
-        let sessions = self.sessions.iter().map(|s| {
-            teamclaw::SessionIndexEntry {
-                session_id: s.session_id.clone(),
-                session_type: session_type_to_proto(&s.session_type) as i32,
-                title: s.title.clone(),
-                host_device_id: s.host_device_id.clone(),
-                created_at: s.created_at.timestamp(),
-                participant_count: s.participants.len() as i32,
-                last_message_preview: String::new(),
-                last_message_at: 0,
-            }
-        }).collect();
-        teamclaw::SessionIndex { sessions }
-    }
-
     pub fn to_proto_session_info(&self, session_id: &str) -> Option<teamclaw::SessionInfo> {
         self.find_by_id(session_id).map(|s| {
             let participants = s.participants.iter().map(|p| {
@@ -123,7 +102,6 @@ impl TeamclawSessionStore {
                 session_type: session_type_to_proto(&s.session_type) as i32,
                 team_id: s.team_id.clone(),
                 title: s.title.clone(),
-                host_device_id: s.host_device_id.clone(),
                 created_by: s.created_by.clone(),
                 created_at: s.created_at.timestamp(),
                 participants,
@@ -160,13 +138,12 @@ mod tests {
     use chrono::Utc;
     use tempfile::TempDir;
 
-    fn make_session(id: &str, session_type: &str, host: &str) -> StoredSession {
+    fn make_session(id: &str, session_type: &str) -> StoredSession {
         StoredSession {
             session_id: id.to_string(),
             session_type: session_type.to_string(),
             team_id: "team1".to_string(),
             title: format!("Session {}", id),
-            host_device_id: host.to_string(),
             created_by: "user1".to_string(),
             created_at: Utc::now(),
             summary: String::new(),
@@ -188,7 +165,7 @@ mod tests {
     #[test]
     fn test_upsert_insert() {
         let mut store = TeamclawSessionStore::default();
-        store.upsert(make_session("s1", "collab", "dev-a"));
+        store.upsert(make_session("s1", "collab"));
         assert_eq!(store.sessions.len(), 1);
         assert_eq!(store.sessions[0].session_id, "s1");
     }
@@ -196,8 +173,8 @@ mod tests {
     #[test]
     fn test_upsert_update() {
         let mut store = TeamclawSessionStore::default();
-        store.upsert(make_session("s1", "collab", "dev-a"));
-        let mut updated = make_session("s1", "collab", "dev-a");
+        store.upsert(make_session("s1", "collab"));
+        let mut updated = make_session("s1", "collab");
         updated.title = "Updated Title".to_string();
         store.upsert(updated);
         assert_eq!(store.sessions.len(), 1);
@@ -207,8 +184,8 @@ mod tests {
     #[test]
     fn test_find_by_id() {
         let mut store = TeamclawSessionStore::default();
-        store.upsert(make_session("s1", "collab", "dev-a"));
-        store.upsert(make_session("s2", "control", "dev-b"));
+        store.upsert(make_session("s1", "collab"));
+        store.upsert(make_session("s2", "control"));
         assert!(store.find_by_id("s1").is_some());
         assert!(store.find_by_id("s3").is_none());
     }
@@ -216,21 +193,11 @@ mod tests {
     #[test]
     fn test_remove() {
         let mut store = TeamclawSessionStore::default();
-        store.upsert(make_session("s1", "collab", "dev-a"));
-        store.upsert(make_session("s2", "control", "dev-b"));
+        store.upsert(make_session("s1", "collab"));
+        store.upsert(make_session("s2", "control"));
         assert!(store.remove("s1"));
         assert_eq!(store.sessions.len(), 1);
         assert!(!store.remove("s1")); // already removed
-    }
-
-    #[test]
-    fn test_hosted_sessions() {
-        let mut store = TeamclawSessionStore::default();
-        store.upsert(make_session("s1", "collab", "dev-a"));
-        store.upsert(make_session("s2", "collab", "dev-b"));
-        store.upsert(make_session("s3", "control", "dev-a"));
-        let hosted = store.hosted_sessions("dev-a");
-        assert_eq!(hosted.len(), 2);
     }
 
     #[test]
@@ -239,7 +206,7 @@ mod tests {
         let path = tmp.path().join("sessions.toml");
 
         let mut store = TeamclawSessionStore::default();
-        store.upsert(make_session("s1", "collab", "dev-a"));
+        store.upsert(make_session("s1", "collab"));
         store.save(&path).unwrap();
 
         let loaded = TeamclawSessionStore::load(&path).unwrap();
@@ -253,19 +220,6 @@ mod tests {
         let path = tmp.path().join("nonexistent.toml");
         let store = TeamclawSessionStore::load(&path).unwrap();
         assert!(store.sessions.is_empty());
-    }
-
-    #[test]
-    fn test_to_proto_index() {
-        let mut store = TeamclawSessionStore::default();
-        let mut s = make_session("s1", "collab", "dev-a");
-        s.participants = vec![make_participant("p1", "human"), make_participant("p2", "personal_agent")];
-        store.upsert(s);
-
-        let index = store.to_proto_index();
-        assert_eq!(index.sessions.len(), 1);
-        assert_eq!(index.sessions[0].session_id, "s1");
-        assert_eq!(index.sessions[0].participant_count, 2);
     }
 
     #[test]

@@ -9,6 +9,7 @@ public struct SessionsTab: View {
     let activeTeam: TeamSummary?
     let currentActorID: String?
     @Bindable var viewModel: SessionListViewModel
+    let refreshSessionsFromBackend: () async -> Void
     let connectedAgentsStore: ConnectedAgentsStore?
     var onReconnect: (() -> Void)?
 
@@ -29,6 +30,7 @@ public struct SessionsTab: View {
                 activeTeam: TeamSummary?,
                 currentActorID: String?,
                 viewModel: SessionListViewModel,
+                refreshSessionsFromBackend: @escaping () async -> Void,
                 navigationPath: Binding<[String]>,
                 connectedAgentsStore: ConnectedAgentsStore? = nil,
                 onReconnect: (() -> Void)? = nil) {
@@ -38,6 +40,7 @@ public struct SessionsTab: View {
         self.activeTeam = activeTeam
         self.currentActorID = currentActorID
         self.viewModel = viewModel
+        self.refreshSessionsFromBackend = refreshSessionsFromBackend
         self._navigationPath = navigationPath
         self.connectedAgentsStore = connectedAgentsStore
         self.onReconnect = onReconnect
@@ -47,6 +50,7 @@ public struct SessionsTab: View {
         NavigationStack(path: $navigationPath) {
             SessionListContent(
                 viewModel: viewModel,
+                refreshSessionsFromBackend: refreshSessionsFromBackend,
                 navigationPath: $navigationPath,
                 isEditing: $isEditing,
                 selectedIDs: $selectedIDs,

@@ -25,8 +25,6 @@ pub struct SessionManager {
     device_id: String,
     team_id: String,
     actor_id: Option<String>,
-    is_team_host: bool,
-    team_host_device_id: Option<String>,
     recent_event_keys: HashSet<String>,
     recent_event_order: VecDeque<String>,
     subscribed_live_sessions: BTreeSet<String>,
@@ -41,8 +39,6 @@ impl SessionManager {
         device_id: &str,
         actor_id: Option<String>,
         config_dir: PathBuf,
-        is_team_host: bool,
-        team_host_device_id: Option<String>,
     ) -> crate::error::Result<Self> {
         let topics = TeamclawTopics::new(team_id, device_id);
         let live_publisher = LivePublisher::new(
@@ -67,8 +63,6 @@ impl SessionManager {
             device_id: device_id.to_string(),
             team_id: team_id.to_string(),
             actor_id,
-            is_team_host,
-            team_host_device_id,
             recent_event_keys: HashSet::new(),
             recent_event_order: VecDeque::new(),
             subscribed_live_sessions: BTreeSet::new(),
@@ -84,46 +78,6 @@ impl SessionManager {
         }
         self.refresh_membership_subscriptions().await?;
 
-        Ok(())
-    }
-
-    pub async fn apply_session_meta(
-        &mut self,
-        info: &teamclaw::SessionInfo,
-    ) -> crate::error::Result<()> {
-        if info.session_id.is_empty() {
-            return Ok(());
-        }
-
-        let participants = info.participants.iter().map(|participant| StoredParticipant {
-            actor_id: participant.actor_id.clone(),
-            actor_type: actor_type_to_string(participant.actor_type),
-            display_name: participant.display_name.clone(),
-            joined_at: chrono::DateTime::<Utc>::from_timestamp(participant.joined_at, 0)
-                .unwrap_or_else(Utc::now),
-        }).collect();
-
-        let stored = StoredSession {
-            session_id: info.session_id.clone(),
-            session_type: match info.session_type {
-                x if x == teamclaw::SessionType::Control as i32 => "control".to_string(),
-                _ => "collab".to_string(),
-            },
-            team_id: info.team_id.clone(),
-            title: info.title.clone(),
-            host_device_id: info.host_device_id.clone(),
-            created_by: info.created_by.clone(),
-            created_at: chrono::DateTime::<Utc>::from_timestamp(info.created_at, 0)
-                .unwrap_or_else(Utc::now),
-            summary: info.summary.clone(),
-            task_id: info.task_id.clone(),
-            participants,
-            primary_agent_id: info.primary_agent_id.clone(),
-        };
-
-        self.sessions.upsert(stored);
-        self.sessions.save(&self.sessions_path)?;
-        self.refresh_membership_subscriptions().await?;
         Ok(())
     }
 
@@ -188,12 +142,6 @@ impl SessionManager {
                 let r = r.clone();
                 self.handle_update_task(&req, r).await
             }
-            Some(teamclaw::rpc_request::Method::RegisterSession(_)) => RpcResponse {
-                request_id: request_id.clone(),
-                success: false,
-                error: "register_session is no longer supported over MQTT retained state".to_string(),
-                result: None,
-            },
             None => {
                 warn!("SessionManager: received RPC request with no method");
                 RpcResponse {
@@ -205,7 +153,7 @@ impl SessionManager {
             }
         };
 
-        self.rpc_server.respond(&req, &request_id, response).await;
+        self.rpc_server.respond(&req, response).await;
     }
 
     // --- RPC Handlers ---
@@ -227,7 +175,6 @@ impl SessionManager {
             session_type: session_type.to_string(),
             team_id: r.team_id.clone(),
             title: r.title.clone(),
-            host_device_id: self.device_id.clone(),
             created_by: if !r.sender_actor_id.is_empty() {
                 r.sender_actor_id.clone()
             } else {
@@ -251,31 +198,6 @@ impl SessionManager {
                 "handle_create_session: failed to refresh membership subscriptions: {}",
                 e
             );
-        }
-
-        // Send invites to invited actors
-        for actor_id in &r.invite_actor_ids {
-            let invite = teamclaw::Invite {
-                invite_id: Uuid::new_v4().to_string(),
-                session_id: session_id.clone(),
-                team_id: r.team_id.clone(),
-                host_device_id: self.device_id.clone(),
-                invited_by: req.sender_device_id.clone(),
-                invited_actor_id: actor_id.clone(),
-                session_title: r.title.clone(),
-                summary: r.summary.clone(),
-                created_at: Utc::now().timestamp(),
-            };
-            let envelope = teamclaw::InviteEnvelope { invite: Some(invite) };
-            let topic = self.topics.user_invites(actor_id);
-            let payload = envelope.encode_to_vec();
-            if let Err(e) = self
-                .client
-                .publish(topic, QoS::AtLeastOnce, false, payload)
-                .await
-            {
-                warn!("handle_create_session: failed to publish invite for {}: {}", actor_id, e);
-            }
         }
 
         let session_info = self.sessions.to_proto_session_info(&session_id);
@@ -654,19 +576,6 @@ impl SessionManager {
             let event = teamclaw::TaskEvent {
                 event: Some(teamclaw::task_event::Event::Created(item.clone())),
             };
-            let topic = if r.session_id.is_empty() {
-                self.topics.tasks()
-            } else {
-                self.topics.session_tasks(&r.session_id)
-            };
-            let payload = event.encode_to_vec();
-            if let Err(e) = self
-                .client
-                .publish(topic, QoS::AtLeastOnce, false, payload)
-                .await
-            {
-                warn!("handle_create_task: failed to publish task event: {}", e);
-            }
             if !r.session_id.is_empty() {
                 if let Err(e) = self
                     .live_publisher
@@ -736,19 +645,6 @@ impl SessionManager {
         let event = teamclaw::TaskEvent {
             event: Some(teamclaw::task_event::Event::Claimed(proto_claim.clone())),
         };
-        let topic = if r.session_id.is_empty() {
-            self.topics.tasks()
-        } else {
-            self.topics.session_tasks(&r.session_id)
-        };
-        let payload = event.encode_to_vec();
-        if let Err(e) = self
-            .client
-            .publish(topic, QoS::AtLeastOnce, false, payload)
-            .await
-        {
-            warn!("handle_claim_task: failed to publish claim event: {}", e);
-        }
         if !r.session_id.is_empty() {
             if let Err(e) = self
                 .live_publisher
@@ -826,19 +722,6 @@ impl SessionManager {
                 proto_submission.clone(),
             )),
         };
-        let topic = if r.session_id.is_empty() {
-            self.topics.tasks()
-        } else {
-            self.topics.session_tasks(&r.session_id)
-        };
-        let payload = event.encode_to_vec();
-        if let Err(e) = self
-            .client
-            .publish(topic, QoS::AtLeastOnce, false, payload)
-            .await
-        {
-            warn!("handle_submit_task: failed to publish submission event: {}", e);
-        }
         if !r.session_id.is_empty() {
             if let Err(e) = self
                 .live_publisher
@@ -922,19 +805,6 @@ impl SessionManager {
             let event = teamclaw::TaskEvent {
                 event: Some(teamclaw::task_event::Event::Updated(item.clone())),
             };
-            let topic = if r.session_id.is_empty() {
-                self.topics.tasks()
-            } else {
-                self.topics.session_tasks(&r.session_id)
-            };
-            let payload = event.encode_to_vec();
-            if let Err(e) = self
-                .client
-                .publish(topic, QoS::AtLeastOnce, false, payload)
-                .await
-            {
-                warn!("handle_update_task: failed to publish update event: {}", e);
-            }
             if !r.session_id.is_empty() {
                 if let Err(e) = self
                     .live_publisher
@@ -986,14 +856,6 @@ impl SessionManager {
         store.append(stored);
         store.save(&self.config_dir, session_id)?;
         Ok(())
-    }
-
-    /// Returns true if this device is the host for the given session.
-    pub fn is_host_for(&self, session_id: &str) -> bool {
-        self.sessions
-            .find_by_id(session_id)
-            .map(|s| s.host_device_id == self.device_id)
-            .unwrap_or(false)
     }
 
     /// Returns the agent actor_ids that should receive this message.
@@ -1101,11 +963,6 @@ impl SessionManager {
         let envelope = teamclaw::SessionMessageEnvelope {
             message: Some(msg),
         };
-        let topic = self.topics.session_messages(session_id);
-        let _ = self
-            .client
-            .publish(topic, QoS::AtLeastOnce, false, envelope.encode_to_vec())
-            .await;
         let _ = self
             .live_publisher
             .publish_message(session_id, agent_actor_id, &envelope)
@@ -1226,10 +1083,9 @@ impl SessionManager {
 
     fn base_subscription_topics(&self) -> Vec<String> {
         vec![
-            self.topics.tasks(),
-            self.topics.rpc_incoming_requests(),
+            self.topics.device_rpc_req(),
             self.topics.device_notify(),
-            self.topics.rpc_response(&self.device_id, "+"),
+            self.topics.device_rpc_res(),
         ]
     }
 
@@ -1243,13 +1099,12 @@ impl SessionManager {
             .sessions
             .iter()
             .filter(|session| {
-                session.host_device_id == self.device_id
-                    || local_actor_id.is_some_and(|actor_id| {
-                        session
-                            .participants
-                            .iter()
-                            .any(|participant| participant.actor_id == actor_id)
-                    })
+                local_actor_id.is_some_and(|actor_id| {
+                    session
+                        .participants
+                        .iter()
+                        .any(|participant| participant.actor_id == actor_id)
+                })
             })
             .map(|session| session.session_id.clone())
             .collect()
@@ -1289,15 +1144,6 @@ impl SessionManager {
         if let Some(requester_device_id) = requester_device_id {
             if !requester_device_id.is_empty() && requester_device_id != self.device_id {
                 targets.push(requester_device_id.to_string());
-            }
-        }
-
-        if let Some(session) = self.sessions.find_by_id(session_id) {
-            if !session.host_device_id.is_empty()
-                && session.host_device_id != self.device_id
-                && !targets.iter().any(|id| id == &session.host_device_id)
-            {
-                targets.push(session.host_device_id.clone());
             }
         }
 
@@ -1390,8 +1236,6 @@ mod tests {
             "dev-a",
             None,
             config_dir.to_path_buf(),
-            false,
-            None,
         )
         .unwrap();
         manager.skip_live_subscription_io = true;
@@ -1404,7 +1248,6 @@ mod tests {
             session_type: "collab".to_string(),
             team_id: "team1".to_string(),
             title: format!("Session {}", id),
-            host_device_id: "dev-a".to_string(),
             created_by: "user1".to_string(),
             created_at: Utc::now(),
             summary: String::new(),
@@ -1535,26 +1378,18 @@ mod tests {
     }
 
     #[test]
-    fn test_membership_refresh_targets_include_requester_and_host_once() {
+    fn test_membership_refresh_targets_only_include_requester() {
         let tmp = TempDir::new().unwrap();
         let mut sm = dummy_session_manager(tmp.path());
 
-        let mut session = make_session("s1");
-        session.host_device_id = "dev-host".to_string();
-        sm.sessions.upsert(session);
-
         let targets = sm.membership_refresh_targets("s1", Some("dev-requester"));
-        assert_eq!(targets, vec!["dev-requester".to_string(), "dev-host".to_string()]);
+        assert_eq!(targets, vec!["dev-requester".to_string()]);
     }
 
     #[test]
-    fn test_membership_refresh_targets_skip_local_and_dedupe_host() {
+    fn test_membership_refresh_targets_skip_local_requester() {
         let tmp = TempDir::new().unwrap();
         let mut sm = dummy_session_manager(tmp.path());
-
-        let mut session = make_session("s1");
-        session.host_device_id = "dev-a".to_string();
-        sm.sessions.upsert(session);
 
         let targets = sm.membership_refresh_targets("s1", Some("dev-a"));
         assert!(targets.is_empty());
@@ -1580,7 +1415,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_refresh_membership_subscriptions_uses_host_and_local_actor_truth() {
+    async fn test_refresh_membership_subscriptions_uses_local_actor_truth() {
         let tmp = TempDir::new().unwrap();
         let (client, _eventloop) = rumqttc::AsyncClient::new(
             rumqttc::MqttOptions::new("test", "localhost", 1883),
@@ -1592,24 +1427,16 @@ mod tests {
             "dev-a",
             Some("member-a".to_string()),
             tmp.path().to_path_buf(),
-            false,
-            None,
         )
         .unwrap();
         sm.skip_live_subscription_io = true;
 
-        let mut hosted = make_session("hosted");
-        hosted.host_device_id = "dev-a".to_string();
-
         let mut joined = make_session("joined");
-        joined.host_device_id = "dev-host".to_string();
         joined.participants.push(make_human_participant("member-a"));
 
         let mut unrelated = make_session("unrelated");
-        unrelated.host_device_id = "dev-host".to_string();
         unrelated.participants.push(make_human_participant("someone-else"));
 
-        sm.sessions.upsert(hosted);
         sm.sessions.upsert(joined);
         sm.sessions.upsert(unrelated);
 
@@ -1617,7 +1444,7 @@ mod tests {
 
         assert_eq!(
             sm.subscribed_live_sessions(),
-            vec!["hosted".to_string(), "joined".to_string()]
+            vec!["joined".to_string()]
         );
     }
 
@@ -1634,27 +1461,20 @@ mod tests {
             "dev-a",
             Some("member-a".to_string()),
             tmp.path().to_path_buf(),
-            false,
-            None,
         )
         .unwrap();
         sm.skip_live_subscription_io = true;
 
-        let mut hosted = make_session("hosted");
-        hosted.host_device_id = "dev-a".to_string();
-
         let mut joined = make_session("joined");
-        joined.host_device_id = "dev-host".to_string();
         joined.participants.push(make_human_participant("member-a"));
 
-        sm.sessions.upsert(hosted);
         sm.sessions.upsert(joined);
 
         sm.subscribe_all().await.unwrap();
 
         assert_eq!(
             sm.subscribed_live_sessions(),
-            vec!["hosted".to_string(), "joined".to_string()]
+            vec!["joined".to_string()]
         );
     }
 
@@ -1671,29 +1491,21 @@ mod tests {
             "dev-a",
             Some("member-a".to_string()),
             tmp.path().to_path_buf(),
-            false,
-            None,
         )
         .unwrap();
         sm.skip_live_subscription_io = true;
 
-        let mut hosted = make_session("hosted");
-        hosted.host_device_id = "dev-a".to_string();
-
         let mut joined = make_session("joined");
-        joined.host_device_id = "dev-host".to_string();
         joined.participants.push(make_human_participant("member-a"));
 
-        sm.sessions.upsert(hosted);
         sm.sessions.upsert(joined);
         sm.subscribe_all().await.unwrap();
         assert_eq!(
             sm.subscribed_live_sessions(),
-            vec!["hosted".to_string(), "joined".to_string()]
+            vec!["joined".to_string()]
         );
 
         let mut unrelated = make_session("replacement");
-        unrelated.host_device_id = "dev-other".to_string();
         sm.sessions.sessions.clear();
         sm.sessions.upsert(unrelated);
 
@@ -1710,7 +1522,8 @@ mod tests {
 
         let topics = sm.base_subscription_topics();
 
-        assert!(topics.contains(&"amux/team1/tasks".to_string()));
+        assert!(topics.contains(&"amux/team1/device/dev-a/rpc/req".to_string()));
+        assert!(topics.contains(&"amux/team1/device/dev-a/rpc/res".to_string()));
         assert!(topics.contains(&"amux/team1/device/dev-a/notify".to_string()));
         assert!(!topics.contains(&"amux/team1/sessions".to_string()));
         assert!(
@@ -1726,9 +1539,6 @@ mod tests {
         let live = sm.live_session_topic("s1");
 
         assert_eq!(live, "amux/team1/session/s1/live");
-        assert_ne!(sm.topics.session_messages("s1"), live);
-        assert_ne!(sm.topics.session_tasks("s1"), live);
-        assert_ne!(sm.topics.session_presence("s1"), live);
     }
 
     #[test]

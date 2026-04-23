@@ -20,7 +20,6 @@ public struct SessionCreateInput: Equatable, Sendable {
     public let mode: String
     public let title: String
     public let summary: String
-    public let hostDeviceID: String
     public let participants: [SessionParticipantInput]
 
     public init(
@@ -32,7 +31,6 @@ public struct SessionCreateInput: Equatable, Sendable {
         mode: String = "collab",
         title: String,
         summary: String,
-        hostDeviceID: String,
         participants: [SessionParticipantInput]
     ) {
         self.id = id
@@ -43,13 +41,13 @@ public struct SessionCreateInput: Equatable, Sendable {
         self.mode = mode
         self.title = title
         self.summary = summary
-        self.hostDeviceID = hostDeviceID
         self.participants = participants
     }
 }
 
 public protocol SessionRepository: Sendable {
     func createSession(_ input: SessionCreateInput) async throws
+    func addParticipants(sessionID: String, actorIDs: [String]) async throws
 }
 
 public enum SessionRepositoryError: LocalizedError {
@@ -123,6 +121,26 @@ public actor SupabaseSessionRepository: SessionRepository {
                 },
                 returning: .minimal
             )
+            .execute()
+    }
+
+    public func addParticipants(sessionID: String, actorIDs: [String]) async throws {
+        let rows = actorIDs
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map {
+                SessionParticipantInsertRow(
+                    id: UUID().uuidString.lowercased(),
+                    sessionID: sessionID,
+                    actorID: $0,
+                    role: nil
+                )
+            }
+        guard !rows.isEmpty else { return }
+
+        try await client
+            .from("session_participants")
+            .insert(rows, returning: .minimal)
             .execute()
     }
 

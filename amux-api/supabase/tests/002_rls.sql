@@ -16,7 +16,7 @@ exception
 end;
 $$;
 
-select plan(40);
+select plan(41);
 
 select lives_ok(
 $$
@@ -244,7 +244,7 @@ select is(
 set local request.jwt.claim.sub = '90000000-0000-0000-0000-000000000003';
 
 select ok(
-  pg_temp.raises_sqlstate(
+  lives_ok(
     $sql$
       insert into public.session_participants (
         id,
@@ -258,11 +258,36 @@ select ok(
         '10000000-0000-0000-0000-000000000002',
         'observer'
       )
-    $sql$,
-    '42501'
+    $sql$
   ),
-  'non-creator participant cannot add another actor to the session'
+  'existing participant can add another actor to the session'
 );
+
+delete from public.session_participants
+where id = '70000000-0000-0000-0000-000000000004';
+
+set local request.jwt.claim.sub = '90000000-0000-0000-0000-000000000001';
+
+select lives_ok(
+  $sql$
+    insert into public.session_participants (
+      id,
+      session_id,
+      actor_id,
+      role
+    )
+    values (
+      '70000000-0000-0000-0000-000000000009',
+      '50000000-0000-0000-0000-000000000001',
+      '10000000-0000-0000-0000-000000000002',
+      'observer'
+    )
+  $sql$,
+  'session creator can bootstrap additional participants'
+);
+
+delete from public.session_participants
+where id = '70000000-0000-0000-0000-000000000009';
 
 set local request.jwt.claim.sub = '90000000-0000-0000-0000-000000000002';
 

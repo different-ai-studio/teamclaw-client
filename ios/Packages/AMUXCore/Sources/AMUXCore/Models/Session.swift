@@ -7,7 +7,6 @@ public final class Session {
     public var mode: String       // "control" or "collab"
     public var teamId: String
     public var title: String
-    public var hostDeviceId: String
     public var createdBy: String
     public var createdAt: Date
     public var summary: String
@@ -22,7 +21,6 @@ public final class Session {
         mode: String = "collab",
         teamId: String = "",
         title: String = "",
-        hostDeviceId: String = "",
         createdBy: String = "",
         createdAt: Date = .now,
         summary: String = "",
@@ -35,7 +33,6 @@ public final class Session {
         self.mode = mode
         self.teamId = teamId
         self.title = title
-        self.hostDeviceId = hostDeviceId
         self.createdBy = createdBy
         self.createdAt = createdAt
         self.summary = summary

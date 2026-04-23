@@ -87,15 +87,12 @@ impl DaemonServer {
         let agents = AgentManager::new(binary, flags, supabase.clone());
 
         let teamclaw = if let Some(team_id) = &config.team_id {
-            let is_team_host = config.is_team_host.unwrap_or(false);
             Some(crate::teamclaw::SessionManager::new(
                 mqtt.client.clone(),
                 team_id,
                 &config.device.id,
                 supabase.as_ref().map(|c| c.config().actor_id.clone()),
                 crate::config::DaemonConfig::config_dir(),
-                is_team_host,
-                config.team_host_device_id.clone(),
             )?)
         } else {
             None
@@ -537,56 +534,6 @@ impl DaemonServer {
                     tc.handle_rpc_request(&topic, &payload, primary).await;
                 }
             }
-            subscriber::IncomingMessage::TeamclawSessionMessage { session_id, payload } => {
-                if let Ok(envelope) = crate::proto::teamclaw::SessionMessageEnvelope::decode(payload.as_slice()) {
-                    if let Some(msg) = &envelope.message {
-                        if let Some(tc) = &mut self.teamclaw {
-                            if !tc.should_process_message(&session_id, &msg.message_id) {
-                                return;
-                            }
-                        }
-                        // Host persists the message
-                        if let Some(tc) = &self.teamclaw {
-                            if tc.is_host_for(&session_id) {
-                                let _ = tc.persist_message(&session_id, msg).await;
-                                if self.agents.get_handle(&msg.sender_actor_id).is_none() {
-                                    let _ = tc.publish_live_message(&session_id, msg).await;
-                                }
-                            }
-                        }
-                        // Route to local agents
-                        if let Some(tc) = &self.teamclaw {
-                            let activated = tc.agents_to_activate(&session_id, msg);
-                            let desired_model = msg.model.clone();
-                            for agent_actor_id in activated {
-                                if msg.sender_actor_id == agent_actor_id { continue; }
-                                if self.agents.get_handle(&agent_actor_id).is_some() {
-                                    // If the message carries a model preference, switch
-                                    // the agent to that model before sending the prompt.
-                                    if !desired_model.is_empty() {
-                                        let current = self.agents.current_model(&agent_actor_id).cloned().unwrap_or_default();
-                                        if desired_model != current {
-                                            if let Err(e) = self.agents.send_set_model(&agent_actor_id, &desired_model).await {
-                                                warn!(?e, "send_set_model from collab message failed");
-                                            } else {
-                                                self.agents.set_current_model(&agent_actor_id, &desired_model);
-                                                self.publish_agent_state_by_id(&agent_actor_id).await;
-                                            }
-                                        }
-                                    }
-                                    let prompt = format!(
-                                        "[Collab session: {}] {} says:\n{}",
-                                        session_id, msg.sender_actor_id, msg.content
-                                    );
-                                    if let Err(e) = self.agents.send_prompt(&agent_actor_id, &prompt).await {
-                                        warn!("Failed to route to agent {}: {}", agent_actor_id, e);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
             subscriber::IncomingMessage::TeamclawSessionLive { session_id, payload } => {
                 if let Ok(envelope) = crate::proto::teamclaw::LiveEventEnvelope::decode(payload.as_slice()) {
                     match envelope.event_type.as_str() {
@@ -601,9 +548,7 @@ impl DaemonServer {
                                         }
                                     }
                                     if let Some(tc) = &self.teamclaw {
-                                        if tc.is_host_for(&session_id) {
-                                            let _ = tc.persist_message(&session_id, msg).await;
-                                        }
+                                        let _ = tc.persist_message(&session_id, msg).await;
                                     }
                                     if let Some(tc) = &self.teamclaw {
                                         let activated = tc.agents_to_activate(&session_id, msg);
@@ -661,45 +606,12 @@ impl DaemonServer {
                     }
                 }
             }
-            subscriber::IncomingMessage::TeamclawSessionMeta { session_id: _, payload } => {
-                if let Ok(envelope) = crate::proto::teamclaw::SessionMetaEnvelope::decode(payload.as_slice()) {
-                    if let Some(info) = &envelope.session {
-                        if let Some(tc) = &mut self.teamclaw {
-                            if let Err(err) = tc.apply_session_meta(info).await {
-                                warn!(?err, session_id = %info.session_id, "failed to apply session meta");
-                            }
-                        }
-                    }
-                }
-            }
             subscriber::IncomingMessage::TeamclawNotify { device_id: _, payload } => {
                 if let Ok(envelope) = crate::proto::teamclaw::NotifyEnvelope::decode(payload.as_slice()) {
                     if envelope.event_type == "membership.refresh" && !envelope.session_id.is_empty() {
                         if let Some(tc) = &mut self.teamclaw {
                             if let Err(err) = tc.refresh_membership_subscriptions().await {
                                 warn!(?err, session_id = %envelope.session_id, "failed to refresh membership subscriptions after notify");
-                            }
-                        }
-                    }
-                }
-            }
-            subscriber::IncomingMessage::TeamclawTaskEvent { session_id, payload } => {
-                if let Ok(event) = crate::proto::teamclaw::TaskEvent::decode(payload.as_slice()) {
-                    if let Some(tc) = &mut self.teamclaw {
-                        if !tc.should_process_task_event(&session_id, &event) {
-                            return;
-                        }
-                    }
-                    if let Some(tc) = &self.teamclaw {
-                        let activated = tc.agents_to_activate_for_work_item(&session_id, &event);
-                        for agent_actor_id in activated {
-                            if self.agents.get_handle(&agent_actor_id).is_some() {
-                                let prompt = format_task_prompt(&session_id, &event);
-                                if !prompt.is_empty() {
-                                    if let Err(e) = self.agents.send_prompt(&agent_actor_id, &prompt).await {
-                                        warn!("Failed to route task to agent {}: {}", agent_actor_id, e);
-                                    }
-                                }
                             }
                         }
                     }
@@ -770,16 +682,7 @@ impl DaemonServer {
 
         if let Err(reason) = self.permissions.check_command_permission(role, &cmd) {
             warn!(peer_id, %reason, "command rejected");
-            // Publish rejection to device-level collab topic so all clients see it
-            let reject_event = amux::DeviceCollabEvent {
-                device_id: self.config.device.id.clone(),
-                timestamp: chrono::Utc::now().timestamp(),
-                event: Some(amux::device_collab_event::Event::CommandRejected(amux::PromptRejected {
-                    command_id,
-                    reason,
-                })),
-            };
-            let _ = Publisher::new(&self.mqtt).publish_device_collab_event(&reject_event).await;
+            self.publish_command_rejected(command_id, reason).await;
             return;
         }
 
@@ -815,10 +718,16 @@ impl DaemonServer {
                         } else if !start_worktree.is_empty() {
                             (start_worktree.clone(), String::new(), Some(start_workspace_id.clone()))
                         } else {
+                            let reason = format!(
+                                "workspace {} not found and no worktree path provided",
+                                start_workspace_id
+                            );
                             error!(
                                 workspace_id = %start_workspace_id,
-                                "workspace not found and no worktree path provided in envelope"
+                                %reason,
+                                "startAgent rejected"
                             );
+                            self.publish_command_rejected(command_id.clone(), reason).await;
                             return;
                         }
                     } else {
@@ -860,6 +769,10 @@ impl DaemonServer {
                     }
                     Err(e) => {
                         error!(peer_id, "failed to start agent: {}", e);
+                        self.publish_command_rejected(
+                            command_id.clone(),
+                            format!("Failed to start agent: {}", e),
+                        ).await;
                     }
                 }
             }
@@ -1216,6 +1129,27 @@ impl DaemonServer {
         let publisher = Publisher::new(&self.mqtt);
         let _ = publisher.publish_agent_event(agent_id, &envelope).await;
     }
+
+    async fn publish_command_rejected(&self, command_id: String, reason: String) {
+        let reject_event = command_rejected_event(&self.config.device.id, command_id, reason);
+        let _ = Publisher::new(&self.mqtt)
+            .publish_device_collab_event(&reject_event)
+            .await;
+    }
+}
+
+fn command_rejected_event(
+    device_id: &str,
+    command_id: String,
+    reason: String,
+) -> amux::DeviceCollabEvent {
+    amux::DeviceCollabEvent {
+        device_id: device_id.to_string(),
+        timestamp: chrono::Utc::now().timestamp(),
+        event: Some(amux::device_collab_event::Event::CommandRejected(
+            amux::PromptRejected { command_id, reason },
+        )),
+    }
 }
 
 /// Shrinks an `AcpAvailableCommands` list in place so the serialized message
@@ -1258,5 +1192,29 @@ fn format_task_prompt(session_id: &str, event: &crate::proto::teamclaw::TaskEven
         Some(Event::Claimed(claim)) => format!("[Collab session: {}] Task {} claimed by {}", session_id, claim.task_id, claim.actor_id),
         Some(Event::Submitted(sub)) => format!("[Collab session: {}] Submission for {}: {}", session_id, sub.task_id, sub.content),
         None => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::command_rejected_event;
+    use crate::proto::amux;
+
+    #[test]
+    fn command_rejected_event_carries_command_id_and_reason() {
+        let event = command_rejected_event(
+            "device-1",
+            "cmd-123".to_string(),
+            "Failed to start agent".to_string(),
+        );
+
+        assert_eq!(event.device_id, "device-1");
+        match event.event {
+            Some(amux::device_collab_event::Event::CommandRejected(rejected)) => {
+                assert_eq!(rejected.command_id, "cmd-123");
+                assert_eq!(rejected.reason, "Failed to start agent");
+            }
+            other => panic!("expected command_rejected event, got {:?}", other),
+        }
     }
 }

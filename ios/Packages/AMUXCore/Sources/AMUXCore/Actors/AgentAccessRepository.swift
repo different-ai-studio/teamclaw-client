@@ -14,6 +14,9 @@ public protocol AgentAccessRepository: Sendable {
 
     /// Grant access for a member on an agent, upserting if the relationship already exists.
     func grantAuthorizedHuman(agentID: String, memberID: String, permissionLevel: String) async throws
+
+    /// Resolve the current daemon device for a specific agent.
+    func deviceID(for agentID: String) async throws -> String?
 }
 
 public actor SupabaseAgentAccessRepository: AgentAccessRepository {
@@ -134,6 +137,16 @@ public actor SupabaseAgentAccessRepository: AgentAccessRepository {
                 onConflict: "agent_id,member_id"
             )
             .execute()
+    }
+
+    public func deviceID(for agentID: String) async throws -> String? {
+        let rows: [AgentKindRow] = try await client
+            .from("agents")
+            .select("id, agent_kind, device_id")
+            .eq("id", value: agentID)
+            .execute()
+            .value
+        return rows.first?.deviceID
     }
 
     private func currentMemberRow(teamID: String?) async throws -> CurrentMemberRow? {

@@ -7,6 +7,7 @@ declare
   v_agent uuid := gen_random_uuid();
   v_task uuid := gen_random_uuid();
   v_session uuid;
+  v_ad_hoc_session uuid;
 begin
   insert into auth.users (id) values (v_member);
   insert into public.teams (id, slug, name) values (v_team, 'sess-test', 'Sess Test');
@@ -51,6 +52,22 @@ begin
     where session_id = v_session and actor_id = v_agent
   ) then
     raise exception 'agent not added as participant';
+  end if;
+
+  v_ad_hoc_session := public.create_session(v_agent, null, 'collab', 'Untasked session');
+
+  if v_ad_hoc_session is null then
+    raise exception 'create_session with null task returned null';
+  end if;
+
+  if not exists (
+    select 1 from public.sessions
+    where id = v_ad_hoc_session
+      and primary_agent_id = v_agent
+      and task_id is null
+      and created_by_actor_id = v_member
+  ) then
+    raise exception 'null-task session row malformed';
   end if;
 end;
 $$;

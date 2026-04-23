@@ -342,7 +342,7 @@ public struct AgentDetailView: View {
         rpcReq.method = .createSession(createReq)
 
         let deviceId = viewModel.deviceIdRef
-        let topic = MQTTTopics.rpcRequest(teamID: viewModel.session?.teamId ?? "", deviceID: deviceId, requestID: rpcReq.requestID)
+        let topic = MQTTTopics.deviceRpcRequest(teamID: viewModel.session?.teamId ?? "", deviceID: deviceId)
         Task {
             if let data = try? rpcReq.serializedData() {
                 try? await viewModel.mqttRef.publish(topic: topic, payload: data, retain: false)

@@ -248,6 +248,40 @@ public final class SessionListViewModel {
         sessions = (try? modelContext.fetch(FetchDescriptor<Session>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
     }
 
+    public func syncSessionRecords(_ records: [SessionRecord], modelContext: ModelContext) {
+        validSessionIDs = Set(records.map(\.id))
+
+        let existing = (try? modelContext.fetch(FetchDescriptor<Session>())) ?? []
+        var byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.sessionId, $0) })
+
+        for record in records {
+            let session = byID.removeValue(forKey: record.id) ?? {
+                let created = Session(sessionId: record.id)
+                modelContext.insert(created)
+                return created
+            }()
+
+            session.mode = record.mode
+            session.teamId = record.teamID
+            session.title = record.title
+            session.createdBy = record.createdByActorID
+            session.createdAt = record.createdAt
+            session.summary = record.summary
+            session.participantCount = record.participantCount
+            session.lastMessagePreview = record.lastMessagePreview
+            session.lastMessageAt = record.lastMessageAt
+            session.taskId = record.taskID ?? ""
+            session.primaryAgentId = record.primaryAgentID
+        }
+
+        for stale in byID.values {
+            modelContext.delete(stale)
+        }
+
+        try? modelContext.save()
+        reloadSessions(modelContext: modelContext)
+    }
+
     public var filteredAgents: [Agent] {
         if searchText.isEmpty { return agents }
         let q = searchText.lowercased()
