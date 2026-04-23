@@ -79,44 +79,8 @@ impl SessionManager {
 
     /// Subscribe to all relevant teamclaw topics.
     pub async fn subscribe_all(&mut self) -> crate::error::Result<()> {
-        // Team-level topics
-        self.client
-            .subscribe(self.topics.sessions(), QoS::AtLeastOnce)
-            .await?;
-        if let Some(actor_id) = &self.actor_id {
-            self.client
-                .subscribe(self.topics.actor_session_meta_wildcard(actor_id), QoS::AtLeastOnce)
-                .await?;
-        }
-
-        // Global tasks topic
-        self.client
-            .subscribe(self.topics.tasks(), QoS::AtLeastOnce)
-            .await?;
-
-        // RPC: incoming requests for this device
-        self.client
-            .subscribe(self.topics.rpc_incoming_requests(), QoS::AtLeastOnce)
-            .await?;
-        self.client
-            .subscribe(self.topics.device_notify(), QoS::AtLeastOnce)
-            .await?;
-
-        // RPC: responses directed at this device
-        let rpc_responses = self.topics.rpc_response(&self.device_id, "+");
-        self.client
-            .subscribe(rpc_responses, QoS::AtLeastOnce)
-            .await?;
-
-        // Subscribe to all known sessions
-        let session_ids: Vec<String> = self
-            .sessions
-            .sessions
-            .iter()
-            .map(|s| s.session_id.clone())
-            .collect();
-        for session_id in &session_ids {
-            self.subscribe_session(session_id).await?;
+        for topic in self.base_subscription_topics() {
+            self.client.subscribe(topic, QoS::AtLeastOnce).await?;
         }
         self.refresh_membership_subscriptions().await?;
 
@@ -159,7 +123,6 @@ impl SessionManager {
 
         self.sessions.upsert(stored);
         self.sessions.save(&self.sessions_path)?;
-        self.subscribe_session(&info.session_id).await?;
         self.refresh_membership_subscriptions().await?;
         Ok(())
     }
@@ -225,10 +188,12 @@ impl SessionManager {
                 let r = r.clone();
                 self.handle_update_task(&req, r).await
             }
-            Some(teamclaw::rpc_request::Method::RegisterSession(r)) => {
-                let r = r.clone();
-                self.handle_register_session(&req, r).await
-            }
+            Some(teamclaw::rpc_request::Method::RegisterSession(_)) => RpcResponse {
+                request_id: request_id.clone(),
+                success: false,
+                error: "register_session is no longer supported over MQTT retained state".to_string(),
+                result: None,
+            },
             None => {
                 warn!("SessionManager: received RPC request with no method");
                 RpcResponse {
@@ -280,15 +245,6 @@ impl SessionManager {
             warn!("handle_create_session: failed to save sessions: {}", e);
         }
 
-        // Publish session meta (retained)
-        if let Err(e) = self.publish_session_meta(&session_id).await {
-            warn!("handle_create_session: failed to publish session meta: {}", e);
-        }
-
-        // Subscribe to session topics
-        if let Err(e) = self.subscribe_session(&session_id).await {
-            warn!("handle_create_session: failed to subscribe to session: {}", e);
-        }
         if let Err(e) = self.refresh_membership_subscriptions().await {
             warn!(
                 session_id = %session_id,
@@ -320,38 +276,6 @@ impl SessionManager {
             {
                 warn!("handle_create_session: failed to publish invite for {}: {}", actor_id, e);
             }
-        }
-
-        // If team host, update session index
-        if self.is_team_host {
-            if let Err(e) = self.publish_session_index().await {
-                warn!("handle_create_session: failed to publish session index: {}", e);
-            }
-        } else if let Some(host_id) = &self.team_host_device_id {
-            // Send RegisterSessionRequest RPC to team host
-            let entry = teamclaw::SessionIndexEntry {
-                session_id: session_id.clone(),
-                session_type: r.session_type,
-                title: r.title.clone(),
-                host_device_id: self.device_id.clone(),
-                created_at: Utc::now().timestamp(),
-                participant_count: 0,
-                ..Default::default()
-            };
-            let rpc_req = RpcRequest {
-                request_id: Uuid::new_v4().to_string()[..8].to_string(),
-                sender_device_id: self.device_id.clone(),
-                method: Some(teamclaw::rpc_request::Method::RegisterSession(
-                    teamclaw::RegisterSessionRequest {
-                        entry: Some(entry),
-                    },
-                )),
-            };
-            let topic = self.topics.rpc_request(host_id, &rpc_req.request_id);
-            let _ = self.client.publish(topic, QoS::AtLeastOnce, false, rpc_req.encode_to_vec()).await;
-            info!(session_id = %session_id, team_host = %host_id, "sent RegisterSession RPC to team host");
-        } else {
-            warn!(session_id = %session_id, "non-team-host with no team_host_device_id configured, session index not updated");
         }
 
         let session_info = self.sessions.to_proto_session_info(&session_id);
@@ -480,12 +404,6 @@ impl SessionManager {
                 e
             );
         }
-        if let Err(e) = self.publish_session_meta(&r.session_id).await {
-            warn!("handle_join_session: failed to publish session meta: {}", e);
-        }
-        if let Err(e) = self.publish_session_index().await {
-            warn!("handle_join_session: failed to publish session index: {}", e);
-        }
         if let Err(e) = self
             .live_publisher
             .publish_presence_event("presence.joined", &r.session_id, &proto_participant)
@@ -577,12 +495,6 @@ impl SessionManager {
                 e
             );
         }
-        if let Err(e) = self.publish_session_meta(&r.session_id).await {
-            warn!("handle_add_participant: failed to publish session meta: {}", e);
-        }
-        if let Err(e) = self.publish_session_index().await {
-            warn!("handle_add_participant: failed to publish session index: {}", e);
-        }
         if let Err(e) = self
             .live_publisher
             .publish_presence_event("presence.joined", &r.session_id, &proto_participant)
@@ -649,12 +561,6 @@ impl SessionManager {
                 "handle_remove_participant: failed to refresh membership subscriptions: {}",
                 e
             );
-        }
-        if let Err(e) = self.publish_session_meta(&r.session_id).await {
-            warn!("handle_remove_participant: failed to publish session meta: {}", e);
-        }
-        if let Err(e) = self.publish_session_index().await {
-            warn!("handle_remove_participant: failed to publish session index: {}", e);
         }
         if let Some(participant) = removed_participant.as_ref() {
             let proto_participant = stored_participant_to_proto(participant);
@@ -1055,74 +961,6 @@ impl SessionManager {
         }
     }
 
-    async fn handle_register_session(
-        &mut self,
-        req: &RpcRequest,
-        r: teamclaw::RegisterSessionRequest,
-    ) -> RpcResponse {
-        if !self.is_team_host {
-            return RpcResponse {
-                request_id: req.request_id.clone(),
-                success: false,
-                error: "this device is not the team host".to_string(),
-                result: None,
-            };
-        }
-
-        let entry = match r.entry {
-            Some(e) => e,
-            None => {
-                return RpcResponse {
-                    request_id: req.request_id.clone(),
-                    success: false,
-                    error: "missing session index entry".to_string(),
-                    result: None,
-                };
-            }
-        };
-
-        // Check if session already in store; if not, add a stub entry
-        if self.sessions.find_by_id(&entry.session_id).is_none() {
-            let session_type = match entry.session_type {
-                x if x == teamclaw::SessionType::Control as i32 => "control",
-                _ => "collab",
-            };
-            let stored = StoredSession {
-                session_id: entry.session_id.clone(),
-                session_type: session_type.to_string(),
-                team_id: self.team_id.clone(),
-                title: entry.title.clone(),
-                host_device_id: entry.host_device_id.clone(),
-                created_by: req.sender_device_id.clone(),
-                created_at: Utc::now(),
-                summary: String::new(),
-                task_id: String::new(),
-                participants: vec![],
-                // primary_agent_id is host-local state; the team host stores
-                // a stub (empty) on RegisterSession and lets the host's own
-                // SessionMeta publish carry the authoritative value.
-                primary_agent_id: String::new(),
-            };
-            self.sessions.upsert(stored);
-            if let Err(e) = self.sessions.save(&self.sessions_path) {
-                warn!("handle_register_session: failed to save sessions: {}", e);
-            }
-        }
-
-        if let Err(e) = self.publish_session_index().await {
-            warn!("handle_register_session: failed to publish session index: {}", e);
-        }
-
-        info!(session_id = %entry.session_id, "session registered with team host");
-
-        RpcResponse {
-            request_id: req.request_id.clone(),
-            success: true,
-            error: String::new(),
-            result: None,
-        }
-    }
-
     // --- Public helpers ---
 
     /// Persist an incoming message for a session.
@@ -1147,7 +985,6 @@ impl SessionManager {
         let mut store = MessageStore::load(&self.config_dir, session_id)?;
         store.append(stored);
         store.save(&self.config_dir, session_id)?;
-        let _ = self.publish_session_index().await;
         Ok(())
     }
 
@@ -1365,76 +1202,6 @@ impl SessionManager {
 
     // --- Private helpers ---
 
-    /// Publish the session's metadata as a retained message.
-    async fn publish_session_meta(&self, session_id: &str) -> crate::error::Result<()> {
-        let mut session_info = match self.sessions.to_proto_session_info(session_id) {
-            Some(info) => info,
-            None => {
-                warn!("publish_session_meta: session {} not found", session_id);
-                return Ok(());
-            }
-        };
-        if let Ok(store) = MessageStore::load(&self.config_dir, session_id) {
-            if let Some((preview, at)) = store.latest_preview() {
-                session_info.last_message_preview = preview;
-                session_info.last_message_at = at;
-            }
-        }
-
-        let envelope = teamclaw::SessionMetaEnvelope {
-            session: Some(session_info),
-        };
-        let payload = envelope.encode_to_vec();
-        if let Some(session) = self.sessions.find_by_id(session_id) {
-            for participant in &session.participants {
-                self.client
-                    .publish(
-                        self.topics.actor_session_meta(&participant.actor_id, session_id),
-                        QoS::AtLeastOnce,
-                        true,
-                        payload.clone(),
-                    )
-                    .await?;
-            }
-        }
-        Ok(())
-    }
-
-    /// Publish the team's session index as a retained message.
-    async fn publish_session_index(&self) -> crate::error::Result<()> {
-        let sessions = self.sessions.sessions.iter().map(|s| {
-            let (last_message_preview, last_message_at) = MessageStore::load(&self.config_dir, &s.session_id)
-                .ok()
-                .and_then(|store| store.latest_preview())
-                .unwrap_or_else(|| (String::new(), 0));
-            teamclaw::SessionIndexEntry {
-                session_id: s.session_id.clone(),
-                session_type: session_type_to_proto(&s.session_type) as i32,
-                title: s.title.clone(),
-                host_device_id: s.host_device_id.clone(),
-                created_at: s.created_at.timestamp(),
-                participant_count: s.participants.len() as i32,
-                last_message_preview,
-                last_message_at,
-            }
-        }).collect();
-        let index = teamclaw::SessionIndex { sessions };
-        let topic = self.topics.sessions();
-        let payload = index.encode_to_vec();
-        self.client
-            .publish(topic, QoS::AtLeastOnce, true, payload)
-            .await?;
-        Ok(())
-    }
-
-    /// Subscribe to all topics for a given session.
-    async fn subscribe_session(&self, session_id: &str) -> crate::error::Result<()> {
-        for topic in self.legacy_session_topics(session_id) {
-            self.client.subscribe(topic, QoS::AtLeastOnce).await?;
-        }
-        Ok(())
-    }
-
     async fn subscribe_session_live(&self, session_id: &str) -> crate::error::Result<()> {
         #[cfg(test)]
         if self.skip_live_subscription_io {
@@ -1457,11 +1224,12 @@ impl SessionManager {
         Ok(())
     }
 
-    fn legacy_session_topics(&self, session_id: &str) -> [String; 3] {
-        [
-            self.topics.session_messages(session_id),
-            self.topics.session_tasks(session_id),
-            self.topics.session_presence(session_id),
+    fn base_subscription_topics(&self) -> Vec<String> {
+        vec![
+            self.topics.tasks(),
+            self.topics.rpc_incoming_requests(),
+            self.topics.device_notify(),
+            self.topics.rpc_response(&self.device_id, "+"),
         ]
     }
 
@@ -1854,18 +1622,32 @@ mod tests {
     }
 
     #[test]
-    fn test_legacy_and_live_session_topics_are_separate() {
+    fn test_base_subscription_topics_exclude_retained_session_state_topics() {
+        let tmp = TempDir::new().unwrap();
+        let mut sm = dummy_session_manager(tmp.path());
+        sm.actor_id = Some("member-a".to_string());
+
+        let topics = sm.base_subscription_topics();
+
+        assert!(topics.contains(&"amux/team1/tasks".to_string()));
+        assert!(topics.contains(&"amux/team1/device/dev-a/notify".to_string()));
+        assert!(!topics.contains(&"amux/team1/sessions".to_string()));
+        assert!(
+            !topics.iter().any(|topic| topic.contains("/actor/member-a/session/"))
+        );
+    }
+
+    #[test]
+    fn test_session_live_topic_is_distinct_from_legacy_rollout_topics() {
         let tmp = TempDir::new().unwrap();
         let sm = dummy_session_manager(tmp.path());
 
-        let legacy = sm.legacy_session_topics("s1");
         let live = sm.live_session_topic("s1");
 
-        assert_eq!(legacy[0], "amux/team1/session/s1/messages");
-        assert_eq!(legacy[1], "amux/team1/session/s1/tasks");
-        assert_eq!(legacy[2], "amux/team1/session/s1/presence");
         assert_eq!(live, "amux/team1/session/s1/live");
-        assert!(legacy.iter().all(|topic| topic != &live));
+        assert_ne!(sm.topics.session_messages("s1"), live);
+        assert_ne!(sm.topics.session_tasks("s1"), live);
+        assert_ne!(sm.topics.session_presence("s1"), live);
     }
 
     #[test]

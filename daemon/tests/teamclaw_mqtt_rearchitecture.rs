@@ -57,3 +57,20 @@ fn parse_global_tasks_topic() {
         Some(subscriber::IncomingMessage::TeamclawTaskEvent { session_id, .. }) if session_id.is_empty()
     ));
 }
+
+#[test]
+fn mixed_legacy_and_live_topics_parse_during_rollout() {
+    let legacy = rumqttc::Publish::new(
+        "amux/team1/session/sess-1/messages",
+        rumqttc::QoS::AtLeastOnce,
+        vec![],
+    );
+    let live = rumqttc::Publish::new(
+        "amux/team1/session/sess-1/live",
+        rumqttc::QoS::AtLeastOnce,
+        vec![],
+    );
+
+    assert!(subscriber::parse_incoming(&legacy).is_some());
+    assert!(subscriber::parse_incoming(&live).is_some());
+}

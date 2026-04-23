@@ -43,8 +43,8 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         XCTAssertEqual(
             restartedMQTT.subscribedTopics,
             [
-                MQTTTopics.teamSessions(teamID: "team1"),
                 MQTTTopics.teamMembers(teamID: "team1"),
+                MQTTTopics.deviceNotify(teamID: "team1", deviceID: "device1"),
                 MQTTTopics.userInvites(teamID: "team1", actorID: "peer1"),
                 MQTTTopics.rpcResponseWildcard(teamID: "team1", deviceID: "device1"),
                 MQTTTopics.teamTasks(teamID: "team1"),
@@ -55,6 +55,38 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         XCTAssertEqual(service.foregroundSessionIDs, ["sess-1"])
 
         service.stop()
+    }
+
+    func testMembershipRefreshNotifyUsesExplicitRefreshPath() async throws {
+        let mqtt = MQTTService(
+            subscribeHook: { _ in },
+            unsubscribeHook: { _ in }
+        )
+        let service = TeamclawService()
+        let container = try makeModelContainer()
+
+        service.configureRuntimeForTesting(
+            mqtt: mqtt,
+            teamId: "team1",
+            deviceId: "device1",
+            peerId: "peer1",
+            modelContainer: container
+        )
+
+        var notify = Teamclaw_NotifyEnvelope()
+        notify.eventType = "membership.refresh"
+        notify.sessionID = "sess-1"
+
+        await service.handleIncomingForTesting(
+            MQTTIncoming(
+                topic: MQTTTopics.deviceNotify(teamID: "team1", deviceID: "device1"),
+                payload: try notify.serializedData(),
+                retained: false
+            )
+        )
+
+        XCTAssertEqual(service.refreshedSessionIDs, ["sess-1"])
+        XCTAssertTrue(service.foregroundSessionIDs.isEmpty)
     }
 
     func testBeginForegroundSessionSubscribesToLiveTopicAndFetchesHistoryOnce() async throws {
@@ -146,6 +178,7 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         service.stop()
 
         await fulfillment(of: [stopUnsubscribeExpectation], timeout: 1.0)
+        try await Task.sleep(for: .milliseconds(50))
 
         XCTAssertEqual(
             Set(mqtt.unsubscribedTopics),

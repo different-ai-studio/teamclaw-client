@@ -19,12 +19,12 @@ public final class TeamclawService {
     /// daemon records the creator as a member rather than a device.
     public private(set) var localMemberId: String = ""
     public private(set) var localDisplayName: String = ""
-    private var subscribedSessionMetaActorID: String?
     private var foregroundSessionIDsSet: Set<String> = []
     private var listenerTask: Task<Void, Never>?
     private var modelContainer: ModelContainer?
     private var isTestingForegroundLifecycle = false
     internal private(set) var fetchRecentMessagesCalls: [String] = []
+    internal private(set) var refreshedSessionIDs: [String] = []
 
     internal var foregroundSessionIDs: [String] {
         foregroundSessionIDsSet.sorted()
@@ -77,8 +77,8 @@ public final class TeamclawService {
             let stream = mqtt.messages()
 
             // Subscribe to core teamclaw topics
-            try? await mqtt.subscribe(MQTTTopics.teamSessions(teamID: teamId))
             try? await mqtt.subscribe(MQTTTopics.teamMembers(teamID: teamId))
+            try? await mqtt.subscribe(MQTTTopics.deviceNotify(teamID: teamId, deviceID: deviceId))
             // Subscribe to the legacy peer-scoped invite topic first so older
             // senders still reach us until all clients publish member-scoped
             // invite targets. Once we resolve localMemberId from PeerList we
@@ -106,7 +106,6 @@ public final class TeamclawService {
         listenerTask?.cancel()
         listenerTask = nil
         isConnected = false
-        subscribedSessionMetaActorID = nil
         for sessionId in foregroundSessionIDsSet {
             let topic = MQTTTopics.sessionLive(teamID: teamId, sessionID: sessionId)
             mqtt?.unsubscribeForLifecycleStop(topic)
@@ -130,6 +129,17 @@ public final class TeamclawService {
                         localDisplayName = mine.displayName
                     }
                 }
+            }
+            return
+        }
+
+        if topic == MQTTTopics.deviceNotify(teamID: teamId, deviceID: deviceId) {
+            guard let envelope = try? Teamclaw_NotifyEnvelope(serializedBytes: incoming.payload) else {
+                print("[TeamclawService] failed to decode NotifyEnvelope from topic: \(topic)")
+                return
+            }
+            if envelope.eventType == "membership.refresh", !envelope.sessionID.isEmpty {
+                await refreshSessionState(for: envelope.sessionID, modelContext: modelContext)
             }
             return
         }
@@ -705,11 +715,59 @@ public final class TeamclawService {
 
     private func subscribeToCurrentActorTopics(actorID: String) async {
         guard let mqtt else { return }
-        if subscribedSessionMetaActorID != actorID {
-            try? await mqtt.subscribe(MQTTTopics.actorSessionMetaWildcard(teamID: teamId, actorID: actorID))
-            subscribedSessionMetaActorID = actorID
-        }
         try? await mqtt.subscribe(MQTTTopics.userInvites(teamID: teamId, actorID: actorID))
+    }
+
+    private func refreshSessionState(for sessionId: String, modelContext: ModelContext) async {
+        refreshedSessionIDs.append(sessionId)
+
+        if isTestingForegroundLifecycle {
+            return
+        }
+
+        await fetchSessionInfo(sessionId: sessionId, modelContext: modelContext)
+        if foregroundSessionIDsSet.contains(sessionId) {
+            await fetchRecentMessagesForForegroundSession(sessionId)
+        }
+    }
+
+    private func fetchSessionInfo(sessionId: String, modelContext: ModelContext) async {
+        guard let mqtt else { return }
+
+        let descriptor = FetchDescriptor<Session>(
+            predicate: #Predicate { $0.sessionId == sessionId }
+        )
+        guard let session = (try? modelContext.fetch(descriptor))?.first else {
+            return
+        }
+
+        var req = Teamclaw_FetchSessionRequest()
+        req.sessionID = sessionId
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .fetchSession(req)
+
+        let topic = MQTTTopics.rpcRequest(teamID: teamId, deviceID: session.hostDeviceId, requestID: rpcReq.requestID)
+        guard let data = try? rpcReq.serializedData() else { return }
+        try? await mqtt.publish(topic: topic, payload: data, retain: false)
+
+        let stream = mqtt.messages()
+        let deadline = Date().addingTimeInterval(10)
+        for await msg in stream {
+            if Date() > deadline { break }
+            guard msg.topic.contains("/rpc/"), msg.topic.hasSuffix("/res"),
+                  let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
+                  response.requestID == rpcReq.requestID,
+                  response.success,
+                  case .sessionInfo(let info) = response.result else {
+                continue
+            }
+
+            syncSessionMeta(info, modelContext: modelContext)
+            break
+        }
     }
 
     public func fetchRecentMessages(sessionId: String, beforeCreatedAt: Int64 = 0, pageSize: UInt32 = 100) async {
@@ -810,6 +868,11 @@ public final class TeamclawService {
             modelContainer: modelContainer
         )
         isTestingForegroundLifecycle = true
+    }
+
+    internal func handleIncomingForTesting(_ incoming: MQTTIncoming) async {
+        guard let modelContainer else { return }
+        await handleIncoming(incoming, modelContext: ModelContext(modelContainer))
     }
 
     private func fetchRecentMessagesForForegroundSession(_ sessionId: String) async {

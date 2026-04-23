@@ -16,18 +16,9 @@ impl TeamclawTopics {
         format!("amux/{}", self.team_id)
     }
 
-    // Team-level
-    pub fn sessions(&self) -> String {
-        format!("{}/sessions", self.base())
-    }
-
     // Session-level
     pub fn session_messages(&self, session_id: &str) -> String {
         format!("{}/session/{}/messages", self.base(), session_id)
-    }
-
-    pub fn actor_session_meta(&self, actor_id: &str, session_id: &str) -> String {
-        format!("{}/actor/{}/session/{}/meta", self.base(), actor_id, session_id)
     }
 
     pub fn session_presence(&self, session_id: &str) -> String {
@@ -89,11 +80,6 @@ impl TeamclawTopics {
         format!("{}/session/+/messages", self.base())
     }
 
-    /// Subscribe pattern for all session metadata addressed to one actor.
-    pub fn actor_session_meta_wildcard(&self, actor_id: &str) -> String {
-        format!("{}/actor/{}/session/+/meta", self.base(), actor_id)
-    }
-
     /// Subscribe pattern for all task events (wildcard).
     pub fn all_session_tasks(&self) -> String {
         format!("{}/session/+/tasks", self.base())
@@ -105,16 +91,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_team_level_topics() {
-        let t = TeamclawTopics::new("team1", "dev-a");
-        assert_eq!(t.sessions(), "amux/team1/sessions");
-    }
-
-    #[test]
     fn test_session_level_topics() {
         let t = TeamclawTopics::new("team1", "dev-a");
         assert_eq!(t.session_messages("s1"), "amux/team1/session/s1/messages");
-        assert_eq!(t.actor_session_meta("actor1", "s1"), "amux/team1/actor/actor1/session/s1/meta");
         assert_eq!(t.session_presence("s1"), "amux/team1/session/s1/presence");
         assert_eq!(t.session_tasks("s1"), "amux/team1/session/s1/tasks");
     }
@@ -137,7 +116,6 @@ mod tests {
         let t = TeamclawTopics::new("team1", "dev-a");
         assert_eq!(t.rpc_incoming_requests(), "amux/team1/device/dev-a/rpc/+/req");
         assert_eq!(t.all_session_messages(), "amux/team1/session/+/messages");
-        assert_eq!(t.actor_session_meta_wildcard("actor1"), "amux/team1/actor/actor1/session/+/meta");
         assert_eq!(t.all_session_tasks(), "amux/team1/session/+/tasks");
     }
 }
