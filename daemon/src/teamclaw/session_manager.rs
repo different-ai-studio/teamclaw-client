@@ -1621,6 +1621,87 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_subscribe_all_rebuilds_live_set_from_membership_truth() {
+        let tmp = TempDir::new().unwrap();
+        let (client, _eventloop) = rumqttc::AsyncClient::new(
+            rumqttc::MqttOptions::new("test", "localhost", 1883),
+            10,
+        );
+        let mut sm = SessionManager::new(
+            client,
+            "team1",
+            "dev-a",
+            Some("member-a".to_string()),
+            tmp.path().to_path_buf(),
+            false,
+            None,
+        )
+        .unwrap();
+        sm.skip_live_subscription_io = true;
+
+        let mut hosted = make_session("hosted");
+        hosted.host_device_id = "dev-a".to_string();
+
+        let mut joined = make_session("joined");
+        joined.host_device_id = "dev-host".to_string();
+        joined.participants.push(make_human_participant("member-a"));
+
+        sm.sessions.upsert(hosted);
+        sm.sessions.upsert(joined);
+
+        sm.subscribe_all().await.unwrap();
+
+        assert_eq!(
+            sm.subscribed_live_sessions(),
+            vec!["hosted".to_string(), "joined".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_all_reconciles_live_set_after_membership_changes() {
+        let tmp = TempDir::new().unwrap();
+        let (client, _eventloop) = rumqttc::AsyncClient::new(
+            rumqttc::MqttOptions::new("test", "localhost", 1883),
+            10,
+        );
+        let mut sm = SessionManager::new(
+            client,
+            "team1",
+            "dev-a",
+            Some("member-a".to_string()),
+            tmp.path().to_path_buf(),
+            false,
+            None,
+        )
+        .unwrap();
+        sm.skip_live_subscription_io = true;
+
+        let mut hosted = make_session("hosted");
+        hosted.host_device_id = "dev-a".to_string();
+
+        let mut joined = make_session("joined");
+        joined.host_device_id = "dev-host".to_string();
+        joined.participants.push(make_human_participant("member-a"));
+
+        sm.sessions.upsert(hosted);
+        sm.sessions.upsert(joined);
+        sm.subscribe_all().await.unwrap();
+        assert_eq!(
+            sm.subscribed_live_sessions(),
+            vec!["hosted".to_string(), "joined".to_string()]
+        );
+
+        let mut unrelated = make_session("replacement");
+        unrelated.host_device_id = "dev-other".to_string();
+        sm.sessions.sessions.clear();
+        sm.sessions.upsert(unrelated);
+
+        sm.subscribe_all().await.unwrap();
+
+        assert!(sm.subscribed_live_sessions().is_empty());
+    }
+
     #[test]
     fn test_base_subscription_topics_exclude_retained_session_state_topics() {
         let tmp = TempDir::new().unwrap();

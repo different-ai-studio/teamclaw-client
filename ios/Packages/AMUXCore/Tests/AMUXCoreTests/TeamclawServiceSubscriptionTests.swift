@@ -89,6 +89,77 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         XCTAssertTrue(service.foregroundSessionIDs.isEmpty)
     }
 
+    func testMembershipRefreshNotifyFetchesSessionInfoWithoutMessageBackfillForBackgroundSession() async throws {
+        let mqtt = MQTTService(
+            subscribeHook: { _ in },
+            unsubscribeHook: { _ in }
+        )
+        let service = TeamclawService()
+        let container = try makeModelContainer()
+
+        service.configureRuntimeForTesting(
+            mqtt: mqtt,
+            teamId: "team1",
+            deviceId: "device1",
+            peerId: "peer1",
+            modelContainer: container
+        )
+
+        var notify = Teamclaw_NotifyEnvelope()
+        notify.eventType = "membership.refresh"
+        notify.sessionID = "sess-background"
+
+        await service.handleIncomingForTesting(
+            MQTTIncoming(
+                topic: MQTTTopics.deviceNotify(teamID: "team1", deviceID: "device1"),
+                payload: try notify.serializedData(),
+                retained: false
+            )
+        )
+
+        XCTAssertEqual(service.refreshedSessionIDs, ["sess-background"])
+        XCTAssertEqual(service.fetchSessionInfoCalls, ["sess-background"])
+        XCTAssertTrue(service.fetchRecentMessagesCalls.isEmpty)
+        XCTAssertTrue(service.foregroundSessionIDs.isEmpty)
+    }
+
+    func testMembershipRefreshNotifyBackfillsMessagesForForegroundSession() async throws {
+        let mqtt = MQTTService(
+            subscribeHook: { _ in },
+            unsubscribeHook: { _ in }
+        )
+        let service = TeamclawService()
+        let container = try makeModelContainer()
+
+        service.configureRuntimeForTesting(
+            mqtt: mqtt,
+            teamId: "team1",
+            deviceId: "device1",
+            peerId: "peer1",
+            modelContainer: container
+        )
+
+        try await service.beginForegroundSession("sess-foreground")
+        XCTAssertEqual(service.fetchRecentMessagesCalls, ["sess-foreground"])
+
+        var notify = Teamclaw_NotifyEnvelope()
+        notify.eventType = "membership.refresh"
+        notify.sessionID = "sess-foreground"
+
+        await service.handleIncomingForTesting(
+            MQTTIncoming(
+                topic: MQTTTopics.deviceNotify(teamID: "team1", deviceID: "device1"),
+                payload: try notify.serializedData(),
+                retained: false
+            )
+        )
+
+        XCTAssertEqual(service.refreshedSessionIDs, ["sess-foreground"])
+        XCTAssertEqual(service.fetchSessionInfoCalls, ["sess-foreground"])
+        XCTAssertEqual(service.fetchRecentMessagesCalls, ["sess-foreground", "sess-foreground"])
+        XCTAssertEqual(service.foregroundSessionIDs, ["sess-foreground"])
+    }
+
     func testBeginForegroundSessionSubscribesToLiveTopicAndFetchesHistoryOnce() async throws {
         let mqtt = MQTTService(
             subscribeHook: { _ in },

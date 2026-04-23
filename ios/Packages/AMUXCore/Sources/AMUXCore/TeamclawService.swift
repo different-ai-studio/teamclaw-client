@@ -24,6 +24,7 @@ public final class TeamclawService {
     private var modelContainer: ModelContainer?
     private var isTestingForegroundLifecycle = false
     internal private(set) var fetchRecentMessagesCalls: [String] = []
+    internal private(set) var fetchSessionInfoCalls: [String] = []
     internal private(set) var refreshedSessionIDs: [String] = []
 
     internal var foregroundSessionIDs: [String] {
@@ -720,11 +721,6 @@ public final class TeamclawService {
 
     private func refreshSessionState(for sessionId: String, modelContext: ModelContext) async {
         refreshedSessionIDs.append(sessionId)
-
-        if isTestingForegroundLifecycle {
-            return
-        }
-
         await fetchSessionInfo(sessionId: sessionId, modelContext: modelContext)
         if foregroundSessionIDsSet.contains(sessionId) {
             await fetchRecentMessagesForForegroundSession(sessionId)
@@ -732,6 +728,11 @@ public final class TeamclawService {
     }
 
     private func fetchSessionInfo(sessionId: String, modelContext: ModelContext) async {
+        if isTestingForegroundLifecycle {
+            fetchSessionInfoCalls.append(sessionId)
+            return
+        }
+
         guard let mqtt else { return }
 
         let descriptor = FetchDescriptor<Session>(
