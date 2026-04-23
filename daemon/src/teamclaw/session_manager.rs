@@ -6,7 +6,7 @@ use crate::teamclaw::{
 };
 use chrono::Utc;
 use rumqttc::{AsyncClient, QoS};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{BTreeSet, HashSet, VecDeque};
 use std::path::PathBuf;
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -29,6 +29,9 @@ pub struct SessionManager {
     team_host_device_id: Option<String>,
     recent_event_keys: HashSet<String>,
     recent_event_order: VecDeque<String>,
+    subscribed_live_sessions: BTreeSet<String>,
+    #[cfg(test)]
+    skip_live_subscription_io: bool,
 }
 
 impl SessionManager {
@@ -68,11 +71,14 @@ impl SessionManager {
             team_host_device_id,
             recent_event_keys: HashSet::new(),
             recent_event_order: VecDeque::new(),
+            subscribed_live_sessions: BTreeSet::new(),
+            #[cfg(test)]
+            skip_live_subscription_io: false,
         })
     }
 
     /// Subscribe to all relevant teamclaw topics.
-    pub async fn subscribe_all(&self) -> crate::error::Result<()> {
+    pub async fn subscribe_all(&mut self) -> crate::error::Result<()> {
         // Team-level topics
         self.client
             .subscribe(self.topics.sessions(), QoS::AtLeastOnce)
@@ -111,8 +117,8 @@ impl SessionManager {
             .collect();
         for session_id in &session_ids {
             self.subscribe_session(session_id).await?;
-            self.ensure_session_subscription(session_id).await?;
         }
+        self.refresh_membership_subscriptions().await?;
 
         Ok(())
     }
@@ -154,6 +160,7 @@ impl SessionManager {
         self.sessions.upsert(stored);
         self.sessions.save(&self.sessions_path)?;
         self.subscribe_session(&info.session_id).await?;
+        self.refresh_membership_subscriptions().await?;
         Ok(())
     }
 
@@ -281,6 +288,13 @@ impl SessionManager {
         // Subscribe to session topics
         if let Err(e) = self.subscribe_session(&session_id).await {
             warn!("handle_create_session: failed to subscribe to session: {}", e);
+        }
+        if let Err(e) = self.refresh_membership_subscriptions().await {
+            warn!(
+                session_id = %session_id,
+                "handle_create_session: failed to refresh membership subscriptions: {}",
+                e
+            );
         }
 
         // Send invites to invited actors
@@ -459,6 +473,13 @@ impl SessionManager {
         if let Err(e) = self.sessions.save(&self.sessions_path) {
             warn!("handle_join_session: failed to save sessions: {}", e);
         }
+        if let Err(e) = self.refresh_membership_subscriptions().await {
+            warn!(
+                session_id = %r.session_id,
+                "handle_join_session: failed to refresh membership subscriptions: {}",
+                e
+            );
+        }
         if let Err(e) = self.publish_session_meta(&r.session_id).await {
             warn!("handle_join_session: failed to publish session meta: {}", e);
         }
@@ -549,6 +570,13 @@ impl SessionManager {
         if let Err(e) = self.sessions.save(&self.sessions_path) {
             warn!("handle_add_participant: failed to save sessions: {}", e);
         }
+        if let Err(e) = self.refresh_membership_subscriptions().await {
+            warn!(
+                session_id = %r.session_id,
+                "handle_add_participant: failed to refresh membership subscriptions: {}",
+                e
+            );
+        }
         if let Err(e) = self.publish_session_meta(&r.session_id).await {
             warn!("handle_add_participant: failed to publish session meta: {}", e);
         }
@@ -614,6 +642,13 @@ impl SessionManager {
 
         if let Err(e) = self.sessions.save(&self.sessions_path) {
             warn!("handle_remove_participant: failed to save sessions: {}", e);
+        }
+        if let Err(e) = self.refresh_membership_subscriptions().await {
+            warn!(
+                session_id = %r.session_id,
+                "handle_remove_participant: failed to refresh membership subscriptions: {}",
+                e
+            );
         }
         if let Err(e) = self.publish_session_meta(&r.session_id).await {
             warn!("handle_remove_participant: failed to publish session meta: {}", e);
@@ -1254,10 +1289,51 @@ impl SessionManager {
     }
 
     pub async fn ensure_session_subscription(
-        &self,
-        session_id: &str,
+        &mut self,
+        _session_id: &str,
     ) -> crate::error::Result<()> {
-        self.subscribe_session_live(session_id).await
+        self.refresh_membership_subscriptions().await
+    }
+
+    pub async fn refresh_membership_subscriptions(&mut self) -> crate::error::Result<()> {
+        self.apply_membership_sessions(self.membership_session_ids())
+            .await
+    }
+
+    pub async fn apply_membership_sessions(
+        &mut self,
+        session_ids: Vec<String>,
+    ) -> crate::error::Result<()> {
+        let desired: BTreeSet<String> = session_ids
+            .into_iter()
+            .filter(|session_id| !session_id.is_empty())
+            .collect();
+
+        let to_subscribe: Vec<String> = desired
+            .difference(&self.subscribed_live_sessions)
+            .cloned()
+            .collect();
+        let to_unsubscribe: Vec<String> = self
+            .subscribed_live_sessions
+            .difference(&desired)
+            .cloned()
+            .collect();
+
+        for session_id in &to_subscribe {
+            self.subscribe_session_live(session_id).await?;
+            self.request_recent_session_events(session_id).await?;
+        }
+
+        for session_id in &to_unsubscribe {
+            self.unsubscribe_session_live(session_id).await?;
+        }
+
+        self.subscribed_live_sessions = desired;
+        Ok(())
+    }
+
+    pub fn subscribed_live_sessions(&self) -> Vec<String> {
+        self.subscribed_live_sessions.iter().cloned().collect()
     }
 
     pub fn should_process_message(&mut self, session_id: &str, message_id: &str) -> bool {
@@ -1360,8 +1436,23 @@ impl SessionManager {
     }
 
     async fn subscribe_session_live(&self, session_id: &str) -> crate::error::Result<()> {
+        #[cfg(test)]
+        if self.skip_live_subscription_io {
+            return Ok(());
+        }
         self.client
             .subscribe(self.live_session_topic(session_id), QoS::AtLeastOnce)
+            .await?;
+        Ok(())
+    }
+
+    async fn unsubscribe_session_live(&self, session_id: &str) -> crate::error::Result<()> {
+        #[cfg(test)]
+        if self.skip_live_subscription_io {
+            return Ok(());
+        }
+        self.client
+            .unsubscribe(self.live_session_topic(session_id))
             .await?;
         Ok(())
     }
@@ -1376,6 +1467,28 @@ impl SessionManager {
 
     fn live_session_topic(&self, session_id: &str) -> String {
         self.topics.session_live(session_id)
+    }
+
+    fn membership_session_ids(&self) -> Vec<String> {
+        let local_actor_id = self.actor_id.as_deref();
+        self.sessions
+            .sessions
+            .iter()
+            .filter(|session| {
+                session.host_device_id == self.device_id
+                    || local_actor_id.is_some_and(|actor_id| {
+                        session
+                            .participants
+                            .iter()
+                            .any(|participant| participant.actor_id == actor_id)
+                    })
+            })
+            .map(|session| session.session_id.clone())
+            .collect()
+    }
+
+    async fn request_recent_session_events(&self, _session_id: &str) -> crate::error::Result<()> {
+        Ok(())
     }
 
     fn record_recent_event(&mut self, key: String) -> bool {
@@ -1503,7 +1616,7 @@ mod tests {
             rumqttc::MqttOptions::new("test", "localhost", 1883),
             10,
         );
-        SessionManager::new(
+        let mut manager = SessionManager::new(
             client,
             "team1",
             "dev-a",
@@ -1512,7 +1625,9 @@ mod tests {
             false,
             None,
         )
-        .unwrap()
+        .unwrap();
+        manager.skip_live_subscription_io = true;
+        manager
     }
 
     fn make_session(id: &str) -> StoredSession {
@@ -1675,6 +1790,67 @@ mod tests {
 
         let targets = sm.membership_refresh_targets("s1", Some("dev-a"));
         assert!(targets.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_apply_membership_sessions_adds_and_removes_live_subscriptions() {
+        let tmp = TempDir::new().unwrap();
+        let mut sm = dummy_session_manager(tmp.path());
+
+        sm.apply_membership_sessions(vec!["sess-1".to_string(), "sess-2".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(
+            sm.subscribed_live_sessions(),
+            vec!["sess-1".to_string(), "sess-2".to_string()]
+        );
+
+        sm.apply_membership_sessions(vec!["sess-2".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(sm.subscribed_live_sessions(), vec!["sess-2".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn test_refresh_membership_subscriptions_uses_host_and_local_actor_truth() {
+        let tmp = TempDir::new().unwrap();
+        let (client, _eventloop) = rumqttc::AsyncClient::new(
+            rumqttc::MqttOptions::new("test", "localhost", 1883),
+            10,
+        );
+        let mut sm = SessionManager::new(
+            client,
+            "team1",
+            "dev-a",
+            Some("member-a".to_string()),
+            tmp.path().to_path_buf(),
+            false,
+            None,
+        )
+        .unwrap();
+        sm.skip_live_subscription_io = true;
+
+        let mut hosted = make_session("hosted");
+        hosted.host_device_id = "dev-a".to_string();
+
+        let mut joined = make_session("joined");
+        joined.host_device_id = "dev-host".to_string();
+        joined.participants.push(make_human_participant("member-a"));
+
+        let mut unrelated = make_session("unrelated");
+        unrelated.host_device_id = "dev-host".to_string();
+        unrelated.participants.push(make_human_participant("someone-else"));
+
+        sm.sessions.upsert(hosted);
+        sm.sessions.upsert(joined);
+        sm.sessions.upsert(unrelated);
+
+        sm.refresh_membership_subscriptions().await.unwrap();
+
+        assert_eq!(
+            sm.subscribed_live_sessions(),
+            vec!["hosted".to_string(), "joined".to_string()]
+        );
     }
 
     #[test]

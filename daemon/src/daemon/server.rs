@@ -128,7 +128,7 @@ impl DaemonServer {
         self.mqtt.subscribe_all().await
             .map_err(crate::error::AmuxError::Mqtt)?;
 
-        if let Some(tc) = &self.teamclaw {
+        if let Some(tc) = &mut self.teamclaw {
             tc.subscribe_all().await.expect("teamclaw subscribe failed");
         }
 
@@ -186,7 +186,7 @@ impl DaemonServer {
                     info!("MQTT reconnected, re-publishing state");
                     let _ = self.mqtt.announce_online(&self.config.device.name).await;
                     let _ = self.mqtt.subscribe_all().await;
-                    if let Some(tc) = &self.teamclaw {
+                    if let Some(tc) = &mut self.teamclaw {
                         let _ = tc.subscribe_all().await;
                     }
                     let publisher = Publisher::new(&self.mqtt);
@@ -675,9 +675,9 @@ impl DaemonServer {
             subscriber::IncomingMessage::TeamclawNotify { device_id: _, payload } => {
                 if let Ok(envelope) = crate::proto::teamclaw::NotifyEnvelope::decode(payload.as_slice()) {
                     if envelope.event_type == "membership.refresh" && !envelope.session_id.is_empty() {
-                        if let Some(tc) = &self.teamclaw {
-                            if let Err(err) = tc.ensure_session_subscription(&envelope.session_id).await {
-                                warn!(?err, session_id = %envelope.session_id, "failed to subscribe after notify");
+                        if let Some(tc) = &mut self.teamclaw {
+                            if let Err(err) = tc.refresh_membership_subscriptions().await {
+                                warn!(?err, session_id = %envelope.session_id, "failed to refresh membership subscriptions after notify");
                             }
                         }
                     }
