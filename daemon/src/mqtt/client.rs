@@ -146,7 +146,7 @@ mod tests {
     use crate::config::{AgentsConfig, DaemonConfig, DeviceConfig, MqttConfig};
 
     #[test]
-    fn new_accepts_actor_id_and_token_as_credentials() {
+    fn new_succeeds_with_token_credentials() {
         let config = DaemonConfig {
             device: DeviceConfig {
                 id: "abc123defg".into(),
