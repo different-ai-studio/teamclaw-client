@@ -117,6 +117,55 @@ public enum Amux_AgentStatus: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
+/// Lifecycle state for a Claude Code runtime (subprocess).
+/// Published on device/{id}/runtime/{id}/state topic.
+/// See spec: docs/superpowers/specs/2026-04-24-mqtt-topic-redesign-design.md#runtime-lifecycle
+public enum Amux_RuntimeLifecycle: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unknown // = 0
+  case starting // = 1
+  case active // = 2
+  case failed // = 3
+  case stopped // = 4
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unknown
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unknown
+    case 1: self = .starting
+    case 2: self = .active
+    case 3: self = .failed
+    case 4: self = .stopped
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unknown: return 0
+    case .starting: return 1
+    case .active: return 2
+    case .failed: return 3
+    case .stopped: return 4
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Amux_RuntimeLifecycle] = [
+    .unknown,
+    .starting,
+    .active,
+    .failed,
+    .stopped,
+  ]
+
+}
+
 public enum Amux_MemberRole: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case owner // = 0
@@ -1495,6 +1544,10 @@ extension Amux_AgentType: SwiftProtobuf._ProtoNameProviding {
 
 extension Amux_AgentStatus: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0AGENT_STATUS_UNKNOWN\0\u{1}AGENT_STATUS_STARTING\0\u{1}AGENT_STATUS_ACTIVE\0\u{1}AGENT_STATUS_IDLE\0\u{1}AGENT_STATUS_ERROR\0\u{1}AGENT_STATUS_STOPPED\0")
+}
+
+extension Amux_RuntimeLifecycle: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0RUNTIME_LIFECYCLE_UNKNOWN\0\u{1}RUNTIME_LIFECYCLE_STARTING\0\u{1}RUNTIME_LIFECYCLE_ACTIVE\0\u{1}RUNTIME_LIFECYCLE_FAILED\0\u{1}RUNTIME_LIFECYCLE_STOPPED\0")
 }
 
 extension Amux_MemberRole: SwiftProtobuf._ProtoNameProviding {

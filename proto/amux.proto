@@ -360,6 +360,17 @@ enum AgentStatus {
   AGENT_STATUS_STOPPED = 5;
 }
 
+// Lifecycle state for a Claude Code runtime (subprocess).
+// Published on device/{id}/runtime/{id}/state topic.
+// See spec: docs/superpowers/specs/2026-04-24-mqtt-topic-redesign-design.md#runtime-lifecycle
+enum RuntimeLifecycle {
+  RUNTIME_LIFECYCLE_UNKNOWN = 0;
+  RUNTIME_LIFECYCLE_STARTING = 1;
+  RUNTIME_LIFECYCLE_ACTIVE = 2;
+  RUNTIME_LIFECYCLE_FAILED = 3;
+  RUNTIME_LIFECYCLE_STOPPED = 4;
+}
+
 message AgentInfo {
   string agent_id = 1;
   AgentType agent_type = 2;
