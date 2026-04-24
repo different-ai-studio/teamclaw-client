@@ -60,7 +60,7 @@ public final class SessionListViewModel {
         task?.cancel()
         // Daemon fans each session out to its own retained topic
         // `device/{id}/agent/{agent}/state` (one RuntimeInfo per message) so a
-        // single publish never bumps into HiveMQ's 10 KB packet cap. We
+        // single publish never relies on a large broker packet limit. We
         // subscribe to the wildcard and rebuild our dict as retained
         // messages arrive.
         let agentStatePrefix = MQTTTopics.agentStatePrefix(teamID: teamID, deviceID: deviceId)

@@ -319,8 +319,9 @@ impl DaemonServer {
     /// Publish every known agent (active + historical) individually. Used on
     /// startup and after MQTT reconnect so clients subscribing to the wildcard
     /// `agent/+/state` topic receive one retained message per agent — keeping
-    /// each publish well under HiveMQ's 10 KB packet limit, which the old
-    /// single-list publish would blow past once the session count grew.
+    /// each publish small instead of relying on a large broker packet limit,
+    /// which the old single-list publish would blow past once the session
+    /// count grew.
     async fn publish_all_agent_states(&self) {
         let publisher = Publisher::new(&self.mqtt);
         for info in self.merged_agent_list().runtimes {
@@ -496,11 +497,11 @@ impl DaemonServer {
             Some(amux::acp_event::Event::AvailableCommands(_))
         );
 
-        // HiveMQ Cloud free tier caps publishes at 10 240 bytes. Claude Code's
+        // Keep publishes under a conservative 10 KB budget. Claude Code's
         // AvailableCommands list with full descriptions routinely lands at
-        // ~12 KB, which trips the broker and knocks the daemon's MQTT session
-        // offline mid-session-start. Trim descriptions (and as a last resort
-        // commands themselves) in-place until the envelope fits.
+        // ~12 KB, which can trip broker packet limits and knock the daemon's
+        // MQTT session offline mid-session-start. Trim descriptions (and as a
+        // last resort commands themselves) in-place until the envelope fits.
         if let Some(amux::acp_event::Event::AvailableCommands(ref mut ac)) = acp_event.event {
             fit_available_commands_in_budget(ac);
         }
@@ -1003,8 +1004,8 @@ impl DaemonServer {
                 let page_size = if req.page_size == 0 { 50 } else { req.page_size };
                 let (mut events, mut has_more) = self.history.read_page(agent_id, req.after_sequence, page_size);
 
-                // HiveMQ Cloud free tier caps packet size at 10240 bytes.
-                // Trim the batch by estimated encoded length so we never
+                // Keep history replies under a conservative 10 KB publish
+                // budget. Trim the batch by estimated encoded length so we never
                 // produce a publish the broker will reject (which otherwise
                 // forces the daemon's MQTT client to reconnect and knocks
                 // every iOS peer offline in a loop).
