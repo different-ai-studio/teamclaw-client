@@ -9,6 +9,13 @@ pub enum IncomingMessage {
         agent_id: String,
         envelope: amux::CommandEnvelope,
     },
+    // New Phase 1a variant: decoded from device/{id}/runtime/+/commands.
+    // Structurally carries the same AcpCommand oneof as AgentCommand; the
+    // dispatcher unifies them.
+    RuntimeCommand {
+        runtime_id: String,
+        envelope: amux::RuntimeCommandEnvelope,
+    },
     DeviceCollab {
         envelope: amux::DeviceCommandEnvelope,
     },
@@ -60,6 +67,24 @@ pub fn parse_incoming(publish: &Publish) -> Option<IncomingMessage> {
         }
     }
 
+    if topic.contains("/runtime/") && topic.ends_with("/commands") {
+        let parts: Vec<&str> = topic.split('/').collect();
+        // amux / {team} / device / {device_id} / runtime / {runtime_id} / commands
+        // = 7 segments
+        if parts.len() == 7 && parts[4] == "runtime" {
+            let runtime_id = parts[5].to_string();
+            match amux::RuntimeCommandEnvelope::decode(publish.payload.as_ref()) {
+                Ok(envelope) => {
+                    return Some(IncomingMessage::RuntimeCommand {
+                        runtime_id,
+                        envelope,
+                    });
+                }
+                Err(e) => warn!("failed to decode RuntimeCommandEnvelope: {}", e),
+            }
+        }
+    }
+
     if topic.contains("/agent/") && topic.ends_with("/commands") {
         let parts: Vec<&str> = topic.split('/').collect();
         if parts.len() >= 7 {
@@ -82,4 +107,53 @@ pub fn parse_incoming(publish: &Publish) -> Option<IncomingMessage> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use prost::Message as ProstMessage;
+    use rumqttc::Publish;
+
+    #[test]
+    fn parse_legacy_agent_commands_still_works() {
+        let envelope = amux::CommandEnvelope {
+            runtime_id: "rt1".to_string(),
+            device_id: "dev-a".to_string(),
+            ..Default::default()
+        };
+        let p = Publish::new(
+            "amux/team1/device/dev-a/agent/rt1/commands",
+            rumqttc::QoS::AtLeastOnce,
+            envelope.encode_to_vec(),
+        );
+        let msg = parse_incoming(&p).expect("should parse");
+        match msg {
+            IncomingMessage::AgentCommand { agent_id, .. } => {
+                assert_eq!(agent_id, "rt1");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn parse_runtime_commands_routes_to_new_variant() {
+        let envelope = amux::RuntimeCommandEnvelope {
+            runtime_id: "rt1".to_string(),
+            device_id: "dev-a".to_string(),
+            ..Default::default()
+        };
+        let p = Publish::new(
+            "amux/team1/device/dev-a/runtime/rt1/commands",
+            rumqttc::QoS::AtLeastOnce,
+            envelope.encode_to_vec(),
+        );
+        let msg = parse_incoming(&p).expect("should parse");
+        match msg {
+            IncomingMessage::RuntimeCommand { runtime_id, .. } => {
+                assert_eq!(runtime_id, "rt1");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
 }

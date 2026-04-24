@@ -135,10 +135,14 @@ impl MqttClient {
         self.client
             .subscribe(&self.topics.all_agent_commands(), QoS::AtLeastOnce)
             .await?;
+        self.client
+            .subscribe(self.topics.runtime_commands_wildcard(), QoS::AtLeastOnce)
+            .await?;
         info!(
-            "subscribed to {} and {}",
+            "subscribed to {}, {}, and {}",
             self.topics.collab(),
-            self.topics.all_agent_commands()
+            self.topics.all_agent_commands(),
+            self.topics.runtime_commands_wildcard(),
         );
         Ok(())
     }

@@ -529,6 +529,22 @@ impl DaemonServer {
             subscriber::IncomingMessage::AgentCommand { agent_id, envelope } => {
                 self.handle_agent_command(&agent_id, envelope).await;
             }
+            subscriber::IncomingMessage::RuntimeCommand { runtime_id, envelope } => {
+                // During Phase 1-2, runtime_id on the new path is the same
+                // 8-char UUID used on the legacy path. Route into the same
+                // ACP handler as AgentCommand by translating the envelope.
+                let legacy_envelope = amux::CommandEnvelope {
+                    runtime_id: envelope.runtime_id,
+                    device_id: envelope.device_id,
+                    peer_id: envelope.peer_id,
+                    command_id: envelope.command_id,
+                    timestamp: envelope.timestamp,
+                    sender_actor_id: envelope.sender_actor_id,
+                    reply_to_device_id: envelope.reply_to_device_id,
+                    acp_command: envelope.acp_command,
+                };
+                self.handle_agent_command(&runtime_id, legacy_envelope).await;
+            }
             subscriber::IncomingMessage::DeviceCollab { envelope } => {
                 self.handle_device_collab(envelope).await;
             }
