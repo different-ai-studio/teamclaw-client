@@ -99,11 +99,14 @@ public actor SupabaseAppOnboardingStore: AppOnboardingStore {
     }
 
     public func ensureSession() async throws {
-        if client.auth.currentSession != nil {
-            return
+        let session = client.auth.currentSession
+        let isAnonymous = session?.user.isAnonymous ?? true
+        if isAnonymous {
+            if session != nil {
+                try? await client.auth.signOut()
+            }
+            throw AuthRequired.notAuthenticated
         }
-
-        _ = try await client.auth.signInAnonymously()
     }
 
     public func loadBootstrap() async throws -> AppBootstrap {
@@ -177,6 +180,40 @@ public actor SupabaseAppOnboardingStore: AppOnboardingStore {
             workspaceID: row.workspaceID,
             workspaceName: row.workspaceName
         )
+    }
+
+    public func signIn(email: String, password: String) async throws {
+        try await client.auth.signIn(email: email, password: password)
+    }
+
+    public func signUp(email: String, password: String) async throws {
+        try await client.auth.signUp(email: email, password: password)
+    }
+
+    public func sendMagicLink(email: String) async throws {
+        try await client.auth.signInWithOTP(
+            email: email,
+            redirectTo: URL(string: "amux://auth-callback"),
+            shouldCreateUser: true
+        )
+    }
+
+    public func signInWithAppleCredential(idToken: String, nonce: String) async throws {
+        try await client.auth.signInWithIdToken(
+            credentials: .init(provider: .apple, idToken: idToken, nonce: nonce)
+        )
+    }
+
+    public func signInWithGoogle() async throws {
+        try await client.auth.signInWithOAuth(
+            provider: .google,
+            redirectTo: URL(string: "amux://auth-callback"),
+            scopes: "email profile"
+        )
+    }
+
+    public func handleAuthCallback(url: URL) async throws {
+        _ = try await client.auth.session(from: url)
     }
 }
 
