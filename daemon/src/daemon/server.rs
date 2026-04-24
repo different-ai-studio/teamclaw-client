@@ -10,6 +10,22 @@ use crate::collab::{AuthManager, AuthResult, PeerTracker, PeerState, PermissionM
 use crate::history::EventHistory;
 use crate::proto::amux;
 
+/// Outcome of apply_start_runtime. Success path returns the allocated
+/// runtime_id + the session_id (echoed from request or freshly created).
+/// Failure path returns a (error_code, error_message, failed_stage) tuple
+/// — the caller formats this into whatever wire envelope it emits
+/// (legacy AgentStartResult or new RuntimeStartResult).
+struct StartRuntimeOutcome {
+    runtime_id: String,
+    session_id: String,
+}
+
+struct StartRuntimeError {
+    error_code: String,
+    error_message: String,
+    failed_stage: String,
+}
+
 pub struct DaemonServer {
     config: DaemonConfig,
     mqtt: MqttClient,
@@ -788,104 +804,51 @@ impl DaemonServer {
 
         match cmd {
             amux::acp_command::Command::StartAgent(start) => {
-                let at = amux::AgentType::try_from(start.agent_type).unwrap_or(amux::AgentType::ClaudeCode);
+                let at = amux::AgentType::try_from(start.agent_type)
+                    .unwrap_or(amux::AgentType::ClaudeCode);
 
-                // Resolve workspace path. Two sources in order of priority:
-                //   1. Local workspaces.toml lookup by legacy MQTT id (id set,
-                //      path comes from the registry).
-                //   2. Supabase-sourced envelope: id is the Supabase UUID and
-                //      `worktree` carries the checkout path. The daemon uses
-                //      the path directly and keeps the UUID around for
-                //      `agent_runtimes.workspace_id`.
-                let start_workspace_id = start.workspace_id.clone();
-                let start_worktree = start.worktree.clone();
-                let start_session_id = start.session_id.clone();
                 info!(
-                    workspace_id = %start_workspace_id,
-                    worktree = %start_worktree,
+                    workspace_id = %start.workspace_id,
+                    worktree = %start.worktree,
                     peer_id,
                     "received startAgent envelope"
                 );
-                let (worktree, ws_id, supabase_ws_id_owned): (String, String, Option<String>) =
-                    if !start_workspace_id.is_empty() {
-                        if let Some(ws) = self.workspaces.find_by_id(&start_workspace_id) {
-                            (
-                                ws.path.clone(),
-                                ws.workspace_id.clone(),
-                                (!ws.supabase_workspace_id.is_empty())
-                                    .then_some(ws.supabase_workspace_id.clone()),
-                            )
-                        } else if !start_worktree.is_empty() {
-                            (start_worktree.clone(), String::new(), Some(start_workspace_id.clone()))
-                        } else {
-                            let reason = format!(
-                                "workspace {} not found and no worktree path provided",
-                                start_workspace_id
-                            );
-                            error!(
-                                workspace_id = %start_workspace_id,
-                                %reason,
-                                "startAgent rejected"
-                            );
-                            self.publish_command_rejected(&reply_device_id, command_id.clone(), reason).await;
-                            return;
-                        }
-                    } else {
-                        let wt = if start_worktree.is_empty() { ".".to_string() } else { start_worktree.clone() };
-                        (wt, String::new(), None)
-                    };
-                let supabase_ws_id = supabase_ws_id_owned.as_deref();
 
-                match self.agents.spawn_agent(
-                    at,
-                    &worktree,
-                    &start.initial_prompt,
-                    &ws_id,
-                    supabase_ws_id,
-                    (!start_session_id.is_empty()).then_some(start_session_id.as_str()),
-                ).await {
-                    Ok(new_id) => {
-                        info!(agent_id = %new_id, peer_id, "agent started");
-                        // Persist session
-                        let acp_sid = self.agents.get_handle(&new_id)
-                            .map(|h| h.acp_session_id.clone())
-                            .unwrap_or_default();
-                        let stored = StoredSession {
-                            session_id: new_id.clone(),
-                            acp_session_id: acp_sid,
-                            collab_session_id: start_session_id.clone(),
-                            agent_type: at as i32,
-                            workspace_id: ws_id.clone(),
-                            worktree: worktree.clone(),
-                            status: amux::AgentStatus::Active as i32,
-                            created_at: chrono::Utc::now().timestamp(),
-                            last_prompt: start.initial_prompt.clone(),
-                            last_output_summary: String::new(),
-                            tool_use_count: 0,
-                        };
-                        self.sessions.upsert(stored);
-                        let _ = self.sessions.save(&self.sessions_path);
-                        self.publish_agent_state_by_id(&new_id).await;
+                let outcome = self
+                    .apply_start_runtime(
+                        at,
+                        &start.workspace_id,
+                        &start.worktree,
+                        &start.session_id,
+                        &start.initial_prompt,
+                    )
+                    .await;
+
+                match outcome {
+                    Ok(res) => {
+                        info!(agent_id = %res.runtime_id, peer_id, "agent started");
                         self.publish_agent_start_result(
                             &reply_device_id,
                             command_id.clone(),
                             true,
                             String::new(),
-                            new_id.clone(),
-                            start_session_id.clone(),
-                        ).await;
+                            res.runtime_id,
+                            res.session_id,
+                        )
+                        .await;
                     }
-                    Err(e) => {
-                        let reason = format!("Failed to start agent: {}", e);
-                        error!(peer_id, "{}", reason);
+                    Err(err) => {
+                        let reason = err.error_message.clone();
+                        error!(peer_id, "startAgent failed: {}", reason);
                         self.publish_agent_start_result(
                             &reply_device_id,
                             command_id.clone(),
                             false,
                             reason,
                             String::new(),
-                            start_session_id.clone(),
-                        ).await;
+                            start.session_id.clone(),
+                        )
+                        .await;
                     }
                 }
             }
@@ -1569,6 +1532,148 @@ impl DaemonServer {
                 error,
             })),
         }
+    }
+
+    /// Spawns a Claude Code subprocess and publishes lifecycle state
+    /// transitions on the retained runtime state topic. Shared by legacy
+    /// AcpCommand::StartAgent and RPC RuntimeStart handlers.
+    ///
+    /// Lifecycle publishes:
+    ///   - STARTING (stage "spawning_process") published retained right after
+    ///     spawn_agent returns the new runtime_id, before StoredSession upsert.
+    ///   - ACTIVE published retained via publish_agent_state_by_id after
+    ///     StoredSession upsert (that call reads the now-populated AgentHandle).
+    ///   - No FAILED publish here — spawn_agent error path returns before any
+    ///     runtime_id is allocated, so there is no retained topic to write to.
+    ///     Callers may surface the error via their wire envelope.
+    async fn apply_start_runtime(
+        &mut self,
+        agent_type: amux::AgentType,
+        workspace_id: &str,
+        worktree: &str,
+        session_id: &str,
+        initial_prompt: &str,
+    ) -> Result<StartRuntimeOutcome, StartRuntimeError> {
+        info!(
+            workspace_id,
+            worktree,
+            session_id,
+            "apply_start_runtime"
+        );
+
+        // Resolve workspace + worktree. Same 4-branch logic as the legacy
+        // AcpCommand::StartAgent arm (see server.rs ~800-836 pre-refactor).
+        let (resolved_worktree, ws_id, supabase_ws_id_owned): (String, String, Option<String>) =
+            if !workspace_id.is_empty() {
+                if let Some(ws) = self.workspaces.find_by_id(workspace_id) {
+                    (
+                        ws.path.clone(),
+                        ws.workspace_id.clone(),
+                        (!ws.supabase_workspace_id.is_empty())
+                            .then_some(ws.supabase_workspace_id.clone()),
+                    )
+                } else if !worktree.is_empty() {
+                    (
+                        worktree.to_string(),
+                        String::new(),
+                        Some(workspace_id.to_string()),
+                    )
+                } else {
+                    return Err(StartRuntimeError {
+                        error_code: "WORKSPACE_NOT_FOUND".to_string(),
+                        error_message: format!(
+                            "workspace {} not found and no worktree path provided",
+                            workspace_id
+                        ),
+                        failed_stage: "validation".to_string(),
+                    });
+                }
+            } else {
+                // Bare-agent spawn: empty workspace_id. Use worktree if
+                // provided, else "." (today's legacy default).
+                let wt = if worktree.is_empty() {
+                    ".".to_string()
+                } else {
+                    worktree.to_string()
+                };
+                (wt, String::new(), None)
+            };
+        let supabase_ws_id = supabase_ws_id_owned.as_deref();
+        let session_id_opt = (!session_id.is_empty()).then_some(session_id);
+
+        // Spawn.
+        let new_id = match self
+            .agents
+            .spawn_agent(
+                agent_type,
+                &resolved_worktree,
+                initial_prompt,
+                &ws_id,
+                supabase_ws_id,
+                session_id_opt,
+            )
+            .await
+        {
+            Ok(id) => id,
+            Err(e) => {
+                error!("spawn_agent failed: {}", e);
+                // We never allocated a retained topic (spawn_agent failed before
+                // returning an id), so there's no retain to publish FAILED to.
+                // The caller formats the error into its wire envelope; no state
+                // topic is involved.
+                return Err(StartRuntimeError {
+                    error_code: "SPAWN_FAILED".to_string(),
+                    error_message: format!("spawn_agent failed: {}", e),
+                    failed_stage: "spawning_process".to_string(),
+                });
+            }
+        };
+
+        // STARTING retain — fleeting but observable by mid-spawn reconnects.
+        let publisher = Publisher::new(&self.mqtt);
+        let starting_info = amux::RuntimeInfo {
+            runtime_id: new_id.clone(),
+            agent_type: agent_type as i32,
+            worktree: resolved_worktree.clone(),
+            workspace_id: ws_id.clone(),
+            state: amux::RuntimeLifecycle::Starting as i32,
+            stage: "spawning_process".to_string(),
+            started_at: chrono::Utc::now().timestamp(),
+            ..Default::default()
+        };
+        let _ = publisher.publish_agent_state(&new_id, &starting_info).await;
+
+        // Persist session + transition to ACTIVE.
+        let acp_sid = self
+            .agents
+            .get_handle(&new_id)
+            .map(|h| h.acp_session_id.clone())
+            .unwrap_or_default();
+        let stored = StoredSession {
+            session_id: new_id.clone(),
+            acp_session_id: acp_sid,
+            collab_session_id: session_id.to_string(),
+            agent_type: agent_type as i32,
+            workspace_id: ws_id,
+            worktree: resolved_worktree,
+            status: amux::AgentStatus::Active as i32,
+            created_at: chrono::Utc::now().timestamp(),
+            last_prompt: initial_prompt.to_string(),
+            last_output_summary: String::new(),
+            tool_use_count: 0,
+        };
+        self.sessions.upsert(stored);
+        let _ = self.sessions.save(&self.sessions_path);
+
+        // ACTIVE — publish_agent_state_by_id reads the live AgentHandle and
+        // dual-publishes to agent/{id}/state + runtime/{id}/state. The handle
+        // today encodes state=ACTIVE (Phase 1a Task 4).
+        self.publish_agent_state_by_id(&new_id).await;
+
+        Ok(StartRuntimeOutcome {
+            runtime_id: new_id,
+            session_id: session_id.to_string(),
+        })
     }
 
     async fn handle_stop_runtime(

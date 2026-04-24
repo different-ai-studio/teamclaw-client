@@ -87,6 +87,28 @@ impl<'a> Publisher<'a> {
             .await
     }
 
+    /// Publishes RuntimeInfo with state=FAILED and populated error fields
+    /// to the retained runtime state topic (dual-publishes to agent/{id}/state
+    /// + runtime/{id}/state per Phase 1a). The retain stays until a future
+    /// clear — iOS surfaces the error_message to the user.
+    pub async fn publish_runtime_failed(
+        &self,
+        runtime_id: &str,
+        error_code: &str,
+        error_message: &str,
+        failed_stage: &str,
+    ) -> Result<(), rumqttc::ClientError> {
+        let info = crate::proto::amux::RuntimeInfo {
+            runtime_id: runtime_id.to_string(),
+            state: crate::proto::amux::RuntimeLifecycle::Failed as i32,
+            error_code: error_code.to_string(),
+            error_message: error_message.to_string(),
+            failed_stage: failed_stage.to_string(),
+            ..Default::default()
+        };
+        self.publish_agent_state(runtime_id, &info).await
+    }
+
     /// Publishes a Notify hint to the daemon's own device/{id}/notify topic.
     /// Ephemeral (no retain) — receivers react by re-fetching authoritative
     /// state from Supabase or daemon RPC.
