@@ -7,8 +7,6 @@ use crate::supabase::{SupabaseClient, SupabaseConfig, SUPABASE_ANON_KEY, SUPABAS
 use std::path::{Path, PathBuf};
 
 const DEFAULT_MQTT_BROKER_URL: &str = "mqtts://ai.ucar.cc:8883";
-const DEFAULT_MQTT_USERNAME: &str = "teamclaw";
-const DEFAULT_MQTT_PASSWORD: &str = "teamclaw2026";
 
 pub struct InitOutcome {
     pub actor_id: String,
@@ -89,8 +87,6 @@ fn default_daemon_config(display_name: &str) -> DaemonConfig {
         },
         mqtt: MqttConfig {
             broker_url: DEFAULT_MQTT_BROKER_URL.to_string(),
-            username: DEFAULT_MQTT_USERNAME.to_string(),
-            password: DEFAULT_MQTT_PASSWORD.to_string(),
         },
         agents: AgentsConfig::default(),
         team_id: None,
@@ -109,14 +105,6 @@ fn daemon_config_for_invite(
         .broker_url
         .clone()
         .unwrap_or_else(|| DEFAULT_MQTT_BROKER_URL.to_string());
-    daemon_cfg.mqtt.username = invite
-        .username
-        .clone()
-        .unwrap_or_else(|| DEFAULT_MQTT_USERNAME.to_string());
-    daemon_cfg.mqtt.password = invite
-        .password
-        .clone()
-        .unwrap_or_else(|| DEFAULT_MQTT_PASSWORD.to_string());
     daemon_cfg
 }
 
@@ -125,7 +113,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn invite_mqtt_settings_override_defaults() {
+    fn invite_broker_url_overrides_default() {
         let cfg = daemon_config_for_invite(
             None,
             "macmini-5",
@@ -133,20 +121,15 @@ mod tests {
             &ParsedInvite {
                 token: "tok".into(),
                 broker_url: Some("mqtts://broker.example.com:8883".into()),
-                username: Some("alice".into()),
-                password: Some("secret".into()),
             },
         );
-
         assert_eq!(cfg.team_id.as_deref(), Some("team-1"));
         assert_eq!(cfg.device.name, "macmini-5");
         assert_eq!(cfg.mqtt.broker_url, "mqtts://broker.example.com:8883");
-        assert_eq!(cfg.mqtt.username, "alice");
-        assert_eq!(cfg.mqtt.password, "secret");
     }
 
     #[test]
-    fn legacy_invite_uses_default_mqtt_settings() {
+    fn legacy_invite_uses_default_broker_url() {
         let cfg = daemon_config_for_invite(
             None,
             "macmini-5",
@@ -154,14 +137,9 @@ mod tests {
             &ParsedInvite {
                 token: "tok".into(),
                 broker_url: None,
-                username: None,
-                password: None,
             },
         );
-
         assert_eq!(cfg.mqtt.broker_url, DEFAULT_MQTT_BROKER_URL);
-        assert_eq!(cfg.mqtt.username, DEFAULT_MQTT_USERNAME);
-        assert_eq!(cfg.mqtt.password, DEFAULT_MQTT_PASSWORD);
     }
 
     #[test]
@@ -174,8 +152,6 @@ mod tests {
                 },
                 mqtt: MqttConfig {
                     broker_url: "mqtts://old.example.com:8883".into(),
-                    username: "old-user".into(),
-                    password: "old-pass".into(),
                 },
                 agents: AgentsConfig::default(),
                 team_id: Some("team-old".into()),
@@ -185,11 +161,8 @@ mod tests {
             &ParsedInvite {
                 token: "tok".into(),
                 broker_url: Some("mqtts://broker.example.com:8883".into()),
-                username: Some("alice".into()),
-                password: Some("secret".into()),
             },
         );
-
         assert_eq!(cfg.device.id, "device-123");
         assert_eq!(cfg.device.name, "existing-device");
         assert_eq!(cfg.team_id.as_deref(), Some("team-2"));

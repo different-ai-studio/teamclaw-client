@@ -20,8 +20,6 @@ pub struct DeviceConfig {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MqttConfig {
     pub broker_url: String,
-    pub username: String,
-    pub password: String,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
