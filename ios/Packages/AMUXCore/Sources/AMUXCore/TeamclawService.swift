@@ -689,6 +689,76 @@ public final class TeamclawService {
         }
     }
 
+    /// Fetches the daemon's current in-memory peer set via FetchPeers RPC.
+    /// Phase 2b replacement for the retained devicePeers topic subscription.
+    /// Returns empty array on timeout or decode error — the retained topic
+    /// semantics degraded the same way, and callers are idempotent.
+    public func fetchPeers() async -> [Amux_PeerInfo] {
+        guard let mqtt else { return [] }
+
+        let fetch = Teamclaw_FetchPeersRequest()  // empty request
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .fetchPeers(fetch)
+
+        let requestId = rpcReq.requestID
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let stream = mqtt.messages()
+
+        guard let data = try? rpcReq.serializedData() else { return [] }
+        try? await mqtt.publish(topic: topic, payload: data, retain: false)
+
+        let deadline = Date().addingTimeInterval(10)
+        for await msg in stream {
+            if Date() > deadline { break }
+            if msg.topic == MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId),
+               let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
+               response.requestID == requestId {
+                if case let .fetchPeersResult(result)? = response.result {
+                    return result.peers
+                }
+                return []
+            }
+        }
+        return []
+    }
+
+    /// Fetches the daemon's workspace set via FetchWorkspaces RPC.
+    /// Phase 2b replacement for the retained deviceWorkspaces topic subscription.
+    public func fetchWorkspaces() async -> [Amux_WorkspaceInfo] {
+        guard let mqtt else { return [] }
+
+        let fetch = Teamclaw_FetchWorkspacesRequest()  // empty request
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .fetchWorkspaces(fetch)
+
+        let requestId = rpcReq.requestID
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let stream = mqtt.messages()
+
+        guard let data = try? rpcReq.serializedData() else { return [] }
+        try? await mqtt.publish(topic: topic, payload: data, retain: false)
+
+        let deadline = Date().addingTimeInterval(10)
+        for await msg in stream {
+            if Date() > deadline { break }
+            if msg.topic == MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId),
+               let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
+               response.requestID == requestId {
+                if case let .fetchWorkspacesResult(result)? = response.result {
+                    return result.workspaces
+                }
+                return []
+            }
+        }
+        return []
+    }
+
     private func configureRuntime(
         mqtt: MQTTService,
         teamId: String,
