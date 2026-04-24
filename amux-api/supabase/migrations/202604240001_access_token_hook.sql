@@ -76,16 +76,60 @@ security definer
 set search_path = public, auth
 as $$
 declare
-  v_user_id uuid;
+  v_user_id     uuid;
+  v_claims      jsonb;
+  v_memberships jsonb;
+  v_acl         jsonb;
 begin
   v_user_id := nullif(event->>'user_id','')::uuid;
 
-  -- Anon / service_role callers skip the hook entirely.
   if v_user_id is null then
     return event;
   end if;
 
-  -- Subsequent tasks replace this stub with the full build-and-merge logic.
-  return event;
+  v_claims := coalesce(event->'claims', '{}'::jsonb);
+
+  -- Memberships: one row per actor this user owns.
+  select coalesce(
+    jsonb_agg(jsonb_build_object(
+      'team_id',    a.team_id::text,
+      'actor_id',   a.id::text,
+      'actor_type', a.actor_type
+    ) order by a.team_id, a.id),
+    '[]'::jsonb
+  )
+    into v_memberships
+    from public.actors a
+   where a.user_id = v_user_id;
+
+  -- ACL: flatten every actor's rule set, terminate with a deny-all.
+  with expanded as (
+    select jsonb_build_object(
+             'permission', 'allow',
+             'action',     r.action,
+             'topic',      r.topic
+           ) as rule
+      from public.actors a,
+           lateral public.amux_acl_rules_for(a.team_id, a.id, a.actor_type) r
+     where a.user_id = v_user_id
+  )
+  select coalesce(jsonb_agg(rule), '[]'::jsonb)
+           || jsonb_build_array(jsonb_build_object(
+                'permission','deny','action','all','topic','#'
+              ))
+    into v_acl
+    from expanded;
+
+  -- Merge. Preserve existing claims; acl at top level; memberships under
+  -- app_metadata (merged with whatever GoTrue already put there).
+  v_claims := v_claims
+    || jsonb_build_object('acl', v_acl)
+    || jsonb_build_object(
+         'app_metadata',
+         coalesce(v_claims->'app_metadata', '{}'::jsonb)
+           || jsonb_build_object('memberships', v_memberships)
+       );
+
+  return jsonb_build_object('claims', v_claims);
 end;
 $$;

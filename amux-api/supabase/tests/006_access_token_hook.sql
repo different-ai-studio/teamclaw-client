@@ -1,6 +1,6 @@
 begin;
 
-select plan(7);
+select plan(12);
 
 -- Rule catalog for a member yields exactly 8 allow rules with the expected topic shapes.
 select is(
@@ -102,6 +102,63 @@ select is(
   ),
   'hook with null user_id returns event unchanged'
 );
+
+-- Single-team member: memberships has 1 row, acl has 8 allow + 1 deny rules.
+do $$
+declare
+  v_team  uuid := gen_random_uuid();
+  v_user  uuid := gen_random_uuid();
+  v_actor uuid := gen_random_uuid();
+  v_out   jsonb;
+  v_claims jsonb;
+begin
+  insert into auth.users (id) values (v_user);
+  insert into public.teams (id, slug, name) values (v_team, 'hook-solo', 'Hook Solo');
+  insert into public.actors (id, team_id, actor_type, display_name, user_id)
+    values (v_actor, v_team, 'member', 'solo-member', v_user);
+  insert into public.members (id, status) values (v_actor, 'active');
+  insert into public.team_members (team_id, member_id, role)
+    values (v_team, v_actor, 'owner');
+
+  v_out := public.amux_access_token_hook(
+    jsonb_build_object(
+      'user_id', v_user,
+      'claims',  jsonb_build_object(
+        'sub',  v_user::text,
+        'role', 'authenticated',
+        'aud',  'authenticated',
+        'iss',  'supabase'
+      )
+    )
+  );
+  v_claims := v_out->'claims';
+
+  perform ok(
+    v_claims ? 'acl',
+    'single-team member: claims.acl present'
+  );
+  perform is(
+    jsonb_array_length(v_claims->'acl'),
+    9,
+    'single-team member: acl has 8 allow + 1 deny = 9 rules'
+  );
+  perform is(
+    jsonb_array_length(v_claims->'app_metadata'->'memberships'),
+    1,
+    'single-team member: memberships has 1 entry'
+  );
+  perform is(
+    v_claims->'app_metadata'->'memberships'->0->>'team_id',
+    v_team::text,
+    'single-team member: membership team_id matches'
+  );
+  perform is(
+    v_claims->'app_metadata'->'memberships'->0->>'actor_id',
+    v_actor::text,
+    'single-team member: membership actor_id matches'
+  );
+end;
+$$;
 
 select * from finish();
 rollback;
