@@ -1,5 +1,7 @@
 use rumqttc::{Event, Packet};
 use tracing::{error, info, warn};
+use std::time::{Duration, Instant};
+use tokio::sync::oneshot;
 
 use crate::config::{DaemonConfig, MemberStore, SessionStore, StoredSession, WorkspaceStore};
 use crate::mqtt::{MqttClient, publisher::Publisher, subscriber};
@@ -129,58 +131,12 @@ impl DaemonServer {
     pub async fn run(mut self) -> crate::error::Result<()> {
         info!("amuxd v0.1.0 starting");
 
-        // Poll until connected (CONNACK received)
-        loop {
-            match self.mqtt.eventloop.poll().await {
-                Ok(Event::Incoming(Packet::ConnAck(_))) => {
-                    info!("MQTT CONNACK received");
-                    break;
-                }
-                Ok(_) => {}
-                Err(e) => {
-                    warn!("MQTT connect error: {}, retrying...", e);
-                    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                }
-            }
-        }
-
-        // Now connected — publish and subscribe
-        self.mqtt.subscribe_all().await
-            .map_err(crate::error::AmuxError::Mqtt)?;
-
-        if let Some(tc) = &mut self.teamclaw {
-            tc.subscribe_all().await.expect("teamclaw subscribe failed");
-        }
-
-        self.register_startup_workspace().await;
-
-        let publisher = Publisher::new(&self.mqtt);
-        publisher.publish_device_state(&crate::proto::amux::DeviceState {
-            online: true,
-            device_name: self.config.device.name.clone(),
-            timestamp: chrono::Utc::now().timestamp(),
-        }).await.map_err(crate::error::AmuxError::Mqtt)?;
-        self.publish_all_agent_states().await;
-
-        info!(device_id = %self.config.device.id, "MQTT connected, listening for commands");
-
-        // Register our MQTT device_id on the agents row so iOS clients can
-        // route publishes at `amux/{device_id}/…` without typing the UUID.
-        {
-            let sb = self.supabase.clone();
-            let device_id = self.config.device.id.clone();
-            tokio::spawn(async move {
-                if let Err(e) = sb.set_agent_device_id(&device_id).await {
-                    warn!("supabase agents.device_id upsert failed: {e}");
-                }
-            });
-        }
-
-        // Spawn 60s Supabase heartbeat task
+        // One-time setup before the reconnect loop.
+        // Heartbeat runs independently of MQTT session.
         {
             let sb = self.supabase.clone();
             tokio::spawn(async move {
-                let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+                let mut tick = tokio::time::interval(Duration::from_secs(60));
                 tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 loop {
                     tick.tick().await;
@@ -191,46 +147,176 @@ impl DaemonServer {
             });
         }
 
-        // Main event loop
-        loop {
-            // Poll agent events (non-blocking drain)
-            let agent_events = self.agents.poll_events();
-            for (agent_id, acp_event) in agent_events {
-                self.forward_agent_event(&agent_id, acp_event).await;
+        // Register device_id in Supabase once (background).
+        {
+            let sb = self.supabase.clone();
+            let device_id = self.config.device.id.clone();
+            tokio::spawn(async move {
+                if let Err(e) = sb.set_agent_device_id(&device_id).await {
+                    warn!("supabase agents.device_id upsert failed: {e}");
+                }
+            });
+        }
+
+        let mut first_connect = true;
+
+        'outer: loop {
+            // ── 1. Get fresh access_token (retry indefinitely on Supabase errors) ──
+            let token = loop {
+                match self.supabase.access_token().await {
+                    Ok(t) => break t,
+                    Err(e) => {
+                        warn!("token fetch failed: {e}, retrying in 30s");
+                        tokio::time::sleep(Duration::from_secs(30)).await;
+                    }
+                }
+            };
+
+            // ── 2. Rebuild MqttClient ──
+            info!(
+                actor_id = %self.actor_id,
+                broker   = %self.config.mqtt.broker_url,
+                "MQTT connecting with access_token"
+            );
+            self.mqtt = match MqttClient::new(&self.config, &self.actor_id, &token) {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!("MqttClient build failed: {e}, retrying in 5s");
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    continue 'outer;
+                }
+            };
+
+            // ── 3. Rebuild teamclaw with new AsyncClient ──
+            if let Some(team_id) = self.config.team_id.clone() {
+                self.teamclaw = match crate::teamclaw::SessionManager::new(
+                    self.mqtt.client.clone(),
+                    &team_id,
+                    &self.config.device.id,
+                    Some(self.actor_id.clone()),
+                    crate::config::DaemonConfig::config_dir(),
+                ) {
+                    Ok(tc) => Some(tc),
+                    Err(e) => {
+                        warn!("teamclaw rebuild failed: {e}");
+                        None
+                    }
+                };
             }
 
-            // Poll MQTT with a short timeout so we cycle back to check agents
-            match tokio::time::timeout(
-                tokio::time::Duration::from_millis(50),
-                self.mqtt.eventloop.poll(),
-            ).await {
-                Ok(Ok(Event::Incoming(Packet::ConnAck(_)))) => {
-                    // Reconnected — re-subscribe and re-publish all retained state
-                    info!("MQTT reconnected, re-publishing state");
-                    let _ = self.mqtt.subscribe_all().await;
-                    if let Some(tc) = &mut self.teamclaw {
-                        let _ = tc.subscribe_all().await;
+            // ── 4. Wait for CONNACK ──
+            loop {
+                match self.mqtt.eventloop.poll().await {
+                    Ok(Event::Incoming(Packet::ConnAck(_))) => {
+                        info!("MQTT CONNACK received");
+                        break;
                     }
-                    let publisher = Publisher::new(&self.mqtt);
-                    let _ = publisher.publish_device_state(&crate::proto::amux::DeviceState {
-                        online: true,
-                        device_name: self.config.device.name.clone(),
-                        timestamp: chrono::Utc::now().timestamp(),
-                    }).await;
-                    self.publish_all_agent_states().await;
-                }
-                Ok(Ok(Event::Incoming(Packet::Publish(publish)))) => {
-                    if let Some(msg) = subscriber::parse_incoming(&publish) {
-                        self.handle_incoming(msg).await;
+                    Ok(_) => {}
+                    Err(rumqttc::ConnectionError::ConnectionRefused(_)) => {
+                        warn!("MQTT connection refused during connect, refreshing token");
+                        tokio::time::sleep(Duration::from_secs(3)).await;
+                        continue 'outer;
+                    }
+                    Err(e) => {
+                        warn!("MQTT connect error: {e}, retrying...");
+                        tokio::time::sleep(Duration::from_secs(3)).await;
                     }
                 }
-                Ok(Ok(_)) => {} // Other MQTT events
-                Ok(Err(e)) => {
-                    warn!("MQTT error: {}, reconnecting...", e);
-                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                }
-                Err(_) => {} // Timeout — no MQTT event, loop back to check agents
             }
+
+            // ── 5. Subscribe and announce ──
+            self.mqtt.subscribe_all().await.map_err(crate::error::AmuxError::Mqtt)?;
+            if let Some(tc) = &mut self.teamclaw {
+                tc.subscribe_all().await.expect("teamclaw subscribe failed");
+            }
+            {
+                let publisher = Publisher::new(&self.mqtt);
+                publisher.publish_device_state(&crate::proto::amux::DeviceState {
+                    online: true,
+                    device_name: self.config.device.name.clone(),
+                    timestamp: chrono::Utc::now().timestamp(),
+                }).await.map_err(crate::error::AmuxError::Mqtt)?;
+            }
+            self.publish_all_agent_states().await;
+            info!(device_id = %self.config.device.id, "MQTT connected, listening for commands");
+
+            // One-time workspace registration on first connect only.
+            if first_connect {
+                self.register_startup_workspace().await;
+                first_connect = false;
+            }
+
+            // ── 6. Token monitor — fires ~5 min before token expires ──
+            let expiry = self.supabase.cached_token_expiry();
+            let duration_until_reconnect = expiry
+                .and_then(|t| t.checked_duration_since(Instant::now()))
+                .map(|d| d.saturating_sub(Duration::from_secs(5 * 60)))
+                .unwrap_or(Duration::from_secs(50 * 60));
+
+            let (tx, rx) = oneshot::channel::<()>();
+            tokio::spawn(async move {
+                tokio::time::sleep(duration_until_reconnect).await;
+                let _ = tx.send(());
+            });
+
+            // ── 7. Inner event loop ──
+            let mut reconnect = std::pin::pin!(rx);
+            'inner: loop {
+                // Drain agent events (non-blocking).
+                let agent_events = self.agents.poll_events();
+                for (agent_id, acp_event) in agent_events {
+                    self.forward_agent_event(&agent_id, acp_event).await;
+                }
+
+                tokio::select! {
+                    // Proactive: token is about to expire.
+                    _ = &mut reconnect => {
+                        info!("token expiring, reconnecting MQTT");
+                        break 'inner;
+                    }
+
+                    // MQTT events (50 ms timeout keeps agent polling responsive).
+                    result = tokio::time::timeout(
+                        Duration::from_millis(50),
+                        self.mqtt.eventloop.poll(),
+                    ) => {
+                        match result {
+                            Ok(Ok(Event::Incoming(Packet::ConnAck(_)))) => {
+                                // Network blip — rumqttc reconnected automatically.
+                                // Re-subscribe and republish; do NOT exit inner loop.
+                                info!("MQTT reconnected (network blip), re-publishing state");
+                                let _ = self.mqtt.subscribe_all().await;
+                                if let Some(tc) = &mut self.teamclaw {
+                                    let _ = tc.subscribe_all().await;
+                                }
+                                let publisher = Publisher::new(&self.mqtt);
+                                let _ = publisher.publish_device_state(&crate::proto::amux::DeviceState {
+                                    online: true,
+                                    device_name: self.config.device.name.clone(),
+                                    timestamp: chrono::Utc::now().timestamp(),
+                                }).await;
+                                self.publish_all_agent_states().await;
+                            }
+                            Ok(Ok(Event::Incoming(Packet::Publish(publish)))) => {
+                                if let Some(msg) = subscriber::parse_incoming(&publish) {
+                                    self.handle_incoming(msg).await;
+                                }
+                            }
+                            // Reactive: EMQX rejected connection (JWT expired — Phase 4+).
+                            Ok(Err(rumqttc::ConnectionError::ConnectionRefused(_))) => {
+                                warn!("MQTT connection refused (token expired), reconnecting");
+                                break 'inner;
+                            }
+                            Ok(Err(e)) => {
+                                warn!("MQTT error: {e}, reconnecting...");
+                                tokio::time::sleep(Duration::from_secs(5)).await;
+                            }
+                            Ok(Ok(_)) | Err(_) => {} // other events or 50 ms timeout
+                        }
+                    }
+                }
+            }
+            // inner loop exited → outer loop: get fresh token and reconnect
         }
     }
 
