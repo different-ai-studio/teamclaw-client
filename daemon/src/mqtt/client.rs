@@ -53,7 +53,7 @@ pub mod client_danger {
 }
 
 impl MqttClient {
-    pub fn new(config: &DaemonConfig) -> crate::error::Result<Self> {
+    pub fn new(config: &DaemonConfig, actor_id: &str, token: &str) -> crate::error::Result<Self> {
         let client_id = format!("amuxd-{}", &config.device.id[..8.min(config.device.id.len())]);
 
         // Parse host, port, TLS from broker_url
@@ -68,7 +68,7 @@ impl MqttClient {
         };
 
         let mut opts = MqttOptions::new(&client_id, &host, port);
-        opts.set_credentials("amuxd", "");
+        opts.set_credentials(actor_id, token);
         opts.set_keep_alive(Duration::from_secs(30));
         opts.set_clean_session(true);
 
@@ -137,5 +137,28 @@ impl MqttClient {
             self.topics.runtime_commands_wildcard(),
         );
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{AgentsConfig, DaemonConfig, DeviceConfig, MqttConfig};
+
+    #[test]
+    fn new_accepts_actor_id_and_token_as_credentials() {
+        let config = DaemonConfig {
+            device: DeviceConfig {
+                id: "abc123defg".into(),
+                name: "test-device".into(),
+            },
+            mqtt: MqttConfig {
+                broker_url: "mqtt://localhost:1883".into(),
+            },
+            agents: AgentsConfig::default(),
+            team_id: Some("team-uuid-1234".into()),
+        };
+        let result = MqttClient::new(&config, "actor-uuid-1234", "jwt-token-value");
+        assert!(result.is_ok(), "MqttClient::new should succeed with token credentials");
     }
 }
