@@ -38,6 +38,22 @@ message CommandEnvelope {
   AcpCommand acp_command = 10;    // Agent command (maps to ACP request)
 }
 
+// New envelope for device/{id}/runtime/{id}/commands (Phase 1+ topic).
+// Structurally identical to CommandEnvelope; exists separately so both old
+// and new topics can coexist during the dual-publish migration window.
+// CommandEnvelope is retired in Phase 5.
+message RuntimeCommandEnvelope {
+  string runtime_id = 1;
+  string device_id = 2;
+  string peer_id = 3;
+  string command_id = 4;
+  int64 timestamp = 5;
+  string sender_actor_id = 6;
+  string reply_to_device_id = 7;
+
+  AcpCommand acp_command = 10;
+}
+
 // Upstream: clients → daemon (device-level, sent to {deviceId}/collab topic)
 message DeviceCommandEnvelope {
   string device_id = 1;

@@ -295,6 +295,45 @@ public struct Amux_CommandEnvelope: Sendable {
   fileprivate var _acpCommand: Amux_AcpCommand? = nil
 }
 
+/// New envelope for device/{id}/runtime/{id}/commands (Phase 1+ topic).
+/// Structurally identical to CommandEnvelope; exists separately so both old
+/// and new topics can coexist during the dual-publish migration window.
+/// CommandEnvelope is retired in Phase 5.
+public struct Amux_RuntimeCommandEnvelope: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var runtimeID: String = String()
+
+  public var deviceID: String = String()
+
+  public var peerID: String = String()
+
+  public var commandID: String = String()
+
+  public var timestamp: Int64 = 0
+
+  public var senderActorID: String = String()
+
+  public var replyToDeviceID: String = String()
+
+  public var acpCommand: Amux_AcpCommand {
+    get {_acpCommand ?? Amux_AcpCommand()}
+    set {_acpCommand = newValue}
+  }
+  /// Returns true if `acpCommand` has been explicitly set.
+  public var hasAcpCommand: Bool {self._acpCommand != nil}
+  /// Clears the value of `acpCommand`. Subsequent reads from it will return its default value.
+  public mutating func clearAcpCommand() {self._acpCommand = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _acpCommand: Amux_AcpCommand? = nil
+}
+
 /// Upstream: clients → daemon (device-level, sent to {deviceId}/collab topic)
 public struct Amux_DeviceCommandEnvelope: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
@@ -1783,6 +1822,75 @@ extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
   }
 
   public static func ==(lhs: Amux_CommandEnvelope, rhs: Amux_CommandEnvelope) -> Bool {
+    if lhs.runtimeID != rhs.runtimeID {return false}
+    if lhs.deviceID != rhs.deviceID {return false}
+    if lhs.peerID != rhs.peerID {return false}
+    if lhs.commandID != rhs.commandID {return false}
+    if lhs.timestamp != rhs.timestamp {return false}
+    if lhs.senderActorID != rhs.senderActorID {return false}
+    if lhs.replyToDeviceID != rhs.replyToDeviceID {return false}
+    if lhs._acpCommand != rhs._acpCommand {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Amux_RuntimeCommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RuntimeCommandEnvelope"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}runtime_id\0\u{3}device_id\0\u{3}peer_id\0\u{3}command_id\0\u{1}timestamp\0\u{3}sender_actor_id\0\u{3}reply_to_device_id\0\u{4}\u{3}acp_command\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.runtimeID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.deviceID) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.peerID) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.commandID) }()
+      case 5: try { try decoder.decodeSingularInt64Field(value: &self.timestamp) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.senderActorID) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.replyToDeviceID) }()
+      case 10: try { try decoder.decodeSingularMessageField(value: &self._acpCommand) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.runtimeID.isEmpty {
+      try visitor.visitSingularStringField(value: self.runtimeID, fieldNumber: 1)
+    }
+    if !self.deviceID.isEmpty {
+      try visitor.visitSingularStringField(value: self.deviceID, fieldNumber: 2)
+    }
+    if !self.peerID.isEmpty {
+      try visitor.visitSingularStringField(value: self.peerID, fieldNumber: 3)
+    }
+    if !self.commandID.isEmpty {
+      try visitor.visitSingularStringField(value: self.commandID, fieldNumber: 4)
+    }
+    if self.timestamp != 0 {
+      try visitor.visitSingularInt64Field(value: self.timestamp, fieldNumber: 5)
+    }
+    if !self.senderActorID.isEmpty {
+      try visitor.visitSingularStringField(value: self.senderActorID, fieldNumber: 6)
+    }
+    if !self.replyToDeviceID.isEmpty {
+      try visitor.visitSingularStringField(value: self.replyToDeviceID, fieldNumber: 7)
+    }
+    try { if let v = self._acpCommand {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Amux_RuntimeCommandEnvelope, rhs: Amux_RuntimeCommandEnvelope) -> Bool {
     if lhs.runtimeID != rhs.runtimeID {return false}
     if lhs.deviceID != rhs.deviceID {return false}
     if lhs.peerID != rhs.peerID {return false}
