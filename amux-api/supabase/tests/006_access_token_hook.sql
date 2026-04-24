@@ -1,6 +1,6 @@
 begin;
 
-select plan(21);
+select plan(23);
 
 -- Rule catalog for a member yields exactly 8 allow rules with the expected topic shapes.
 select is(
@@ -333,6 +333,25 @@ begin
   perform is(v_claims->'app_metadata'->>'provider', 'email',                          'preserve existing app_metadata keys');
 end;
 $$;
+
+-- supabase_auth_admin must be able to execute both functions.
+select ok(
+  has_function_privilege(
+    'supabase_auth_admin',
+    'public.amux_access_token_hook(jsonb)',
+    'EXECUTE'
+  ),
+  'supabase_auth_admin can EXECUTE amux_access_token_hook'
+);
+
+select ok(
+  has_function_privilege(
+    'supabase_auth_admin',
+    'public.amux_acl_rules_for(uuid, uuid, text)',
+    'EXECUTE'
+  ),
+  'supabase_auth_admin can EXECUTE amux_acl_rules_for'
+);
 
 select * from finish();
 rollback;

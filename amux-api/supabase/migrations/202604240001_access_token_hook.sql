@@ -136,3 +136,12 @@ exception
     return event;
 end;
 $$;
+
+-- --------------------------------------------------------------------------
+-- Permissions. supabase_auth_admin is the role GoTrue uses to call hooks.
+-- --------------------------------------------------------------------------
+revoke execute on function public.amux_access_token_hook(jsonb)         from public;
+revoke execute on function public.amux_acl_rules_for(uuid, uuid, text)  from public;
+
+grant  execute on function public.amux_access_token_hook(jsonb)         to supabase_auth_admin;
+grant  execute on function public.amux_acl_rules_for(uuid, uuid, text)  to supabase_auth_admin;
