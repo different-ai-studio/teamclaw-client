@@ -1363,6 +1363,27 @@ public struct Teamclaw_FetchWorkspacesResult: Sendable {
   public init() {}
 }
 
+/// Hint-only invalidation payload. See spec "New envelope" + "device/notify vs
+/// user/notify scoping". Receivers route by event_type, not by message type.
+/// Authoritative data lives in Supabase (or daemon RPC for peers).
+public struct Teamclaw_Notify: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// e.g. "peers.changed", "invite.received"
+  public var eventType: String = String()
+
+  /// optional resource id ("session/abc")
+  public var refreshHint: String = String()
+
+  public var sentAt: Int64 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate let _protobuf_package = "teamclaw"
@@ -3876,6 +3897,46 @@ extension Teamclaw_FetchWorkspacesResult: SwiftProtobuf.Message, SwiftProtobuf._
 
   public static func ==(lhs: Teamclaw_FetchWorkspacesResult, rhs: Teamclaw_FetchWorkspacesResult) -> Bool {
     if lhs.workspaces != rhs.workspaces {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_Notify: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Notify"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}event_type\0\u{3}refresh_hint\0\u{3}sent_at\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.eventType) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.refreshHint) }()
+      case 3: try { try decoder.decodeSingularInt64Field(value: &self.sentAt) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.eventType.isEmpty {
+      try visitor.visitSingularStringField(value: self.eventType, fieldNumber: 1)
+    }
+    if !self.refreshHint.isEmpty {
+      try visitor.visitSingularStringField(value: self.refreshHint, fieldNumber: 2)
+    }
+    if self.sentAt != 0 {
+      try visitor.visitSingularInt64Field(value: self.sentAt, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_Notify, rhs: Teamclaw_Notify) -> Bool {
+    if lhs.eventType != rhs.eventType {return false}
+    if lhs.refreshHint != rhs.refreshHint {return false}
+    if lhs.sentAt != rhs.sentAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

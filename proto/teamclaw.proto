@@ -382,3 +382,16 @@ message FetchWorkspacesRequest {}
 message FetchWorkspacesResult {
   repeated amux.WorkspaceInfo workspaces = 1;
 }
+
+// ═══════════════════════════════════════════
+//  Notify — shared payload for device/notify and user/notify
+// ═══════════════════════════════════════════
+
+// Hint-only invalidation payload. See spec "New envelope" + "device/notify vs
+// user/notify scoping". Receivers route by event_type, not by message type.
+// Authoritative data lives in Supabase (or daemon RPC for peers).
+message Notify {
+  string event_type = 1;                // e.g. "peers.changed", "invite.received"
+  string refresh_hint = 2;              // optional resource id ("session/abc")
+  int64 sent_at = 3;
+}
