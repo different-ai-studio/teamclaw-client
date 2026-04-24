@@ -568,8 +568,8 @@ impl DaemonServer {
             }
             // ─── Non-session methods — handle locally ───
             // Phase 1b Tasks 3-9 replace these stubs with real handlers.
-            Some(Method::FetchPeers(_)) => not_yet_implemented(&request, "fetch_peers"),
-            Some(Method::FetchWorkspaces(_)) => not_yet_implemented(&request, "fetch_workspaces"),
+            Some(Method::FetchPeers(_)) => self.handle_fetch_peers(&request).await,
+            Some(Method::FetchWorkspaces(_)) => self.handle_fetch_workspaces(&request).await,
             Some(Method::AnnouncePeer(_)) => not_yet_implemented(&request, "announce_peer"),
             Some(Method::DisconnectPeer(_)) => not_yet_implemented(&request, "disconnect_peer"),
             Some(Method::AddWorkspace(_)) => not_yet_implemented(&request, "add_workspace"),
@@ -1285,6 +1285,48 @@ impl DaemonServer {
         let _ = Publisher::new(&self.mqtt)
             .publish_device_collab_event_to(reply_device_id, &event)
             .await;
+    }
+
+    // ─── Non-session RPC handlers ───
+
+    async fn handle_fetch_peers(
+        &self,
+        request: &crate::proto::teamclaw::RpcRequest,
+    ) -> crate::proto::teamclaw::RpcResponse {
+        use crate::proto::teamclaw::{rpc_response, FetchPeersResult, RpcResponse};
+
+        let peers = self.peers.to_proto_peer_list().peers;
+        RpcResponse {
+            request_id: request.request_id.clone(),
+            success: true,
+            error: String::new(),
+            requester_client_id: request.requester_client_id.clone(),
+            requester_actor_id: request.requester_actor_id.clone(),
+            requester_device_id: request.requester_device_id.clone(),
+            result: Some(rpc_response::Result::FetchPeersResult(FetchPeersResult {
+                peers,
+            })),
+        }
+    }
+
+    async fn handle_fetch_workspaces(
+        &self,
+        request: &crate::proto::teamclaw::RpcRequest,
+    ) -> crate::proto::teamclaw::RpcResponse {
+        use crate::proto::teamclaw::{rpc_response, FetchWorkspacesResult, RpcResponse};
+
+        let workspaces = self.workspaces.to_proto_list().workspaces;
+        RpcResponse {
+            request_id: request.request_id.clone(),
+            success: true,
+            error: String::new(),
+            requester_client_id: request.requester_client_id.clone(),
+            requester_actor_id: request.requester_actor_id.clone(),
+            requester_device_id: request.requester_device_id.clone(),
+            result: Some(rpc_response::Result::FetchWorkspacesResult(
+                FetchWorkspacesResult { workspaces },
+            )),
+        }
     }
 }
 
