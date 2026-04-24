@@ -574,7 +574,7 @@ impl DaemonServer {
             Some(Method::DisconnectPeer(d)) => self.handle_disconnect_peer(&request, d).await,
             Some(Method::AddWorkspace(a)) => self.handle_add_workspace(&request, a).await,
             Some(Method::RemoveWorkspace(r)) => self.handle_remove_workspace(&request, r).await,
-            Some(Method::RemoveMember(_)) => not_yet_implemented(&request, "remove_member"),
+            Some(Method::RemoveMember(r)) => self.handle_remove_member(&request, r).await,
             Some(Method::RuntimeStop(_)) => not_yet_implemented(&request, "runtime_stop"),
             Some(Method::RuntimeStart(_)) => not_yet_implemented(&request, "runtime_start"),
             None => RpcResponse {
@@ -1140,18 +1140,17 @@ impl DaemonServer {
                 warn!(peer_id, "InviteMember command received but handler removed; use Supabase invite flow");
             }
             amux::device_collab_command::Command::RemoveMember(remove) => {
-                let role = self.peers.get_peer(&peer_id).map(|p| p.role).unwrap_or(amux::MemberRole::Member);
-                if role != amux::MemberRole::Owner {
-                    warn!(peer_id, "remove rejected: not owner");
-                    return;
-                }
-                if let Ok(true) = self.auth.remove_member(&remove.member_id) {
-                    let kicked = self.peers.remove_by_member_id(&remove.member_id);
-                    for p in &kicked {
-                        info!(peer_id = %p.peer_id, "peer kicked");
-                    }
+                let is_owner = self
+                    .peers
+                    .get_peer(&peer_id)
+                    .map(|p| p.role == amux::MemberRole::Owner)
+                    .unwrap_or(false);
+                let (success, _error) = self.apply_remove_member(&remove, is_owner).await;
+                if success {
                     let publisher = Publisher::new(&self.mqtt);
-                    let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
+                    let _ = publisher
+                        .publish_peer_list(&self.peers.to_proto_peer_list())
+                        .await;
                 }
             }
             amux::device_collab_command::Command::AddWorkspace(add) => {
@@ -1507,6 +1506,65 @@ impl DaemonServer {
             requester_actor_id: request.requester_actor_id.clone(),
             requester_device_id: request.requester_device_id.clone(),
             result: Some(rpc_response::Result::RemoveWorkspaceResult(RemoveWorkspaceResult {
+                accepted,
+                error,
+            })),
+        }
+    }
+
+    /// Applies a member removal. Returns (success, error_text).
+    /// Caller passes `requester_is_owner` because the two callers have
+    /// different ways to establish it: legacy collab path looks up the
+    /// peer's role via PeerTracker; RPC path looks up the requester_actor_id
+    /// through AuthManager::is_owner.
+    async fn apply_remove_member(
+        &mut self,
+        remove: &amux::RemoveMember,
+        requester_is_owner: bool,
+    ) -> (bool, String) {
+        if !requester_is_owner {
+            warn!(member_id = %remove.member_id, "remove rejected: not owner");
+            return (false, "not owner".to_string());
+        }
+        match self.auth.remove_member(&remove.member_id) {
+            Ok(true) => {
+                let kicked = self.peers.remove_by_member_id(&remove.member_id);
+                for p in &kicked {
+                    info!(peer_id = %p.peer_id, "peer kicked");
+                }
+                (true, String::new())
+            }
+            Ok(false) => (false, format!("member not found: {}", remove.member_id)),
+            Err(e) => (false, e.to_string()),
+        }
+    }
+
+    async fn handle_remove_member(
+        &mut self,
+        request: &crate::proto::teamclaw::RpcRequest,
+        remove: &crate::proto::teamclaw::RemoveMemberRequest,
+    ) -> crate::proto::teamclaw::RpcResponse {
+        use crate::proto::teamclaw::{rpc_response, RemoveMemberResult, RpcResponse};
+
+        let amux_remove = amux::RemoveMember { member_id: remove.member_id.clone() };
+        // RPC carries requester identity in payload; resolve is_owner via
+        // AuthManager, which is the source of truth for member roles.
+        let is_owner = self.auth.is_owner(&request.requester_actor_id);
+        let (accepted, error) = self.apply_remove_member(&amux_remove, is_owner).await;
+
+        if accepted {
+            let publisher = Publisher::new(&self.mqtt);
+            let _ = publisher.publish_notify("members.changed", "").await;
+        }
+
+        RpcResponse {
+            request_id: request.request_id.clone(),
+            success: accepted,
+            error: error.clone(),
+            requester_client_id: request.requester_client_id.clone(),
+            requester_actor_id: request.requester_actor_id.clone(),
+            requester_device_id: request.requester_device_id.clone(),
+            result: Some(rpc_response::Result::RemoveMemberResult(RemoveMemberResult {
                 accepted,
                 error,
             })),
