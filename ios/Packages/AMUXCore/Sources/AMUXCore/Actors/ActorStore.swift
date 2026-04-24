@@ -4,6 +4,7 @@ import SwiftData
 
 public extension Notification.Name {
     static let amuxInviteTokenReceived = Notification.Name("amuxInviteTokenReceived")
+    static let amuxAuthCallbackReceived = Notification.Name("amuxAuthCallbackReceived")
 }
 
 @Observable

@@ -44,12 +44,22 @@ struct AMUXApp: App {
     }
 
     private func handle(_ url: URL) {
-        guard url.scheme == "amux", url.host == "invite",
-              let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let token = comps.queryItems?.first(where: { $0.name == "token" })?.value
-        else { return }
-        NotificationCenter.default.post(
-            name: .amuxInviteTokenReceived, object: nil, userInfo: ["token": token]
-        )
+        guard url.scheme == "amux" else { return }
+
+        switch url.host {
+        case "invite":
+            guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                  let token = comps.queryItems?.first(where: { $0.name == "token" })?.value
+            else { return }
+            NotificationCenter.default.post(
+                name: .amuxInviteTokenReceived, object: nil, userInfo: ["token": token]
+            )
+        case "auth-callback":
+            NotificationCenter.default.post(
+                name: .amuxAuthCallbackReceived, object: url
+            )
+        default:
+            break
+        }
     }
 }

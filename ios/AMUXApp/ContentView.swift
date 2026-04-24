@@ -36,6 +36,8 @@ struct ContentView: View {
             switch onboarding.route {
             case .loading:
                 ProgressView("Setting up AMUX…")
+            case .needsAuth:
+                WelcomeView(coordinator: onboarding)
             case .createTeam:
                 CreateTeamView(coordinator: onboarding)
             case .ready:
@@ -73,6 +75,10 @@ struct ContentView: View {
         .onChange(of: pairing.isPaired) { _, paired in
             guard paired else { return }
             Task { await connectMQTT() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .amuxAuthCallbackReceived)) { notification in
+            guard let url = notification.object as? URL else { return }
+            Task { await onboarding.handleAuthCallback(url: url) }
         }
         .onChange(of: scenePhase) { _, phase in
             // iOS freezes sockets when backgrounded but rarely delivers a
