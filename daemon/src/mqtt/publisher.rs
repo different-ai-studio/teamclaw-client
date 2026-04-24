@@ -17,9 +17,16 @@ impl<'a> Publisher<'a> {
             .await
     }
 
+    /// Dual-publishes Envelope to BOTH agent/{id}/events (legacy) and
+    /// runtime/{id}/events during the Phase 1-2 compat window. Ephemeral;
+    /// no retain.
     pub async fn publish_agent_event(&self, agent_id: &str, envelope: &amux::Envelope) -> Result<(), rumqttc::ClientError> {
+        let payload = envelope.encode_to_vec();
         self.client.client
-            .publish(self.client.topics.agent_events(agent_id), QoS::AtLeastOnce, false, envelope.encode_to_vec())
+            .publish(self.client.topics.agent_events(agent_id), QoS::AtLeastOnce, false, payload.clone())
+            .await?;
+        self.client.client
+            .publish(self.client.topics.runtime_events(agent_id), QoS::AtLeastOnce, false, payload)
             .await
     }
 
