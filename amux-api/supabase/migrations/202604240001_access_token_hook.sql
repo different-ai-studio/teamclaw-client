@@ -35,5 +35,26 @@ as $$
       ('pub', format('amux/%s/device/+/rpc/req',            p_team)),
       ('pub', format('amux/%s/device/+/runtime/+/commands', p_team))
     ) as r(action, topic)
-   where p_type = 'member';
+   where p_type = 'member'
+
+  union all
+
+  -- Agent (daemon): publish its own device-scoped state, subscribe its own
+  -- inbox; pub rpc/res is scoped to its team (in-team RPC only).
+  select action, topic
+    from (values
+      ('pub', format('amux/%s/device/%s/state',             p_team, p_actor)),
+      ('pub', format('amux/%s/device/%s/runtime/+/state',   p_team, p_actor)),
+      ('pub', format('amux/%s/device/%s/runtime/+/events',  p_team, p_actor)),
+      ('pub', format('amux/%s/device/%s/notify',            p_team, p_actor)),
+      ('pub', format('amux/%s/device/+/rpc/res',            p_team)),
+      ('pub', format('amux/%s/session/+/live',              p_team)),
+      ('pub', format('amux/%s/user/+/notify',               p_team)),
+      ('sub', format('amux/%s/device/%s/runtime/+/commands',p_team, p_actor)),
+      ('sub', format('amux/%s/device/%s/rpc/req',           p_team, p_actor)),
+      ('sub', format('amux/%s/device/%s/notify',            p_team, p_actor)),
+      ('sub', format('amux/%s/session/+/live',              p_team)),
+      ('sub', format('amux/%s/user/%s/notify',              p_team, p_actor))
+    ) as r(action, topic)
+   where p_type = 'agent';
 $$;
