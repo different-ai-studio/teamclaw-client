@@ -572,8 +572,8 @@ impl DaemonServer {
             Some(Method::FetchWorkspaces(_)) => self.handle_fetch_workspaces(&request).await,
             Some(Method::AnnouncePeer(ann)) => self.handle_announce_peer(&request, ann).await,
             Some(Method::DisconnectPeer(d)) => self.handle_disconnect_peer(&request, d).await,
-            Some(Method::AddWorkspace(_)) => not_yet_implemented(&request, "add_workspace"),
-            Some(Method::RemoveWorkspace(_)) => not_yet_implemented(&request, "remove_workspace"),
+            Some(Method::AddWorkspace(a)) => self.handle_add_workspace(&request, a).await,
+            Some(Method::RemoveWorkspace(r)) => self.handle_remove_workspace(&request, r).await,
             Some(Method::RemoveMember(_)) => not_yet_implemented(&request, "remove_member"),
             Some(Method::RuntimeStop(_)) => not_yet_implemented(&request, "runtime_stop"),
             Some(Method::RuntimeStart(_)) => not_yet_implemented(&request, "runtime_start"),
@@ -1155,65 +1155,32 @@ impl DaemonServer {
                 }
             }
             amux::device_collab_command::Command::AddWorkspace(add) => {
-                match self.workspaces.add(&add.path) {
-                    Ok(outcome) => {
-                        let mut ws = outcome.workspace;
-                        let mut should_save = outcome.inserted;
-                        if self.sync_workspace_to_supabase(&mut ws).await {
-                            should_save = true;
-                        }
-                        if let Some(existing) = self.workspaces.workspaces.iter_mut().find(|w| w.workspace_id == ws.workspace_id) {
-                            *existing = ws.clone();
-                        }
-                        if should_save {
-                            let _ = self.workspaces.save(&self.workspaces_path);
-                        }
-                        let publisher = Publisher::new(&self.mqtt);
-                        let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
-                        info!(workspace_id = %ws.workspace_id, path = %ws.path, "workspace added");
-                        let event = amux::DeviceCollabEvent {
-                            device_id: self.config.device.id.clone(),
-                            timestamp: chrono::Utc::now().timestamp(),
-                            event: Some(amux::device_collab_event::Event::WorkspaceResult(
-                                amux::WorkspaceResult {
-                                    command_id,
-                                    success: true,
-                                    error: String::new(),
-                                    workspace: Some(amux::WorkspaceInfo {
-                                        workspace_id: ws.workspace_id,
-                                        path: ws.path,
-                                        display_name: ws.display_name,
-                                    }),
-                                },
-                            )),
-                        };
-                        let _ = publisher.publish_device_collab_event(&event).await;
-                    }
-                    Err(e) => {
-                        warn!(path = %add.path, "add workspace failed: {}", e);
-                        let event = amux::DeviceCollabEvent {
-                            device_id: self.config.device.id.clone(),
-                            timestamp: chrono::Utc::now().timestamp(),
-                            event: Some(amux::device_collab_event::Event::WorkspaceResult(
-                                amux::WorkspaceResult {
-                                    command_id,
-                                    success: false,
-                                    error: e.to_string(),
-                                    workspace: None,
-                                },
-                            )),
-                        };
-                        let publisher = Publisher::new(&self.mqtt);
-                        let _ = publisher.publish_device_collab_event(&event).await;
-                    }
-                }
+                let (success, error, workspace) = self.apply_add_workspace(&add).await;
+                let publisher = Publisher::new(&self.mqtt);
+                let _ = publisher
+                    .publish_workspace_list(&self.workspaces.to_proto_list())
+                    .await;
+                let event = amux::DeviceCollabEvent {
+                    device_id: self.config.device.id.clone(),
+                    timestamp: chrono::Utc::now().timestamp(),
+                    event: Some(amux::device_collab_event::Event::WorkspaceResult(
+                        amux::WorkspaceResult {
+                            command_id,
+                            success,
+                            error,
+                            workspace,
+                        },
+                    )),
+                };
+                let _ = publisher.publish_device_collab_event(&event).await;
             }
             amux::device_collab_command::Command::RemoveWorkspace(remove) => {
-                if self.workspaces.remove(&remove.workspace_id) {
-                    let _ = self.workspaces.save(&self.workspaces_path);
+                let (success, _error) = self.apply_remove_workspace(&remove).await;
+                if success {
                     let publisher = Publisher::new(&self.mqtt);
-                    let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
-                    info!(workspace_id = %remove.workspace_id, "workspace removed");
+                    let _ = publisher
+                        .publish_workspace_list(&self.workspaces.to_proto_list())
+                        .await;
                 }
             }
         }
@@ -1426,6 +1393,120 @@ impl DaemonServer {
             requester_actor_id: request.requester_actor_id.clone(),
             requester_device_id: request.requester_device_id.clone(),
             result: Some(rpc_response::Result::DisconnectPeerResult(DisconnectPeerResult {
+                accepted,
+                error,
+            })),
+        }
+    }
+
+    /// Applies a workspace add. Returns (success, error_text, resulting_workspace_if_any).
+    /// Caller publishes any collab event or Notify hint.
+    async fn apply_add_workspace(
+        &mut self,
+        add: &amux::AddWorkspace,
+    ) -> (bool, String, Option<amux::WorkspaceInfo>) {
+        match self.workspaces.add(&add.path) {
+            Ok(outcome) => {
+                let mut ws = outcome.workspace;
+                let mut should_save = outcome.inserted;
+                if self.sync_workspace_to_supabase(&mut ws).await {
+                    should_save = true;
+                }
+                if let Some(existing) = self
+                    .workspaces
+                    .workspaces
+                    .iter_mut()
+                    .find(|w| w.workspace_id == ws.workspace_id)
+                {
+                    *existing = ws.clone();
+                }
+                if should_save {
+                    let _ = self.workspaces.save(&self.workspaces_path);
+                }
+                info!(workspace_id = %ws.workspace_id, path = %ws.path, "workspace added");
+                let info = amux::WorkspaceInfo {
+                    workspace_id: ws.workspace_id,
+                    path: ws.path,
+                    display_name: ws.display_name,
+                };
+                (true, String::new(), Some(info))
+            }
+            Err(e) => {
+                warn!(path = %add.path, "add workspace failed: {}", e);
+                (false, e.to_string(), None)
+            }
+        }
+    }
+
+    /// Applies a workspace remove. Returns (success, error_text).
+    async fn apply_remove_workspace(
+        &mut self,
+        remove: &amux::RemoveWorkspace,
+    ) -> (bool, String) {
+        if self.workspaces.remove(&remove.workspace_id) {
+            let _ = self.workspaces.save(&self.workspaces_path);
+            info!(workspace_id = %remove.workspace_id, "workspace removed");
+            (true, String::new())
+        } else {
+            (false, format!("unknown workspace_id: {}", remove.workspace_id))
+        }
+    }
+
+    async fn handle_add_workspace(
+        &mut self,
+        request: &crate::proto::teamclaw::RpcRequest,
+        add: &crate::proto::teamclaw::AddWorkspaceRequest,
+    ) -> crate::proto::teamclaw::RpcResponse {
+        use crate::proto::teamclaw::{rpc_response, AddWorkspaceResult, RpcResponse};
+
+        let amux_add = amux::AddWorkspace { path: add.path.clone() };
+        let (accepted, error, workspace) = self.apply_add_workspace(&amux_add).await;
+
+        if accepted {
+            let publisher = Publisher::new(&self.mqtt);
+            let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
+            let _ = publisher.publish_notify("workspaces.changed", "").await;
+        }
+
+        RpcResponse {
+            request_id: request.request_id.clone(),
+            success: accepted,
+            error: error.clone(),
+            requester_client_id: request.requester_client_id.clone(),
+            requester_actor_id: request.requester_actor_id.clone(),
+            requester_device_id: request.requester_device_id.clone(),
+            result: Some(rpc_response::Result::AddWorkspaceResult(AddWorkspaceResult {
+                accepted,
+                error,
+                workspace,
+            })),
+        }
+    }
+
+    async fn handle_remove_workspace(
+        &mut self,
+        request: &crate::proto::teamclaw::RpcRequest,
+        remove: &crate::proto::teamclaw::RemoveWorkspaceRequest,
+    ) -> crate::proto::teamclaw::RpcResponse {
+        use crate::proto::teamclaw::{rpc_response, RemoveWorkspaceResult, RpcResponse};
+
+        let amux_remove = amux::RemoveWorkspace { workspace_id: remove.workspace_id.clone() };
+        let (accepted, error) = self.apply_remove_workspace(&amux_remove).await;
+
+        if accepted {
+            let publisher = Publisher::new(&self.mqtt);
+            let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
+            let _ = publisher.publish_notify("workspaces.changed", "").await;
+        }
+
+        RpcResponse {
+            request_id: request.request_id.clone(),
+            success: accepted,
+            error: error.clone(),
+            requester_client_id: request.requester_client_id.clone(),
+            requester_actor_id: request.requester_actor_id.clone(),
+            requester_device_id: request.requester_device_id.clone(),
+            result: Some(rpc_response::Result::RemoveWorkspaceResult(RemoveWorkspaceResult {
                 accepted,
                 error,
             })),
