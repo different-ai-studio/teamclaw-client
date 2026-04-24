@@ -148,6 +148,9 @@ impl SessionManager {
                     request_id: request_id.clone(),
                     success: false,
                     error: "no method specified".to_string(),
+                    requester_client_id: String::new(),
+                    requester_actor_id: String::new(),
+                    requester_device_id: String::new(),
                     result: None,
                 }
             }
@@ -207,6 +210,9 @@ impl SessionManager {
             request_id: req.request_id.clone(),
             success: true,
             error: String::new(),
+            requester_client_id: String::new(),
+            requester_actor_id: String::new(),
+            requester_device_id: String::new(),
             result: session_info.map(|s| teamclaw::rpc_response::Result::SessionInfo(s)),
         }
     }
@@ -221,12 +227,18 @@ impl SessionManager {
                 request_id: req.request_id.clone(),
                 success: true,
                 error: String::new(),
+                requester_client_id: String::new(),
+                requester_actor_id: String::new(),
+                requester_device_id: String::new(),
                 result: Some(teamclaw::rpc_response::Result::SessionInfo(info)),
             },
             None => RpcResponse {
                 request_id: req.request_id.clone(),
                 success: false,
                 error: format!("session {} not found", r.session_id),
+                requester_client_id: String::new(),
+                requester_actor_id: String::new(),
+                requester_device_id: String::new(),
                 result: None,
             },
         }
@@ -244,6 +256,9 @@ impl SessionManager {
                     request_id: req.request_id.clone(),
                     success: false,
                     error: e.to_string(),
+                    requester_client_id: String::new(),
+                    requester_actor_id: String::new(),
+                    requester_device_id: String::new(),
                     result: None,
                 };
             }
@@ -262,6 +277,9 @@ impl SessionManager {
             request_id: req.request_id.clone(),
             success: true,
             error: String::new(),
+            requester_client_id: String::new(),
+            requester_actor_id: String::new(),
+            requester_device_id: String::new(),
             result: Some(teamclaw::rpc_response::Result::SessionMessagePage(page)),
         }
     }
@@ -278,6 +296,9 @@ impl SessionManager {
                     request_id: req.request_id.clone(),
                     success: false,
                     error: "missing participant".to_string(),
+                    requester_client_id: String::new(),
+                    requester_actor_id: String::new(),
+                    requester_device_id: String::new(),
                     result: None,
                 };
             }
@@ -311,6 +332,9 @@ impl SessionManager {
                     request_id: req.request_id.clone(),
                     success: false,
                     error: format!("session {} not found", r.session_id),
+                    requester_client_id: String::new(),
+                    requester_actor_id: String::new(),
+                    requester_device_id: String::new(),
                     result: None,
                 };
             }
@@ -354,6 +378,9 @@ impl SessionManager {
             request_id: req.request_id.clone(),
             success: true,
             error: String::new(),
+            requester_client_id: String::new(),
+            requester_actor_id: String::new(),
+            requester_device_id: String::new(),
             result: session_info.map(|s| teamclaw::rpc_response::Result::SessionInfo(s)),
         }
     }
@@ -370,6 +397,9 @@ impl SessionManager {
                     request_id: req.request_id.clone(),
                     success: false,
                     error: "missing participant".to_string(),
+                    requester_client_id: String::new(),
+                    requester_actor_id: String::new(),
+                    requester_device_id: String::new(),
                     result: None,
                 };
             }
@@ -402,6 +432,9 @@ impl SessionManager {
                     request_id: req.request_id.clone(),
                     success: false,
                     error: format!("session {} not found", r.session_id),
+                    requester_client_id: String::new(),
+                    requester_actor_id: String::new(),
+                    requester_device_id: String::new(),
                     result: None,
                 };
             }
@@ -445,6 +478,9 @@ impl SessionManager {
             request_id: req.request_id.clone(),
             success: true,
             error: String::new(),
+            requester_client_id: String::new(),
+            requester_actor_id: String::new(),
+            requester_device_id: String::new(),
             result: session_info.map(|s| teamclaw::rpc_response::Result::SessionInfo(s)),
         }
     }
@@ -469,6 +505,9 @@ impl SessionManager {
                     request_id: req.request_id.clone(),
                     success: false,
                     error: format!("session {} not found", r.session_id),
+                    requester_client_id: String::new(),
+                    requester_actor_id: String::new(),
+                    requester_device_id: String::new(),
                     result: None,
                 };
             }
@@ -515,6 +554,9 @@ impl SessionManager {
             request_id: req.request_id.clone(),
             success: true,
             error: String::new(),
+            requester_client_id: String::new(),
+            requester_actor_id: String::new(),
+            requester_device_id: String::new(),
             result: session_info.map(|s| teamclaw::rpc_response::Result::SessionInfo(s)),
         }
     }
@@ -556,6 +598,9 @@ impl SessionManager {
                     request_id: req.request_id.clone(),
                     success: false,
                     error: e.to_string(),
+                    requester_client_id: String::new(),
+                    requester_actor_id: String::new(),
+                    requester_device_id: String::new(),
                     result: None,
                 };
             }
@@ -593,6 +638,9 @@ impl SessionManager {
             request_id: req.request_id.clone(),
             success: true,
             error: String::new(),
+            requester_client_id: String::new(),
+            requester_actor_id: String::new(),
+            requester_device_id: String::new(),
             result: task.map(|t| teamclaw::rpc_response::Result::Task(t)),
         }
     }
@@ -610,6 +658,9 @@ impl SessionManager {
                     request_id: req.request_id.clone(),
                     success: false,
                     error: e.to_string(),
+                    requester_client_id: String::new(),
+                    requester_actor_id: String::new(),
+                    requester_device_id: String::new(),
                     result: None,
                 };
             }
@@ -666,6 +717,9 @@ impl SessionManager {
             request_id: req.request_id.clone(),
             success: true,
             error: String::new(),
+            requester_client_id: String::new(),
+            requester_actor_id: String::new(),
+            requester_device_id: String::new(),
             result: Some(teamclaw::rpc_response::Result::Claim(proto_claim)),
         }
     }
@@ -683,6 +737,9 @@ impl SessionManager {
                     request_id: req.request_id.clone(),
                     success: false,
                     error: e.to_string(),
+                    requester_client_id: String::new(),
+                    requester_actor_id: String::new(),
+                    requester_device_id: String::new(),
                     result: None,
                 };
             }
@@ -743,6 +800,9 @@ impl SessionManager {
             request_id: req.request_id.clone(),
             success: true,
             error: String::new(),
+            requester_client_id: String::new(),
+            requester_actor_id: String::new(),
+            requester_device_id: String::new(),
             result: Some(teamclaw::rpc_response::Result::Submission(proto_submission)),
         }
     }
@@ -761,6 +821,9 @@ impl SessionManager {
                     request_id: req.request_id.clone(),
                     success: false,
                     error: e.to_string(),
+                    requester_client_id: String::new(),
+                    requester_actor_id: String::new(),
+                    requester_device_id: String::new(),
                     result: None,
                 };
             }
@@ -787,6 +850,9 @@ impl SessionManager {
                     request_id: req.request_id.clone(),
                     success: false,
                     error: format!("task {} not found", r.task_id),
+                    requester_client_id: String::new(),
+                    requester_actor_id: String::new(),
+                    requester_device_id: String::new(),
                     result: None,
                 };
             }
@@ -827,6 +893,9 @@ impl SessionManager {
             request_id: req.request_id.clone(),
             success: true,
             error: String::new(),
+            requester_client_id: String::new(),
+            requester_actor_id: String::new(),
+            requester_device_id: String::new(),
             result: task.map(|t| teamclaw::rpc_response::Result::Task(t)),
         }
     }

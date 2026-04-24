@@ -483,7 +483,18 @@ public struct Teamclaw_RpcRequest: Sendable {
 
   public var requestID: String = String()
 
+  /// legacy; kept during migration, equivalent to requester_device_id
   public var senderDeviceID: String = String()
+
+  /// Identity fields — spec "Addressing and Identity". Receivers on the shared
+  /// rpc/res topic filter by whichever one is populated. Empty = not applicable.
+  public var requesterClientID: String = String()
+
+  /// Supabase actor id of signed-in user
+  public var requesterActorID: String = String()
+
+  /// populated when another daemon is the caller
+  public var requesterDeviceID: String = String()
 
   public var method: Teamclaw_RpcRequest.OneOf_Method? = nil
 
@@ -586,57 +597,86 @@ public struct Teamclaw_RpcRequest: Sendable {
   public init() {}
 }
 
-public struct Teamclaw_RpcResponse: Sendable {
+public struct Teamclaw_RpcResponse: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var requestID: String = String()
+  public var requestID: String {
+    get {_storage._requestID}
+    set {_uniqueStorage()._requestID = newValue}
+  }
 
-  public var success: Bool = false
+  public var success: Bool {
+    get {_storage._success}
+    set {_uniqueStorage()._success = newValue}
+  }
 
-  public var error: String = String()
+  public var error: String {
+    get {_storage._error}
+    set {_uniqueStorage()._error = newValue}
+  }
 
-  public var result: Teamclaw_RpcResponse.OneOf_Result? = nil
+  /// Copy-through identity fields from RpcRequest, so any subscriber on the
+  /// shared rpc/res topic can filter cheaply by whichever id they authored with.
+  public var requesterClientID: String {
+    get {_storage._requesterClientID}
+    set {_uniqueStorage()._requesterClientID = newValue}
+  }
+
+  public var requesterActorID: String {
+    get {_storage._requesterActorID}
+    set {_uniqueStorage()._requesterActorID = newValue}
+  }
+
+  public var requesterDeviceID: String {
+    get {_storage._requesterDeviceID}
+    set {_uniqueStorage()._requesterDeviceID = newValue}
+  }
+
+  public var result: OneOf_Result? {
+    get {return _storage._result}
+    set {_uniqueStorage()._result = newValue}
+  }
 
   public var sessionInfo: Teamclaw_SessionInfo {
     get {
-      if case .sessionInfo(let v)? = result {return v}
+      if case .sessionInfo(let v)? = _storage._result {return v}
       return Teamclaw_SessionInfo()
     }
-    set {result = .sessionInfo(newValue)}
+    set {_uniqueStorage()._result = .sessionInfo(newValue)}
   }
 
   public var task: Teamclaw_Task {
     get {
-      if case .task(let v)? = result {return v}
+      if case .task(let v)? = _storage._result {return v}
       return Teamclaw_Task()
     }
-    set {result = .task(newValue)}
+    set {_uniqueStorage()._result = .task(newValue)}
   }
 
   public var claim: Teamclaw_Claim {
     get {
-      if case .claim(let v)? = result {return v}
+      if case .claim(let v)? = _storage._result {return v}
       return Teamclaw_Claim()
     }
-    set {result = .claim(newValue)}
+    set {_uniqueStorage()._result = .claim(newValue)}
   }
 
   public var submission: Teamclaw_Submission {
     get {
-      if case .submission(let v)? = result {return v}
+      if case .submission(let v)? = _storage._result {return v}
       return Teamclaw_Submission()
     }
-    set {result = .submission(newValue)}
+    set {_uniqueStorage()._result = .submission(newValue)}
   }
 
   public var sessionMessagePage: Teamclaw_SessionMessagePage {
     get {
-      if case .sessionMessagePage(let v)? = result {return v}
+      if case .sessionMessagePage(let v)? = _storage._result {return v}
       return Teamclaw_SessionMessagePage()
     }
-    set {result = .sessionMessagePage(newValue)}
+    set {_uniqueStorage()._result = .sessionMessagePage(newValue)}
   }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -651,6 +691,8 @@ public struct Teamclaw_RpcResponse: Sendable {
   }
 
   public init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 public struct Teamclaw_CreateSessionRequest: Sendable {
@@ -1570,7 +1612,7 @@ extension Teamclaw_NotifyEnvelope: SwiftProtobuf.Message, SwiftProtobuf._Message
 
 extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".RpcRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{3}sender_device_id\0\u{4}\u{8}create_session\0\u{3}join_session\0\u{3}fetch_session\0\u{3}add_participant\0\u{3}remove_participant\0\u{3}create_task\0\u{3}claim_task\0\u{3}submit_task\0\u{3}update_task\0\u{4}\u{2}fetch_session_messages\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{3}sender_device_id\0\u{3}requester_client_id\0\u{3}requester_actor_id\0\u{3}requester_device_id\0\u{4}\u{5}create_session\0\u{3}join_session\0\u{3}fetch_session\0\u{3}add_participant\0\u{3}remove_participant\0\u{3}create_task\0\u{3}claim_task\0\u{3}submit_task\0\u{3}update_task\0\u{4}\u{2}fetch_session_messages\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1580,6 +1622,9 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.requestID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.senderDeviceID) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.requesterClientID) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.requesterActorID) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.requesterDeviceID) }()
       case 10: try {
         var v: Teamclaw_CreateSessionRequest?
         var hadOneofValue = false
@@ -1726,6 +1771,15 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     if !self.senderDeviceID.isEmpty {
       try visitor.visitSingularStringField(value: self.senderDeviceID, fieldNumber: 2)
     }
+    if !self.requesterClientID.isEmpty {
+      try visitor.visitSingularStringField(value: self.requesterClientID, fieldNumber: 3)
+    }
+    if !self.requesterActorID.isEmpty {
+      try visitor.visitSingularStringField(value: self.requesterActorID, fieldNumber: 4)
+    }
+    if !self.requesterDeviceID.isEmpty {
+      try visitor.visitSingularStringField(value: self.requesterDeviceID, fieldNumber: 5)
+    }
     switch self.method {
     case .createSession?: try {
       guard case .createSession(let v)? = self.method else { preconditionFailure() }
@@ -1775,6 +1829,9 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
   public static func ==(lhs: Teamclaw_RpcRequest, rhs: Teamclaw_RpcRequest) -> Bool {
     if lhs.requestID != rhs.requestID {return false}
     if lhs.senderDeviceID != rhs.senderDeviceID {return false}
+    if lhs.requesterClientID != rhs.requesterClientID {return false}
+    if lhs.requesterActorID != rhs.requesterActorID {return false}
+    if lhs.requesterDeviceID != rhs.requesterDeviceID {return false}
     if lhs.method != rhs.method {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -1783,132 +1840,195 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
 extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".RpcResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}success\0\u{1}error\0\u{4}\u{7}session_info\0\u{1}task\0\u{1}claim\0\u{1}submission\0\u{3}session_message_page\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}success\0\u{1}error\0\u{3}requester_client_id\0\u{3}requester_actor_id\0\u{3}requester_device_id\0\u{4}\u{4}session_info\0\u{1}task\0\u{1}claim\0\u{1}submission\0\u{3}session_message_page\0")
+
+  fileprivate class _StorageClass {
+    var _requestID: String = String()
+    var _success: Bool = false
+    var _error: String = String()
+    var _requesterClientID: String = String()
+    var _requesterActorID: String = String()
+    var _requesterDeviceID: String = String()
+    var _result: Teamclaw_RpcResponse.OneOf_Result?
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _requestID = source._requestID
+      _success = source._success
+      _error = source._error
+      _requesterClientID = source._requesterClientID
+      _requesterActorID = source._requesterActorID
+      _requesterDeviceID = source._requesterDeviceID
+      _result = source._result
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.requestID) }()
-      case 2: try { try decoder.decodeSingularBoolField(value: &self.success) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self.error) }()
-      case 10: try {
-        var v: Teamclaw_SessionInfo?
-        var hadOneofValue = false
-        if let current = self.result {
-          hadOneofValue = true
-          if case .sessionInfo(let m) = current {v = m}
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._requestID) }()
+        case 2: try { try decoder.decodeSingularBoolField(value: &_storage._success) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._error) }()
+        case 4: try { try decoder.decodeSingularStringField(value: &_storage._requesterClientID) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._requesterActorID) }()
+        case 6: try { try decoder.decodeSingularStringField(value: &_storage._requesterDeviceID) }()
+        case 10: try {
+          var v: Teamclaw_SessionInfo?
+          var hadOneofValue = false
+          if let current = _storage._result {
+            hadOneofValue = true
+            if case .sessionInfo(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._result = .sessionInfo(v)
+          }
+        }()
+        case 11: try {
+          var v: Teamclaw_Task?
+          var hadOneofValue = false
+          if let current = _storage._result {
+            hadOneofValue = true
+            if case .task(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._result = .task(v)
+          }
+        }()
+        case 12: try {
+          var v: Teamclaw_Claim?
+          var hadOneofValue = false
+          if let current = _storage._result {
+            hadOneofValue = true
+            if case .claim(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._result = .claim(v)
+          }
+        }()
+        case 13: try {
+          var v: Teamclaw_Submission?
+          var hadOneofValue = false
+          if let current = _storage._result {
+            hadOneofValue = true
+            if case .submission(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._result = .submission(v)
+          }
+        }()
+        case 14: try {
+          var v: Teamclaw_SessionMessagePage?
+          var hadOneofValue = false
+          if let current = _storage._result {
+            hadOneofValue = true
+            if case .sessionMessagePage(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._result = .sessionMessagePage(v)
+          }
+        }()
+        default: break
         }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.result = .sessionInfo(v)
-        }
-      }()
-      case 11: try {
-        var v: Teamclaw_Task?
-        var hadOneofValue = false
-        if let current = self.result {
-          hadOneofValue = true
-          if case .task(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.result = .task(v)
-        }
-      }()
-      case 12: try {
-        var v: Teamclaw_Claim?
-        var hadOneofValue = false
-        if let current = self.result {
-          hadOneofValue = true
-          if case .claim(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.result = .claim(v)
-        }
-      }()
-      case 13: try {
-        var v: Teamclaw_Submission?
-        var hadOneofValue = false
-        if let current = self.result {
-          hadOneofValue = true
-          if case .submission(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.result = .submission(v)
-        }
-      }()
-      case 14: try {
-        var v: Teamclaw_SessionMessagePage?
-        var hadOneofValue = false
-        if let current = self.result {
-          hadOneofValue = true
-          if case .sessionMessagePage(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.result = .sessionMessagePage(v)
-        }
-      }()
-      default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.requestID.isEmpty {
-      try visitor.visitSingularStringField(value: self.requestID, fieldNumber: 1)
-    }
-    if self.success != false {
-      try visitor.visitSingularBoolField(value: self.success, fieldNumber: 2)
-    }
-    if !self.error.isEmpty {
-      try visitor.visitSingularStringField(value: self.error, fieldNumber: 3)
-    }
-    switch self.result {
-    case .sessionInfo?: try {
-      guard case .sessionInfo(let v)? = self.result else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
-    }()
-    case .task?: try {
-      guard case .task(let v)? = self.result else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
-    }()
-    case .claim?: try {
-      guard case .claim(let v)? = self.result else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
-    }()
-    case .submission?: try {
-      guard case .submission(let v)? = self.result else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
-    }()
-    case .sessionMessagePage?: try {
-      guard case .sessionMessagePage(let v)? = self.result else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 14)
-    }()
-    case nil: break
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._requestID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._requestID, fieldNumber: 1)
+      }
+      if _storage._success != false {
+        try visitor.visitSingularBoolField(value: _storage._success, fieldNumber: 2)
+      }
+      if !_storage._error.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._error, fieldNumber: 3)
+      }
+      if !_storage._requesterClientID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._requesterClientID, fieldNumber: 4)
+      }
+      if !_storage._requesterActorID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._requesterActorID, fieldNumber: 5)
+      }
+      if !_storage._requesterDeviceID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._requesterDeviceID, fieldNumber: 6)
+      }
+      switch _storage._result {
+      case .sessionInfo?: try {
+        guard case .sessionInfo(let v)? = _storage._result else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+      }()
+      case .task?: try {
+        guard case .task(let v)? = _storage._result else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
+      }()
+      case .claim?: try {
+        guard case .claim(let v)? = _storage._result else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
+      }()
+      case .submission?: try {
+        guard case .submission(let v)? = _storage._result else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
+      }()
+      case .sessionMessagePage?: try {
+        guard case .sessionMessagePage(let v)? = _storage._result else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 14)
+      }()
+      case nil: break
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Teamclaw_RpcResponse, rhs: Teamclaw_RpcResponse) -> Bool {
-    if lhs.requestID != rhs.requestID {return false}
-    if lhs.success != rhs.success {return false}
-    if lhs.error != rhs.error {return false}
-    if lhs.result != rhs.result {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._requestID != rhs_storage._requestID {return false}
+        if _storage._success != rhs_storage._success {return false}
+        if _storage._error != rhs_storage._error {return false}
+        if _storage._requesterClientID != rhs_storage._requesterClientID {return false}
+        if _storage._requesterActorID != rhs_storage._requesterActorID {return false}
+        if _storage._requesterDeviceID != rhs_storage._requesterDeviceID {return false}
+        if _storage._result != rhs_storage._result {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

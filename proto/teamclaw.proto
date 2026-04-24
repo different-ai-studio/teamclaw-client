@@ -140,7 +140,12 @@ message NotifyEnvelope {
 
 message RpcRequest {
   string request_id = 1;
-  string sender_device_id = 2;
+  string sender_device_id = 2;        // legacy; kept during migration, equivalent to requester_device_id
+  // Identity fields — spec "Addressing and Identity". Receivers on the shared
+  // rpc/res topic filter by whichever one is populated. Empty = not applicable.
+  string requester_client_id = 3;      // iOS/mac install UUID
+  string requester_actor_id = 4;       // Supabase actor id of signed-in user
+  string requester_device_id = 5;      // populated when another daemon is the caller
   oneof method {
     CreateSessionRequest create_session = 10;
     JoinSessionRequest join_session = 11;
@@ -159,6 +164,11 @@ message RpcResponse {
   string request_id = 1;
   bool success = 2;
   string error = 3;
+  // Copy-through identity fields from RpcRequest, so any subscriber on the
+  // shared rpc/res topic can filter cheaply by whichever id they authored with.
+  string requester_client_id = 4;
+  string requester_actor_id = 5;
+  string requester_device_id = 6;
   oneof result {
     SessionInfo session_info = 10;
     Task task = 11;
