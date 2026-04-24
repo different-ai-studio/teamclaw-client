@@ -13,6 +13,11 @@ public final class AppleSignInHandler: NSObject {
 
     public func request() async throws -> (idToken: String, nonce: String) {
         try await withCheckedThrowingContinuation { continuation in
+            // If a previous request is still in flight, cancel it so its
+            // continuation isn't leaked when we overwrite `self.continuation`.
+            if let stale = self.continuation {
+                stale.resume(throwing: CancellationError())
+            }
             self.continuation = continuation
             let (raw, hashed) = Self.makeNonce()
             self.rawNonce = raw
