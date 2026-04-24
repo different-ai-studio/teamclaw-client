@@ -620,9 +620,6 @@ impl DaemonServer {
     async fn handle_incoming(&mut self, msg: subscriber::IncomingMessage) {
         use prost::Message as ProstMessage;
         match msg {
-            subscriber::IncomingMessage::AgentCommand { agent_id, envelope } => {
-                self.handle_agent_command(&agent_id, envelope).await;
-            }
             subscriber::IncomingMessage::RuntimeCommand { runtime_id, envelope } => {
                 // During Phase 1-2, runtime_id on the new path is the same
                 // 8-char UUID used on the legacy path. Route into the same
@@ -638,9 +635,6 @@ impl DaemonServer {
                     acp_command: envelope.acp_command,
                 };
                 self.handle_agent_command(&runtime_id, legacy_envelope).await;
-            }
-            subscriber::IncomingMessage::DeviceCollab { envelope } => {
-                self.handle_device_collab(envelope).await;
             }
             subscriber::IncomingMessage::TeamclawRpc { topic, payload } => {
                 self.handle_rpc_request(&topic, &payload).await;

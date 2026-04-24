@@ -130,18 +130,10 @@ impl MqttClient {
 
     pub async fn subscribe_all(&self) -> Result<(), rumqttc::ClientError> {
         self.client
-            .subscribe(&self.topics.collab(), QoS::AtLeastOnce)
-            .await?;
-        self.client
-            .subscribe(&self.topics.all_agent_commands(), QoS::AtLeastOnce)
-            .await?;
-        self.client
             .subscribe(self.topics.runtime_commands_wildcard(), QoS::AtLeastOnce)
             .await?;
         info!(
-            "subscribed to {}, {}, and {}",
-            self.topics.collab(),
-            self.topics.all_agent_commands(),
+            "subscribed to {}",
             self.topics.runtime_commands_wildcard(),
         );
         Ok(())
