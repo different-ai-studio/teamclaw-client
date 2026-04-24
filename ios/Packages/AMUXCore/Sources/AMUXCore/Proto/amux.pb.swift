@@ -224,6 +224,11 @@ public struct Amux_CommandEnvelope: Sendable {
   /// the legacy MQTT token-derived role.
   public var senderActorID: String = String()
 
+  /// Device-scoped reply target. When set, command results should be routed
+  /// back to this device's collab topic instead of the daemon's own device
+  /// namespace.
+  public var replyToDeviceID: String = String()
+
   /// Agent command (maps to ACP request)
   public var acpCommand: Amux_AcpCommand {
     get {_acpCommand ?? Amux_AcpCommand()}
@@ -888,6 +893,14 @@ public struct Amux_DeviceCollabEvent: Sendable {
     set {event = .workspaceResult(newValue)}
   }
 
+  public var agentStartResult: Amux_AgentStartResult {
+    get {
+      if case .agentStartResult(let v)? = event {return v}
+      return Amux_AgentStartResult()
+    }
+    set {event = .agentStartResult(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Event: Equatable, Sendable {
@@ -899,6 +912,7 @@ public struct Amux_DeviceCollabEvent: Sendable {
     case inviteCreated(Amux_InviteCreated)
     case commandRejected(Amux_PromptRejected)
     case workspaceResult(Amux_WorkspaceResult)
+    case agentStartResult(Amux_AgentStartResult)
 
   }
 
@@ -1144,6 +1158,26 @@ public struct Amux_WorkspaceResult: Sendable {
   public init() {}
 
   fileprivate var _workspace: Amux_WorkspaceInfo? = nil
+}
+
+public struct Amux_AgentStartResult: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var commandID: String = String()
+
+  public var success: Bool = false
+
+  public var error: String = String()
+
+  public var agentID: String = String()
+
+  public var sessionID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
 }
 
 public struct Amux_PeerAnnounce: Sendable {
@@ -1561,7 +1595,7 @@ extension Amux_Envelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
 
 extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CommandEnvelope"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agent_id\0\u{3}device_id\0\u{3}peer_id\0\u{3}command_id\0\u{1}timestamp\0\u{3}sender_actor_id\0\u{4}\u{4}acp_command\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agent_id\0\u{3}device_id\0\u{3}peer_id\0\u{3}command_id\0\u{1}timestamp\0\u{3}sender_actor_id\0\u{3}reply_to_device_id\0\u{4}\u{3}acp_command\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1575,6 +1609,7 @@ extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 4: try { try decoder.decodeSingularStringField(value: &self.commandID) }()
       case 5: try { try decoder.decodeSingularInt64Field(value: &self.timestamp) }()
       case 6: try { try decoder.decodeSingularStringField(value: &self.senderActorID) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.replyToDeviceID) }()
       case 10: try { try decoder.decodeSingularMessageField(value: &self._acpCommand) }()
       default: break
       }
@@ -1604,6 +1639,9 @@ extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if !self.senderActorID.isEmpty {
       try visitor.visitSingularStringField(value: self.senderActorID, fieldNumber: 6)
     }
+    if !self.replyToDeviceID.isEmpty {
+      try visitor.visitSingularStringField(value: self.replyToDeviceID, fieldNumber: 7)
+    }
     try { if let v = self._acpCommand {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
     } }()
@@ -1617,6 +1655,7 @@ extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.commandID != rhs.commandID {return false}
     if lhs.timestamp != rhs.timestamp {return false}
     if lhs.senderActorID != rhs.senderActorID {return false}
+    if lhs.replyToDeviceID != rhs.replyToDeviceID {return false}
     if lhs._acpCommand != rhs._acpCommand {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -2813,7 +2852,7 @@ extension Amux_HistoryBatch: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
 
 extension Amux_DeviceCollabEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeviceCollabEvent"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}peer_joined\0\u{3}peer_left\0\u{3}peer_kicked\0\u{3}member_list_changed\0\u{3}auth_result\0\u{3}invite_created\0\u{3}command_rejected\0\u{3}workspace_result\0\u{4}\u{2}device_id\0\u{1}timestamp\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}peer_joined\0\u{3}peer_left\0\u{3}peer_kicked\0\u{3}member_list_changed\0\u{3}auth_result\0\u{3}invite_created\0\u{3}command_rejected\0\u{3}workspace_result\0\u{3}agent_start_result\0\u{3}device_id\0\u{1}timestamp\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2925,6 +2964,19 @@ extension Amux_DeviceCollabEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageI
           self.event = .workspaceResult(v)
         }
       }()
+      case 9: try {
+        var v: Amux_AgentStartResult?
+        var hadOneofValue = false
+        if let current = self.event {
+          hadOneofValue = true
+          if case .agentStartResult(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.event = .agentStartResult(v)
+        }
+      }()
       case 10: try { try decoder.decodeSingularStringField(value: &self.deviceID) }()
       case 11: try { try decoder.decodeSingularInt64Field(value: &self.timestamp) }()
       default: break
@@ -2969,6 +3021,10 @@ extension Amux_DeviceCollabEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageI
     case .workspaceResult?: try {
       guard case .workspaceResult(let v)? = self.event else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+    }()
+    case .agentStartResult?: try {
+      guard case .agentStartResult(let v)? = self.event else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
     }()
     case nil: break
     }
@@ -3508,6 +3564,56 @@ extension Amux_WorkspaceResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.success != rhs.success {return false}
     if lhs.error != rhs.error {return false}
     if lhs._workspace != rhs._workspace {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Amux_AgentStartResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AgentStartResult"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}command_id\0\u{1}success\0\u{1}error\0\u{3}agent_id\0\u{3}session_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.commandID) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.success) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.agentID) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.commandID.isEmpty {
+      try visitor.visitSingularStringField(value: self.commandID, fieldNumber: 1)
+    }
+    if self.success != false {
+      try visitor.visitSingularBoolField(value: self.success, fieldNumber: 2)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 3)
+    }
+    if !self.agentID.isEmpty {
+      try visitor.visitSingularStringField(value: self.agentID, fieldNumber: 4)
+    }
+    if !self.sessionID.isEmpty {
+      try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Amux_AgentStartResult, rhs: Amux_AgentStartResult) -> Bool {
+    if lhs.commandID != rhs.commandID {return false}
+    if lhs.success != rhs.success {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.agentID != rhs.agentID {return false}
+    if lhs.sessionID != rhs.sessionID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

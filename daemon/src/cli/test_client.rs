@@ -234,6 +234,7 @@ pub async fn run_start_agent(config: DaemonConfig, worktree: &str, prompt: &str)
         command_id: Uuid::new_v4().to_string(),
         timestamp: chrono::Utc::now().timestamp(),
         sender_actor_id: String::new(),
+        reply_to_device_id: tc.config.device.id.clone(),
         acp_command: Some(amux::AcpCommand {
             command: Some(amux::acp_command::Command::StartAgent(amux::AcpStartAgent {
                 agent_type: amux::AgentType::ClaudeCode as i32,
@@ -376,6 +377,7 @@ pub async fn run_e2e(config: DaemonConfig, token: &str, worktree: &str, prompt: 
         command_id: Uuid::new_v4().to_string(),
         timestamp: chrono::Utc::now().timestamp(),
         sender_actor_id: String::new(),
+        reply_to_device_id: device_id.clone(),
         acp_command: Some(amux::AcpCommand {
             command: Some(amux::acp_command::Command::StartAgent(amux::AcpStartAgent {
                 agent_type: amux::AgentType::ClaudeCode as i32,

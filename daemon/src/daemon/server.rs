@@ -663,6 +663,11 @@ impl DaemonServer {
         let peer_id = envelope.peer_id.clone();
         let command_id = envelope.command_id.clone();
         let sender_actor_id = envelope.sender_actor_id.clone();
+        let reply_device_id = if envelope.reply_to_device_id.is_empty() {
+            envelope.device_id.clone()
+        } else {
+            envelope.reply_to_device_id.clone()
+        };
 
         let acp_command = match envelope.acp_command {
             Some(c) => c,
@@ -682,7 +687,7 @@ impl DaemonServer {
 
         if let Err(reason) = self.permissions.check_command_permission(role, &cmd) {
             warn!(peer_id, %reason, "command rejected");
-            self.publish_command_rejected(command_id, reason).await;
+            self.publish_command_rejected(&reply_device_id, command_id, reason).await;
             return;
         }
 
@@ -727,7 +732,7 @@ impl DaemonServer {
                                 %reason,
                                 "startAgent rejected"
                             );
-                            self.publish_command_rejected(command_id.clone(), reason).await;
+                            self.publish_command_rejected(&reply_device_id, command_id.clone(), reason).await;
                             return;
                         }
                     } else {
@@ -766,12 +771,25 @@ impl DaemonServer {
                         self.sessions.upsert(stored);
                         let _ = self.sessions.save(&self.sessions_path);
                         self.publish_agent_state_by_id(&new_id).await;
+                        self.publish_agent_start_result(
+                            &reply_device_id,
+                            command_id.clone(),
+                            true,
+                            String::new(),
+                            new_id.clone(),
+                            start_session_id.clone(),
+                        ).await;
                     }
                     Err(e) => {
-                        error!(peer_id, "failed to start agent: {}", e);
-                        self.publish_command_rejected(
+                        let reason = format!("Failed to start agent: {}", e);
+                        error!(peer_id, "{}", reason);
+                        self.publish_agent_start_result(
+                            &reply_device_id,
                             command_id.clone(),
-                            format!("Failed to start agent: {}", e),
+                            false,
+                            reason,
+                            String::new(),
+                            start_session_id.clone(),
                         ).await;
                     }
                 }
@@ -1130,10 +1148,47 @@ impl DaemonServer {
         let _ = publisher.publish_agent_event(agent_id, &envelope).await;
     }
 
-    async fn publish_command_rejected(&self, command_id: String, reason: String) {
-        let reject_event = command_rejected_event(&self.config.device.id, command_id, reason);
+    async fn publish_command_rejected(&self, reply_device_id: &str, command_id: String, reason: String) {
+        info!(
+            reply_device_id = %reply_device_id,
+            command_id = %command_id,
+            reason = %reason,
+            "publishing command rejected event"
+        );
+        let reject_event = command_rejected_event(reply_device_id, command_id, reason);
         let _ = Publisher::new(&self.mqtt)
-            .publish_device_collab_event(&reject_event)
+            .publish_device_collab_event_to(reply_device_id, &reject_event)
+            .await;
+    }
+
+    async fn publish_agent_start_result(
+        &self,
+        reply_device_id: &str,
+        command_id: String,
+        success: bool,
+        error: String,
+        agent_id: String,
+        session_id: String,
+    ) {
+        info!(
+            reply_device_id = %reply_device_id,
+            command_id = %command_id,
+            success,
+            error = %error,
+            agent_id = %agent_id,
+            session_id = %session_id,
+            "publishing agent start result"
+        );
+        let event = agent_start_result_event(
+            reply_device_id,
+            command_id,
+            success,
+            error,
+            agent_id,
+            session_id,
+        );
+        let _ = Publisher::new(&self.mqtt)
+            .publish_device_collab_event_to(reply_device_id, &event)
             .await;
     }
 }
@@ -1148,6 +1203,29 @@ fn command_rejected_event(
         timestamp: chrono::Utc::now().timestamp(),
         event: Some(amux::device_collab_event::Event::CommandRejected(
             amux::PromptRejected { command_id, reason },
+        )),
+    }
+}
+
+fn agent_start_result_event(
+    device_id: &str,
+    command_id: String,
+    success: bool,
+    error: String,
+    agent_id: String,
+    session_id: String,
+) -> amux::DeviceCollabEvent {
+    amux::DeviceCollabEvent {
+        device_id: device_id.to_string(),
+        timestamp: chrono::Utc::now().timestamp(),
+        event: Some(amux::device_collab_event::Event::AgentStartResult(
+            amux::AgentStartResult {
+                command_id,
+                success,
+                error,
+                agent_id,
+                session_id,
+            },
         )),
     }
 }
@@ -1197,7 +1275,7 @@ fn format_task_prompt(session_id: &str, event: &crate::proto::teamclaw::TaskEven
 
 #[cfg(test)]
 mod tests {
-    use super::command_rejected_event;
+    use super::{agent_start_result_event, command_rejected_event};
     use crate::proto::amux;
 
     #[test]
@@ -1215,6 +1293,30 @@ mod tests {
                 assert_eq!(rejected.reason, "Failed to start agent");
             }
             other => panic!("expected command_rejected event, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn agent_start_result_event_carries_correlation_and_payload() {
+        let event = agent_start_result_event(
+            "ios-device-1",
+            "cmd-456".to_string(),
+            true,
+            String::new(),
+            "agent-1".to_string(),
+            "sess-1".to_string(),
+        );
+
+        assert_eq!(event.device_id, "ios-device-1");
+        match event.event {
+            Some(amux::device_collab_event::Event::AgentStartResult(result)) => {
+                assert_eq!(result.command_id, "cmd-456");
+                assert!(result.success);
+                assert_eq!(result.agent_id, "agent-1");
+                assert_eq!(result.session_id, "sess-1");
+                assert!(result.error.is_empty());
+            }
+            other => panic!("expected agent_start_result event, got {:?}", other),
         }
     }
 }

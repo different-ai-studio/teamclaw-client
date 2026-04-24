@@ -89,7 +89,7 @@ public struct SettingsView: View {
                     LabeledField(label: "Host", text: $mqttHost, placeholder: "ai.ucar.cc")
                     LabeledField(label: "Username", text: $mqttUser, placeholder: "teamclaw")
                     LabeledSecureField(label: "Password", text: $mqttPass)
-                    LabeledField(label: "Device ID", text: $daemonDeviceID, placeholder: "mac-mini-4")
+                    LabeledField(label: "Daemon ID", text: $daemonDeviceID, placeholder: "mac-mini-4")
 
                     if let err = saveError {
                         Text(err).font(.footnote).foregroundStyle(.red)
@@ -172,14 +172,7 @@ public struct SettingsView: View {
                 mqttHost = pairing.brokerHost
                 mqttUser = pairing.username
                 mqttPass = pairing.password
-                // Default the device-id field to this iOS device's
-                // `identifierForVendor` the first time around; user is free
-                // to override (e.g. paste a daemon UUID).
-                if pairing.deviceId.isEmpty {
-                    daemonDeviceID = UIDevice.current.identifierForVendor?.uuidString ?? ""
-                } else {
-                    daemonDeviceID = pairing.deviceId
-                }
+                daemonDeviceID = pairing.deviceId
                 supaURL = SupabaseServerStore.currentURL()
                 supaKey = SupabaseServerStore.currentKey()
                 await loadTeam()

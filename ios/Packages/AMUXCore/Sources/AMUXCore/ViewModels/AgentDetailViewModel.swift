@@ -33,7 +33,7 @@ public final class AgentDetailViewModel {
     /// so the synthesized event in stop()/idle flush carries the model too.
     private var streamingModel: String?
     public var isDaemonOnline = true
-    public let agent: Agent?
+    public var agent: Agent?
     public let session: Session?
     private let mqtt: MQTTService
     private let deviceId: String
@@ -69,6 +69,28 @@ public final class AgentDetailViewModel {
     public init(agent: Agent?, mqtt: MQTTService, teamID: String = "", deviceId: String, peerId: String, session: Session? = nil, teamclawService: TeamclawService? = nil) {
         self.agent = agent; self.mqtt = mqtt; self.deviceId = deviceId; self.teamID = teamID; self.peerId = peerId
         self.session = session; self.teamclawService = teamclawService
+    }
+
+    private func resolveAgent(modelContext: ModelContext) -> Agent? {
+        if let agent {
+            return agent
+        }
+        guard let primaryAgentId = session?.primaryAgentId, !primaryAgentId.isEmpty else {
+            return nil
+        }
+        let descriptor = FetchDescriptor<Agent>(
+            predicate: #Predicate { $0.agentId == primaryAgentId }
+        )
+        let resolved = (try? modelContext.fetch(descriptor))?.first
+        if let resolved {
+            agent = resolved
+        } else if let session {
+            let placeholder = Agent(agentId: primaryAgentId, status: 1)
+            placeholder.sessionTitle = session.title
+            placeholder.currentPrompt = session.summary
+            agent = placeholder
+        }
+        return agent
     }
 
     /// Rebuilds `groupedEvents` from `events`. Call after any mutation that
@@ -191,7 +213,7 @@ public final class AgentDetailViewModel {
         task?.cancel()
         startModelContext = modelContext
 
-        guard let agent else {
+        guard let agent = resolveAgent(modelContext: modelContext) else {
             // No agent — collab-only session, nothing to subscribe to yet
             return
         }
@@ -210,9 +232,17 @@ public final class AgentDetailViewModel {
         rebuildIndexes()
 
         // Insert initial prompt as first user bubble if not already present
-        if !agent.currentPrompt.isEmpty && !events.contains(where: { $0.eventType == "user_prompt" }) {
+        let initialPrompt = if !agent.currentPrompt.isEmpty {
+            agent.currentPrompt
+        } else if let session, !session.summary.isEmpty {
+            session.summary
+        } else {
+            ""
+        }
+
+        if !initialPrompt.isEmpty && !events.contains(where: { $0.eventType == "user_prompt" }) {
             let promptEvent = AgentEvent(agentId: agentId, sequence: 0, eventType: "user_prompt")
-            promptEvent.text = agent.currentPrompt
+            promptEvent.text = initialPrompt
             modelContext.insert(promptEvent)
             events.insert(promptEvent, at: 0)
             // insert-at-zero shifts every cached index; cheaper to rebuild

@@ -1,6 +1,9 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
+import os
+
+private let sessionsTabLogger = Logger(subsystem: "com.amux.app", category: "SessionsTab")
 
 public struct SessionsTab: View {
     let mqtt: MQTTService
@@ -70,6 +73,7 @@ public struct SessionsTab: View {
                     Button { showNewSession = true } label: {
                         Image(systemName: "square.and.pencil").font(.title3).foregroundStyle(.primary)
                     }
+                    .accessibilityIdentifier("sessions.newSessionButton")
                     .buttonStyle(.plain)
                     .matchedTransitionSource(id: "newSession", in: sheetTransition)
                 }
@@ -77,36 +81,25 @@ public struct SessionsTab: View {
             .navigationDestination(for: String.self) { id in
                 if id.hasPrefix("collab:") {
                     let sessionId = String(id.dropFirst("collab:".count))
-                    let descriptor = FetchDescriptor<Session>(
-                        predicate: #Predicate { $0.sessionId == sessionId }
+                    CollabSessionDestinationView(
+                        sessionId: sessionId,
+                        mqtt: mqtt,
+                        pairing: pairing,
+                        teamclawService: teamclawService,
+                        currentActorID: currentActorID,
+                        refreshSessionsFromBackend: refreshSessionsFromBackend,
+                        navigationPath: $navigationPath,
+                        connectedAgentsStore: connectedAgentsStore
                     )
-                    if let session = (try? modelContext.fetch(descriptor))?.first {
-                        if session.primaryAgentId == nil || !pairing.isPaired {
-                            SessionView(
-                                session: session,
-                                teamclawService: teamclawService,
-                                currentActorID: currentActorID
-                            )
-                        } else {
-                            AgentDetailView(session: session, mqtt: mqtt,
-                                            deviceId: pairing.deviceId,
-                                            peerId: "ios-\(pairing.authToken.prefix(6))",
-                                            teamclawService: teamclawService,
-                                            navigationPath: $navigationPath,
-                                            connectedAgentsStore: connectedAgentsStore)
-                        }
-                    } else {
-                        Text("Session not found")
-                    }
-                } else if let agent = viewModel.agents.first(where: { $0.agentId == id }) {
-                    AgentDetailView(agent: agent, mqtt: mqtt,
-                                    deviceId: pairing.deviceId,
-                                    peerId: "ios-\(pairing.authToken.prefix(6))",
-                                    allAgentIds: viewModel.agents.map(\.agentId),
-                                    navigationPath: $navigationPath,
-                                    connectedAgentsStore: connectedAgentsStore)
                 } else {
-                    Text("Agent not found")
+                    AgentDestinationView(
+                        agentId: id,
+                        mqtt: mqtt,
+                        pairing: pairing,
+                        navigationPath: $navigationPath,
+                        connectedAgentsStore: connectedAgentsStore,
+                        allAgentIds: viewModel.agents.map(\.agentId)
+                    )
                 }
             }
             .sheet(isPresented: $showSettings) {
@@ -124,7 +117,7 @@ public struct SessionsTab: View {
                                isAgentAvailable: pairing.isPaired,
                                connectedAgentsStore: connectedAgentsStore,
                                viewModel: viewModel) { agentId in
-                    navigationPath.append(agentId)
+                    navigationPath = [agentId]
                 }
                 .modifier(ZoomTransitionModifier(sourceID: "newSession", namespace: sheetTransition))
             }
@@ -133,6 +126,156 @@ public struct SessionsTab: View {
             }
             .onChange(of: teamclawService?.sessions.count) {
                 viewModel.reloadSessions(modelContext: modelContext)
+            }
+        }
+    }
+}
+
+private struct AgentDestinationView: View {
+    let agentId: String
+    let mqtt: MQTTService
+    let pairing: PairingManager
+    @Binding var navigationPath: [String]
+    let connectedAgentsStore: ConnectedAgentsStore?
+    let allAgentIds: [String]
+
+    @Environment(\.modelContext) private var modelContext
+    @State private var agent: Agent?
+    @State private var session: Session?
+
+    var body: some View {
+        Group {
+            if let session {
+                AgentDetailView(
+                    session: session,
+                    mqtt: mqtt,
+                    deviceId: pairing.deviceId,
+                    peerId: "ios-\(pairing.authToken.prefix(6))",
+                    teamclawService: nil,
+                    navigationPath: $navigationPath,
+                    connectedAgentsStore: connectedAgentsStore
+                )
+                .id("agent-session:\(session.sessionId)")
+            } else if let agent {
+                AgentDetailView(
+                    agent: agent,
+                    mqtt: mqtt,
+                    deviceId: pairing.deviceId,
+                    peerId: "ios-\(pairing.authToken.prefix(6))",
+                    allAgentIds: allAgentIds,
+                    navigationPath: $navigationPath,
+                    connectedAgentsStore: connectedAgentsStore
+                )
+                .id("agent:\(agent.agentId)")
+            } else {
+                Text("Agent not found")
+            }
+        }
+        .task(id: agentId) {
+            await loadDestination()
+        }
+    }
+
+    @MainActor
+    private func loadDestination() {
+        let agentDescriptor = FetchDescriptor<Agent>(
+            predicate: #Predicate { $0.agentId == agentId }
+        )
+        agent = (try? modelContext.fetch(agentDescriptor))?.first
+
+        let sessionDescriptor = FetchDescriptor<Session>()
+        session = (try? modelContext.fetch(sessionDescriptor))?.first(where: { $0.primaryAgentId == agentId })
+    }
+}
+
+private struct CollabSessionDestinationView: View {
+    let sessionId: String
+    let mqtt: MQTTService
+    let pairing: PairingManager
+    let teamclawService: TeamclawService?
+    let currentActorID: String?
+    let refreshSessionsFromBackend: () async -> Void
+    @Binding var navigationPath: [String]
+    let connectedAgentsStore: ConnectedAgentsStore?
+
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var session: Session?
+    @State private var attemptedRefresh = false
+
+    var body: some View {
+        Group {
+            if let session {
+                if session.primaryAgentId == nil || !pairing.isPaired {
+                    SessionView(
+                        session: session,
+                        teamclawService: teamclawService,
+                        currentActorID: currentActorID
+                    )
+                    .id("session:\(session.sessionId)")
+                } else {
+                    AgentDetailView(session: session, mqtt: mqtt,
+                                    deviceId: pairing.deviceId,
+                                    peerId: "ios-\(pairing.authToken.prefix(6))",
+                                    teamclawService: teamclawService,
+                                    navigationPath: $navigationPath,
+                                    connectedAgentsStore: connectedAgentsStore)
+                    .id("collab-agent:\(session.sessionId)")
+                }
+            } else {
+                Text("Session not found")
+                    .task(id: sessionId) {
+                        await reloadSessionIfNeeded()
+                    }
+            }
+        }
+        .task(id: sessionId) {
+            await loadSession()
+        }
+    }
+
+    @MainActor
+    private func fetchSession() -> Session? {
+        let descriptor = FetchDescriptor<Session>(
+            predicate: #Predicate { $0.sessionId == sessionId }
+        )
+        return (try? modelContext.fetch(descriptor))?.first
+    }
+
+    private func loadSession() async {
+        await MainActor.run {
+            session = fetchSession()
+        }
+    }
+
+    @MainActor
+    private func logKnownSessions() {
+        let knownSessions: [Session] = (try? modelContext.fetch(FetchDescriptor<Session>())) ?? []
+        let knownIDs = knownSessions.map(\.sessionId).joined(separator: ",")
+        sessionsTabLogger.error(
+            "session lookup failed requested=\(sessionId, privacy: .public) knownCount=\(knownSessions.count) knownIDs=\(knownIDs, privacy: .public)"
+        )
+    }
+
+    private func reloadSessionIfNeeded() async {
+        await loadSession()
+        guard session == nil, !attemptedRefresh else {
+            if session == nil {
+                await MainActor.run {
+                    logKnownSessions()
+                }
+            }
+            return
+        }
+
+        await MainActor.run {
+            attemptedRefresh = true
+        }
+        await refreshSessionsFromBackend()
+        await loadSession()
+        if session == nil {
+            await MainActor.run {
+                logKnownSessions()
             }
         }
     }

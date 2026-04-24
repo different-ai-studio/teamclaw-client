@@ -37,6 +37,7 @@ public final class MQTTService: NSObject, @unchecked Sendable {
     private let stateQueue = DispatchQueue(label: "com.amux.mqtt-service.state")
     private var continuations: [UUID: AsyncStream<MQTTIncoming>.Continuation] = [:]
     private var connectContinuation: CheckedContinuation<Void, Error>?
+    private var subscribeContinuations: [String: [CheckedContinuation<Void, Error>]] = [:]
 
     public override init() {
         subscribeHook = nil
@@ -143,7 +144,7 @@ public final class MQTTService: NSObject, @unchecked Sendable {
         guard let mqtt, connectionState == .connected else {
             throw MQTTConnectionError.notConnected
         }
-        mqtt.subscribe(topic, qos: .qos1)
+        try await waitForSubscribeAck(topic: topic, mqtt: mqtt)
         if recordTopicOperations {
             subscribedTopics.append(topic)
         }
@@ -235,15 +236,64 @@ public final class MQTTService: NSObject, @unchecked Sendable {
         }
     }
 
+    private func waitForSubscribeAck(topic: String, mqtt: CocoaMQTT) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    self.stateQueue.sync {
+                        self.subscribeContinuations[topic, default: []].append(continuation)
+                    }
+                    mqtt.subscribe(topic, qos: .qos1)
+                }
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(5))
+                if let pending = self.takeSubscribeContinuation(for: topic) {
+                    pending.resume(throwing: MQTTConnectionError.subscribeTimeout(topic))
+                }
+                throw MQTTConnectionError.subscribeTimeout(topic)
+            }
+
+            let result = try await group.next()
+            group.cancelAll()
+            _ = result
+        }
+    }
+
+    fileprivate func takeSubscribeContinuation(for topic: String) -> CheckedContinuation<Void, Error>? {
+        stateQueue.sync {
+            guard var pending = subscribeContinuations[topic], !pending.isEmpty else {
+                return nil
+            }
+            let continuation = pending.removeFirst()
+            if pending.isEmpty {
+                subscribeContinuations.removeValue(forKey: topic)
+            } else {
+                subscribeContinuations[topic] = pending
+            }
+            return continuation
+        }
+    }
+
+    fileprivate func takeAllSubscribeContinuations() -> [CheckedContinuation<Void, Error>] {
+        stateQueue.sync {
+            let pending = subscribeContinuations.values.flatMap { $0 }
+            subscribeContinuations.removeAll()
+            return pending
+        }
+    }
+
     enum MQTTConnectionError: Error, LocalizedError {
         case connectFailed
         case timeout
         case notConnected
+        case subscribeTimeout(String)
         var errorDescription: String? {
             switch self {
             case .connectFailed: "MQTT connection initiation failed"
             case .timeout: "MQTT connection timed out"
             case .notConnected: "MQTT is not connected"
+            case .subscribeTimeout(let topic): "MQTT subscribe timed out for \(topic)"
             }
         }
     }
@@ -275,7 +325,19 @@ extension MQTTService: CocoaMQTTDelegate {
         broadcast(incoming)
     }
 
-    public func mqtt(_ mqtt: CocoaMQTT, didSubscribeTopics success: NSDictionary, failed: [String]) {}
+    public func mqtt(_ mqtt: CocoaMQTT, didSubscribeTopics success: NSDictionary, failed: [String]) {
+        for key in success.allKeys {
+            guard let topic = key as? String,
+                  let pending = takeSubscribeContinuation(for: topic) else {
+                continue
+            }
+            pending.resume()
+        }
+        for topic in failed {
+            takeSubscribeContinuation(for: topic)?
+                .resume(throwing: MQTTConnectionError.subscribeTimeout(topic))
+        }
+    }
     public func mqtt(_ mqtt: CocoaMQTT, didUnsubscribeTopics topics: [String]) {}
 
     public func mqttDidPing(_ mqtt: CocoaMQTT) {}
@@ -285,6 +347,10 @@ extension MQTTService: CocoaMQTTDelegate {
         connectionState = .disconnected
         if let pending = takeConnectContinuation() {
             pending.resume(throwing: err ?? MQTTConnectionError.connectFailed)
+        }
+        let subscribeError = err ?? MQTTConnectionError.connectFailed
+        for pending in takeAllSubscribeContinuations() {
+            pending.resume(throwing: subscribeError)
         }
     }
 

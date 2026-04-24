@@ -1,9 +1,21 @@
 import SwiftUI
 import SwiftData
+import UIKit
 import AMUXCore
 import os
 
 private let newSessionLogger = Logger(subsystem: "com.amux.app", category: "NewSession")
+
+private func collabEventSummary(_ event: Amux_DeviceCollabEvent.OneOf_Event) -> String {
+    switch event {
+    case .agentStartResult(let result):
+        return "agentStartResult commandID=\(result.commandID) success=\(result.success) agentID=\(result.agentID)"
+    case .commandRejected(let rejected):
+        return "commandRejected commandID=\(rejected.commandID) reason=\(rejected.reason)"
+    default:
+        return String(describing: event)
+    }
+}
 
 // MARK: - NewSessionSheet
 
@@ -35,6 +47,8 @@ public struct NewSessionSheet: View {
     @State private var primaryAgentCandidates: [CachedActor] = []
     @State private var isSending = false
     @State private var errorMessage: String?
+    @State private var debugStatusMessage: String?
+    @State private var debugTransportMessage: String?
     @FocusState private var isInputFocused: Bool
 
     @Query(filter: #Predicate<SessionTask> { !$0.archived },
@@ -53,6 +67,9 @@ public struct NewSessionSheet: View {
         return scopedTasks.isEmpty ? tasks : scopedTasks
     }
     private var shouldShowWorkspaceRow: Bool { primaryAgentID != nil }
+    private var requesterDeviceID: String {
+        UIDevice.current.identifierForVendor?.uuidString ?? "ios-\(peerId)"
+    }
 
     /// Set by parent — called with agentId when session is created
     var onSessionCreated: ((String) -> Void)?
@@ -101,6 +118,25 @@ public struct NewSessionSheet: View {
                             .padding(.horizontal, 16)
                             .padding(.bottom, 8)
                     }
+#if DEBUG
+                    if let debugStatusMessage, !debugStatusMessage.isEmpty {
+                        Text(debugStatusMessage)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+                            .lineLimit(2)
+                            .accessibilityIdentifier("newSession.debugStatus")
+                    }
+                    if let debugTransportMessage, !debugTransportMessage.isEmpty {
+                        Text(debugTransportMessage)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+                            .accessibilityIdentifier("newSession.debugTransport")
+                    }
+#endif
                     inputBar
                 }
                 if isSending {
@@ -382,6 +418,7 @@ public struct NewSessionSheet: View {
                         .font(.body)
                         .lineLimit(1...5)
                         .focused($isInputFocused)
+                        .accessibilityIdentifier("newSession.messageField")
                         .padding(.leading, 14)
                         .padding(.trailing, 4)
                         .padding(.vertical, 10)
@@ -391,6 +428,7 @@ public struct NewSessionSheet: View {
                             .font(.system(size: 28))
                             .foregroundStyle(canSend ? .blue : .gray.opacity(0.4))
                     }
+                    .accessibilityIdentifier("newSession.sendButton")
                     .buttonStyle(.plain)
                     .disabled(!canSend)
                     .padding(.trailing, 6)
@@ -455,6 +493,7 @@ public struct NewSessionSheet: View {
 
         isInputFocused = false
         errorMessage = nil
+        debugStatusMessage = nil
 
         if !isAgentAvailable {
             createLocalSession(text: text, title: userText)
@@ -472,19 +511,29 @@ public struct NewSessionSheet: View {
         isSending = true
 
         Task {
-            // Listen for per-agent state publishes instead of the old bulk
-            // AgentList — the daemon now fans each session out to its own
-            // retained `agent/{id}/state` topic to stay under the broker's
-            // 10 KB per-packet cap.
             let stream = mqtt.messages()
-
-            let cmd = makeStartAgentCommand(initialPrompt: text, sessionID: "")
             let routeDevice = effectiveDeviceID
+            let collabTopic = MQTTTopics.deviceCollab(teamID: effectiveTeamID, deviceID: requesterDeviceID)
+            let commandTopic = MQTTTopics.agentCommands(teamID: effectiveTeamID, deviceID: routeDevice, agentID: "new")
+            let cmd = makeStartAgentCommand(initialPrompt: text, sessionID: "")
+            await MainActor.run {
+                debugStatusMessage = "waiting command=\(cmd.commandID)"
+                debugTransportMessage = "team=\(effectiveTeamID) route=\(routeDevice) reply=\(requesterDeviceID) cmd=\(commandTopic) collab=\(collabTopic)"
+            }
+
+            guard !routeDevice.isEmpty, routeDevice != requesterDeviceID else {
+                await MainActor.run {
+                    isSending = false
+                    errorMessage = "Daemon device ID is not configured."
+                }
+                return
+            }
 
             do {
+                try await mqtt.subscribe(collabTopic)
                 let data = try ProtoMQTTCoder.encode(cmd)
                 try await mqtt.publish(
-                    topic: MQTTTopics.agentCommands(teamID: effectiveTeamID, deviceID: routeDevice, agentID: "new"),
+                    topic: commandTopic,
                     payload: data
                 )
             } catch {
@@ -495,42 +544,52 @@ public struct NewSessionSheet: View {
                 return
             }
 
-            // Wait up to 15s for the new agent's state publish or a rejection.
-            let collabTopic = MQTTTopics.deviceCollab(teamID: effectiveTeamID, deviceID: routeDevice)
-            let deadline = Date().addingTimeInterval(15)
-            for await msg in stream {
-                if Date() > deadline { break }
-
-                // Check for rejection on collab topic
-                if msg.topic == collabTopic,
-                   let dce = try? ProtoMQTTCoder.decode(Amux_DeviceCollabEvent.self, from: msg.payload),
-                   !dce.commandRejected.reason.isEmpty {
-                    await MainActor.run {
-                        isSending = false
-                        errorMessage = dce.commandRejected.reason
-                    }
-                    return
-                }
-
-                // Check for new agent state publish matching our prompt.
-                if isAgentStateTopic(msg.topic),
-                   !msg.payload.isEmpty,
-                   let info = try? ProtoMQTTCoder.decode(Amux_AgentInfo.self, from: msg.payload),
-                   info.currentPrompt == text {
-                    let agentId = info.agentID
-                    await MainActor.run {
-                        isSending = false
-                        onSessionCreated?(agentId)
-                        dismiss()
-                    }
-                    return
+            defer {
+                Task {
+                    try? await mqtt.unsubscribe(collabTopic)
                 }
             }
 
-            // Timeout
-            await MainActor.run {
-                isSending = false
-                errorMessage = "Session creation timed out. Check daemon logs."
+            do {
+                let event = try await waitForCommandResult(
+                    stream: stream,
+                    collabTopic: collabTopic,
+                    commandID: cmd.commandID
+                )
+                switch event {
+                case .agentStartResult(let result):
+                    await MainActor.run {
+                        isSending = false
+                        if result.success {
+                            persistPlaceholderAgent(
+                                agentID: result.agentID,
+                                title: String(userText.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines),
+                                prompt: text
+                            )
+                            newSessionLogger.info(
+                                "new-session success destination=\(result.agentID, privacy: .public) resultSessionID=\(result.sessionID, privacy: .public) resultAgentID=\(result.agentID, privacy: .public)"
+                            )
+                            onSessionCreated?(result.agentID)
+                            dismiss()
+                        } else {
+                            errorMessage = result.error.isEmpty
+                                ? "Agent failed to start. Check daemon logs."
+                                : result.error
+                        }
+                    }
+                case .commandRejected(let rejected):
+                    await MainActor.run {
+                        isSending = false
+                        errorMessage = rejected.reason
+                    }
+                default:
+                    break
+                }
+            } catch {
+                await MainActor.run {
+                    isSending = false
+                    errorMessage = error.localizedDescription
+                }
             }
         }
     }
@@ -551,7 +610,26 @@ public struct NewSessionSheet: View {
            let id = agent.deviceID, !id.isEmpty {
             return id
         }
-        return deviceId
+
+        let configuredDeviceID = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !configuredDeviceID.isEmpty, configuredDeviceID != requesterDeviceID {
+            return configuredDeviceID
+        }
+
+        let inferredDeviceIDs = connectedAgentsStore?.agents.sorted(by: { lhs, rhs in
+            if lhs.isOnline != rhs.isOnline {
+                return lhs.isOnline && !rhs.isOnline
+            }
+            return (lhs.lastActiveAt ?? .distantPast) > (rhs.lastActiveAt ?? .distantPast)
+        }).compactMap(\.deviceID)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        if let inferredDeviceID = inferredDeviceIDs?
+            .first(where: { !$0.isEmpty && $0 != requesterDeviceID }) {
+            return inferredDeviceID
+        }
+
+        return configuredDeviceID
     }
 
     private func createSharedSession(text: String, title: String) {
@@ -597,10 +675,12 @@ public struct NewSessionSheet: View {
                 )
 
                 teamclawService?.subscribeToSession(sessionID)
-                let session = persistSession(info)
-                session.primaryAgentId = primaryAgentID
-                try? modelContext.save()
-                viewModel.reloadSessions(modelContext: modelContext)
+                await MainActor.run {
+                    let session = persistSession(info)
+                    session.primaryAgentId = primaryAgentID
+                    try? modelContext.save()
+                    viewModel.reloadSessions(modelContext: modelContext)
+                }
 
                 if let primaryAgentID, !primaryAgentID.isEmpty {
                     _ = try await startAgentAndWaitForState(
@@ -612,6 +692,9 @@ public struct NewSessionSheet: View {
 
                 await MainActor.run {
                     isSending = false
+                    newSessionLogger.info(
+                        "shared-session success destination=collab:\(sessionID, privacy: .public)"
+                    )
                     onSessionCreated?("collab:\(sessionID)")
                     dismiss()
                 }
@@ -667,6 +750,7 @@ public struct NewSessionSheet: View {
         var cmd = Amux_CommandEnvelope()
         cmd.agentID = ""
         cmd.deviceID = effectiveDeviceID
+        cmd.replyToDeviceID = requesterDeviceID
         cmd.peerID = peerId
         cmd.senderActorID = currentActorID ?? ""
         cmd.commandID = UUID().uuidString
@@ -683,18 +767,13 @@ public struct NewSessionSheet: View {
         start.sessionID = sessionID
 
         newSessionLogger.info(
-            "startAgent envelope device=\(self.effectiveDeviceID, privacy: .public) primaryAgent=\(self.primaryAgentID ?? "", privacy: .public) sessionID=\(sessionID, privacy: .public) workspaceID=\(start.workspaceID, privacy: .public) worktree=\(start.worktree, privacy: .public)"
+            "startAgent envelope routeDevice=\(self.effectiveDeviceID, privacy: .public) replyDevice=\(self.requesterDeviceID, privacy: .public) primaryAgent=\(self.primaryAgentID ?? "", privacy: .public) sessionID=\(sessionID, privacy: .public) workspaceID=\(start.workspaceID, privacy: .public) worktree=\(start.worktree, privacy: .public)"
         )
 
         var acpCmd = Amux_AcpCommand()
         acpCmd.command = .startAgent(start)
         cmd.acpCommand = acpCmd
         return cmd
-    }
-
-    private func isAgentStateTopic(_ topic: String) -> Bool {
-        let prefix = MQTTTopics.agentStatePrefix(teamID: effectiveTeamID, deviceID: effectiveDeviceID)
-        return topic.hasPrefix(prefix) && topic.hasSuffix("/state")
     }
 
     private func persistSession(_ info: Teamclaw_SessionInfo) -> Session {
@@ -740,6 +819,42 @@ public struct NewSessionSheet: View {
         return session
     }
 
+    @MainActor
+    private func persistPlaceholderAgent(agentID: String, title: String, prompt: String) {
+        guard !agentID.isEmpty else { return }
+
+        let fetch = FetchDescriptor<Agent>(
+            predicate: #Predicate { $0.agentId == agentID }
+        )
+
+        let agent = (try? modelContext.fetch(fetch))?.first ?? {
+            let created = Agent(
+                agentId: agentID,
+                agentType: Int(selectedAgentType.rawValue),
+                status: 1,
+                startedAt: .now,
+                currentPrompt: prompt,
+                workspaceId: selectedWorkspaceRecord?.id ?? ""
+            )
+            modelContext.insert(created)
+            return created
+        }()
+
+        agent.agentType = Int(selectedAgentType.rawValue)
+        agent.status = 1
+        agent.currentPrompt = prompt
+        if let workspaceId = selectedWorkspaceRecord?.id, !workspaceId.isEmpty {
+            agent.workspaceId = workspaceId
+        }
+        agent.sessionTitle = title
+        agent.lastEventTime = .now
+        try? modelContext.save()
+
+        viewModel.agents = (try? modelContext.fetch(
+            FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)])
+        )) ?? []
+    }
+
     private func waitForSessionInfoResponse(
         requestId: String,
         timeout: TimeInterval,
@@ -767,67 +882,101 @@ public struct NewSessionSheet: View {
     }
 
     private func startAgentAndWaitForState(initialPrompt: String, sessionID: String) async throws -> String {
-        let knownAgentIds = Set(viewModel.agents.map(\.agentId))
         let stream = mqtt.messages()
-        let sentAt = Int64(Date().timeIntervalSince1970)
         let routeDevice = effectiveDeviceID
-        let collabTopic = MQTTTopics.deviceCollab(teamID: effectiveTeamID, deviceID: routeDevice)
+        let collabTopic = MQTTTopics.deviceCollab(teamID: effectiveTeamID, deviceID: requesterDeviceID)
+        let commandTopic = MQTTTopics.agentCommands(teamID: effectiveTeamID, deviceID: routeDevice, agentID: "new")
         let cmd = makeStartAgentCommand(initialPrompt: initialPrompt, sessionID: sessionID)
+        let commandID = cmd.commandID
+        await MainActor.run {
+            debugStatusMessage = "waiting command=\(commandID)"
+            debugTransportMessage = "team=\(effectiveTeamID) route=\(routeDevice) reply=\(requesterDeviceID) cmd=\(commandTopic) collab=\(collabTopic)"
+        }
+
+        guard !routeDevice.isEmpty, routeDevice != requesterDeviceID else {
+            throw SessionCreationError.rpc("Daemon device ID is not configured.")
+        }
 
         do {
+            try await mqtt.subscribe(collabTopic)
             let data = try ProtoMQTTCoder.encode(cmd)
             try await mqtt.publish(
-                topic: MQTTTopics.agentCommands(teamID: effectiveTeamID, deviceID: routeDevice, agentID: "new"),
+                topic: commandTopic,
                 payload: data
             )
         } catch {
             throw SessionCreationError.rpc("Failed to start agent: \(error.localizedDescription)")
         }
 
-        let deadline = Date().addingTimeInterval(15)
-        for await msg in stream {
-            if Date() > deadline {
-                throw SessionCreationError.rpc("Agent startup timed out. Check daemon logs.")
+        defer {
+            Task {
+                try? await mqtt.unsubscribe(collabTopic)
             }
-
-            if msg.topic == collabTopic,
-               let dce = try? ProtoMQTTCoder.decode(Amux_DeviceCollabEvent.self, from: msg.payload),
-               !dce.commandRejected.reason.isEmpty {
-                throw SessionCreationError.rpc(dce.commandRejected.reason)
-            }
-
-            guard isAgentStateTopic(msg.topic),
-                  !msg.payload.isEmpty,
-                  let info = try? ProtoMQTTCoder.decode(Amux_AgentInfo.self, from: msg.payload) else {
-                continue
-            }
-
-            if initialPrompt.isEmpty {
-                guard !knownAgentIds.contains(info.agentID),
-                      info.agentType == selectedAgentType,
-                      info.workspaceID == (selectedWorkspaceId ?? ""),
-                      info.startedAt >= sentAt else {
-                    continue
-                }
-            } else if info.currentPrompt != initialPrompt {
-                continue
-            }
-
-            // Daemon-side failures surface as AgentInfo with status=Error or
-            // Stopped. Without this check iOS would hang on "Starting
-            // session…" because the for-await loop keeps waiting for a
-            // matching healthy state that never arrives.
-            if info.status == .error || info.status == .stopped {
-                let reason = info.lastOutputSummary.isEmpty
-                    ? "Agent exited with status \(info.status). Check daemon logs."
-                    : info.lastOutputSummary
-                throw SessionCreationError.rpc(reason)
-            }
-
-            return info.agentID
         }
 
-        throw SessionCreationError.rpc("Agent startup timed out. Check daemon logs.")
+        let event = try await waitForCommandResult(
+            stream: stream,
+            collabTopic: collabTopic,
+            commandID: commandID
+        )
+        switch event {
+        case .agentStartResult(let result):
+            if result.success {
+                return result.agentID
+            }
+            let reason = result.error.isEmpty
+                ? "Agent failed to start. Check daemon logs."
+                : result.error
+            throw SessionCreationError.rpc(reason)
+        case .commandRejected(let rejected):
+            throw SessionCreationError.rpc(rejected.reason)
+        default:
+            throw SessionCreationError.rpc("Unexpected command result")
+        }
+    }
+
+    private func waitForCommandResult(
+        stream: AsyncStream<MQTTIncoming>,
+        collabTopic: String,
+        commandID: String
+    ) async throws -> Amux_DeviceCollabEvent.OneOf_Event {
+        try await withThrowingTaskGroup(of: Amux_DeviceCollabEvent.OneOf_Event.self) { group in
+            group.addTask {
+                for await msg in stream {
+                    guard msg.topic == collabTopic,
+                          let dce = try? ProtoMQTTCoder.decode(Amux_DeviceCollabEvent.self, from: msg.payload),
+                          let event = dce.event else {
+                        continue
+                    }
+                    newSessionLogger.info(
+                        "received collab event topic=\(collabTopic, privacy: .public) expectedCommandID=\(commandID, privacy: .public) event=\(collabEventSummary(event), privacy: .public)"
+                    )
+                    await MainActor.run {
+                        debugStatusMessage = collabEventSummary(event)
+                    }
+                    switch event {
+                    case .agentStartResult(let result) where result.commandID == commandID:
+                        return event
+                    case .commandRejected(let rejected) where rejected.commandID == commandID:
+                        return event
+                    default:
+                        continue
+                    }
+                }
+                throw SessionCreationError.rpc("Session creation timed out. Check daemon logs.")
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(15))
+                await MainActor.run {
+                    debugStatusMessage = "timeout command=\(commandID)"
+                }
+                throw SessionCreationError.rpc("Session creation timed out. Check daemon logs.")
+            }
+
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
     }
 
     private enum SessionCreationError: LocalizedError {

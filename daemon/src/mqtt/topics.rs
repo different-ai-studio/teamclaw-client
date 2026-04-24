@@ -32,6 +32,10 @@ impl Topics {
         format!("{}/collab", self.device_base())
     }
 
+    pub fn collab_for(&self, device_id: &str) -> String {
+        format!("amux/{}/device/{}/collab", self.team_id, device_id)
+    }
+
     pub fn agent_state(&self, agent_id: &str) -> String {
         format!("{}/agent/{}/state", self.device_base(), agent_id)
     }

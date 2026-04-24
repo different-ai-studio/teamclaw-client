@@ -43,6 +43,12 @@ impl<'a> Publisher<'a> {
             .await
     }
 
+    pub async fn publish_device_collab_event_to(&self, device_id: &str, event: &amux::DeviceCollabEvent) -> Result<(), rumqttc::ClientError> {
+        self.client.client
+            .publish(self.client.topics.collab_for(device_id), QoS::AtLeastOnce, false, event.encode_to_vec())
+            .await
+    }
+
     pub async fn publish_workspace_list(&self, list: &amux::WorkspaceList) -> Result<(), rumqttc::ClientError> {
         self.client.client
             .publish(self.client.topics.workspaces(), QoS::AtLeastOnce, true, list.encode_to_vec())

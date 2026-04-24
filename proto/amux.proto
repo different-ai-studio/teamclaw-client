@@ -30,6 +30,10 @@ message CommandEnvelope {
   // uses it to look up `agent_member_access.permission_level` instead of
   // the legacy MQTT token-derived role.
   string sender_actor_id = 6;
+  // Device-scoped reply target. When set, command results should be routed
+  // back to this device's collab topic instead of the daemon's own device
+  // namespace.
+  string reply_to_device_id = 7;
 
   AcpCommand acp_command = 10;    // Agent command (maps to ACP request)
 }
@@ -213,6 +217,7 @@ message DeviceCollabEvent {
     InviteCreated invite_created = 6;
     PromptRejected command_rejected = 7;
     WorkspaceResult workspace_result = 8;
+    AgentStartResult agent_start_result = 9;
   }
 }
 
@@ -280,6 +285,14 @@ message WorkspaceResult {
   bool success = 2;
   string error = 3;
   WorkspaceInfo workspace = 4;
+}
+
+message AgentStartResult {
+  string command_id = 1;
+  bool success = 2;
+  string error = 3;
+  string agent_id = 4;
+  string session_id = 5;
 }
 
 message PeerAnnounce {
