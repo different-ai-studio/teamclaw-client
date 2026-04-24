@@ -69,6 +69,44 @@ impl Topics {
     pub fn session_live(&self, session_id: &str) -> String {
         format!("amux/{}/session/{}/live", self.team_id, session_id)
     }
+
+    // ─── Phase 1 dual-write additions ───
+
+    /// New device-scoped retained state topic. LWT migrates here in Phase 3.
+    pub fn device_state(&self) -> String {
+        format!("{}/state", self.device_base())
+    }
+
+    /// Per-runtime retained state. iOS subscribes via runtime_state_wildcard.
+    pub fn runtime_state(&self, runtime_id: &str) -> String {
+        format!("{}/runtime/{}/state", self.device_base(), runtime_id)
+    }
+
+    /// Per-runtime event stream.
+    pub fn runtime_events(&self, runtime_id: &str) -> String {
+        format!("{}/runtime/{}/events", self.device_base(), runtime_id)
+    }
+
+    /// Per-runtime command stream.
+    pub fn runtime_commands(&self, runtime_id: &str) -> String {
+        format!("{}/runtime/{}/commands", self.device_base(), runtime_id)
+    }
+
+    /// Wildcard for aggregating all retained runtime states for this device.
+    pub fn runtime_state_wildcard(&self) -> String {
+        format!("{}/runtime/+/state", self.device_base())
+    }
+
+    /// Wildcard for subscribing to all incoming runtime commands for this device.
+    pub fn runtime_commands_wildcard(&self) -> String {
+        format!("{}/runtime/+/commands", self.device_base())
+    }
+
+    /// Team-scoped user notify channel. Requires broker JWT auth before use
+    /// (Phase 1c prerequisite); path builder available now for Phase 2 iOS.
+    pub fn user_notify(&self, actor_id: &str) -> String {
+        format!("amux/{}/user/{}/notify", self.team_id, actor_id)
+    }
 }
 
 #[cfg(test)]
@@ -87,5 +125,67 @@ mod tests {
         let t = Topics::new("team1", "dev-a");
         assert_eq!(t.device_notify(), "amux/team1/device/dev-a/notify");
         assert_eq!(t.session_live("s1"), "amux/team1/session/s1/live");
+    }
+
+    #[test]
+    fn new_device_state_and_runtime_paths() {
+        let t = Topics::new("team1", "dev-a");
+        assert_eq!(t.device_state(), "amux/team1/device/dev-a/state");
+        assert_eq!(
+            t.runtime_state("r1"),
+            "amux/team1/device/dev-a/runtime/r1/state"
+        );
+        assert_eq!(
+            t.runtime_events("r1"),
+            "amux/team1/device/dev-a/runtime/r1/events"
+        );
+        assert_eq!(
+            t.runtime_commands("r1"),
+            "amux/team1/device/dev-a/runtime/r1/commands"
+        );
+        assert_eq!(
+            t.runtime_state_wildcard(),
+            "amux/team1/device/dev-a/runtime/+/state"
+        );
+        assert_eq!(
+            t.runtime_commands_wildcard(),
+            "amux/team1/device/dev-a/runtime/+/commands"
+        );
+    }
+
+    #[test]
+    fn user_notify_path() {
+        let t = Topics::new("team1", "dev-a");
+        assert_eq!(
+            t.user_notify("actor-xyz"),
+            "amux/team1/user/actor-xyz/notify"
+        );
+    }
+
+    #[test]
+    fn legacy_paths_still_work() {
+        // Regression — the dual-write window relies on these staying
+        // byte-identical to today's daemon output.
+        let t = Topics::new("team1", "dev-a");
+        assert_eq!(t.status(), "amux/team1/device/dev-a/status");
+        assert_eq!(t.peers(), "amux/team1/device/dev-a/peers");
+        assert_eq!(t.workspaces(), "amux/team1/device/dev-a/workspaces");
+        assert_eq!(t.collab(), "amux/team1/device/dev-a/collab");
+        assert_eq!(
+            t.agent_state("a1"),
+            "amux/team1/device/dev-a/agent/a1/state"
+        );
+        assert_eq!(
+            t.agent_events("a1"),
+            "amux/team1/device/dev-a/agent/a1/events"
+        );
+        assert_eq!(
+            t.agent_commands("a1"),
+            "amux/team1/device/dev-a/agent/a1/commands"
+        );
+        assert_eq!(
+            t.all_agent_commands(),
+            "amux/team1/device/dev-a/agent/+/commands"
+        );
     }
 }
