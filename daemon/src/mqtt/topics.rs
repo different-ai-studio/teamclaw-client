@@ -26,22 +26,6 @@ impl Topics {
         format!("amux/{}/device/{}/rpc/res", self.team_id, device_id)
     }
 
-    pub fn agent_state(&self, agent_id: &str) -> String {
-        format!("{}/agent/{}/state", self.device_base(), agent_id)
-    }
-
-    pub fn agent_events(&self, agent_id: &str) -> String {
-        format!("{}/agent/{}/events", self.device_base(), agent_id)
-    }
-
-    pub fn agent_commands(&self, agent_id: &str) -> String {
-        format!("{}/agent/{}/commands", self.device_base(), agent_id)
-    }
-
-    pub fn all_agent_commands(&self) -> String {
-        format!("{}/agent/+/commands", self.device_base())
-    }
-
     // ─── Teamclaw (absorbed from teamclaw/topics.rs in Phase 1a) ───
 
     pub fn device_rpc_req(&self) -> String {
@@ -158,21 +142,5 @@ mod tests {
         // byte-identical to today's daemon output.
         let t = Topics::new("team1", "dev-a");
         assert_eq!(t.status(), "amux/team1/device/dev-a/status");
-        assert_eq!(
-            t.agent_state("a1"),
-            "amux/team1/device/dev-a/agent/a1/state"
-        );
-        assert_eq!(
-            t.agent_events("a1"),
-            "amux/team1/device/dev-a/agent/a1/events"
-        );
-        assert_eq!(
-            t.agent_commands("a1"),
-            "amux/team1/device/dev-a/agent/a1/commands"
-        );
-        assert_eq!(
-            t.all_agent_commands(),
-            "amux/team1/device/dev-a/agent/+/commands"
-        );
     }
 }

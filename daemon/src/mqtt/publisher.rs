@@ -11,39 +11,25 @@ impl<'a> Publisher<'a> {
         Self { client }
     }
 
-    /// Dual-publishes Envelope to BOTH agent/{id}/events (legacy) and
-    /// runtime/{id}/events during the Phase 1-2 compat window. Ephemeral;
-    /// no retain.
+    /// Publishes Envelope to runtime/{id}/events. Ephemeral; no retain.
     pub async fn publish_agent_event(&self, agent_id: &str, envelope: &amux::Envelope) -> Result<(), rumqttc::ClientError> {
         let payload = envelope.encode_to_vec();
-        self.client.client
-            .publish(self.client.topics.agent_events(agent_id), QoS::AtLeastOnce, false, payload.clone())
-            .await?;
         self.client.client
             .publish(self.client.topics.runtime_events(agent_id), QoS::AtLeastOnce, false, payload)
             .await
     }
 
-    /// Dual-publishes RuntimeInfo to BOTH the legacy agent/{id}/state and
-    /// the new runtime/{id}/state retained topics during the Phase 1-2
-    /// compat window. Phase 3 drops the legacy publish.
+    /// Publishes RuntimeInfo to the retained runtime/{id}/state topic.
     pub async fn publish_agent_state(&self, agent_id: &str, info: &amux::RuntimeInfo) -> Result<(), rumqttc::ClientError> {
         let payload = info.encode_to_vec();
-        self.client.client
-            .publish(self.client.topics.agent_state(agent_id), QoS::AtLeastOnce, true, payload.clone())
-            .await?;
         self.client.client
             .publish(self.client.topics.runtime_state(agent_id), QoS::AtLeastOnce, true, payload)
             .await
     }
 
-    /// Clears retained state on BOTH the legacy agent/{id}/state and the
-    /// new runtime/{id}/state paths. Otherwise a legacy subscriber or a
-    /// new subscriber would see ghost state after runtime termination.
+    /// Clears retained state on runtime/{id}/state. Otherwise subscribers
+    /// would see ghost state after runtime termination.
     pub async fn clear_agent_state(&self, agent_id: &str) -> Result<(), rumqttc::ClientError> {
-        self.client.client
-            .publish(self.client.topics.agent_state(agent_id), QoS::AtLeastOnce, true, Vec::<u8>::new())
-            .await?;
         self.client.client
             .publish(self.client.topics.runtime_state(agent_id), QoS::AtLeastOnce, true, Vec::<u8>::new())
             .await
@@ -64,9 +50,8 @@ impl<'a> Publisher<'a> {
     }
 
     /// Publishes RuntimeInfo with state=FAILED and populated error fields
-    /// to the retained runtime state topic (dual-publishes to agent/{id}/state
-    /// + runtime/{id}/state per Phase 1a). The retain stays until a future
-    /// clear — iOS surfaces the error_message to the user.
+    /// to the retained runtime/{id}/state topic. The retain stays until a
+    /// future clear — iOS surfaces the error_message to the user.
     pub async fn publish_runtime_failed(
         &self,
         runtime_id: &str,

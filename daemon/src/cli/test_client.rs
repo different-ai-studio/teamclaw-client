@@ -249,7 +249,7 @@ pub async fn run_start_agent(config: DaemonConfig, worktree: &str, prompt: &str)
 
     let payload = envelope.encode_to_vec();
     // Send to a dummy agent ID — daemon picks up from wildcard subscription
-    let topic = tc.topics.agent_commands("new");
+    let topic = tc.topics.runtime_commands("new");
 
     tc.client.publish(&topic, QoS::AtLeastOnce, false, payload).await?;
     println!("📤 Sent StartAgent command (worktree={}, prompt=\"{}\")", worktree, prompt);
@@ -393,7 +393,7 @@ pub async fn run_e2e(config: DaemonConfig, token: &str, worktree: &str, prompt: 
             })),
         }),
     };
-    let topic = tc.topics.agent_commands("new");
+    let topic = tc.topics.runtime_commands("new");
     tc.client.publish(&topic, QoS::AtLeastOnce, false, start_cmd.encode_to_vec()).await?;
     println!("📤 StartAgent sent (prompt=\"{}\")", prompt);
 
