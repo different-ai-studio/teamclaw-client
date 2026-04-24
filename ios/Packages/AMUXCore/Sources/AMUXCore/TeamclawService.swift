@@ -120,27 +120,15 @@ public final class TeamclawService {
         let topic = incoming.topic
 
         if topic == MQTTTopics.deviceNotify(teamID: teamId, deviceID: deviceId) {
-            // Phase 2b: device/{id}/notify carries two wire shapes during the
-            // compat window — new Teamclaw_Notify (event_type + refresh_hint,
-            // field numbers 1-3) and legacy NotifyEnvelope (pre-Phase-2b
-            // daemons still emit it on membership.refresh). Try Notify first;
-            // fall back to NotifyEnvelope for old-format messages.
-            let parsed: (eventType: String, refreshHint: String)?
-            if let notify = try? Teamclaw_Notify(serializedBytes: incoming.payload) {
-                parsed = (notify.eventType, notify.refreshHint)
-            } else if let envelope = try? Teamclaw_NotifyEnvelope(serializedBytes: incoming.payload) {
-                parsed = (envelope.eventType, envelope.sessionID)
-            } else {
-                print("[TeamclawService] failed to decode device/notify payload as Notify or NotifyEnvelope")
+            guard let notify = try? Teamclaw_Notify(serializedBytes: incoming.payload) else {
+                print("[TeamclawService] failed to decode device/notify payload as Notify")
                 return
             }
 
-            guard let (eventType, refreshHint) = parsed else { return }
-
-            switch eventType {
+            switch notify.eventType {
             case "membership.refresh", "members.changed":
-                if !refreshHint.isEmpty {
-                    await refreshSessionState(for: refreshHint, modelContext: modelContext)
+                if !notify.refreshHint.isEmpty {
+                    await refreshSessionState(for: notify.refreshHint, modelContext: modelContext)
                 }
             case "peers.changed":
                 let peers = await fetchPeers()
