@@ -65,6 +65,14 @@ public protocol AppOnboardingStore: Sendable {
     func ensureSession() async throws
     func loadBootstrap() async throws -> AppBootstrap
     func createTeam(named name: String) async throws -> CreatedTeam
+
+    // Auth sign-in methods
+    func signIn(email: String, password: String) async throws
+    func signUp(email: String, password: String) async throws
+    func sendMagicLink(email: String) async throws
+    func signInWithAppleCredential(idToken: String, nonce: String) async throws
+    func signInWithGoogle() async throws
+    func handleAuthCallback(url: URL) async throws
 }
 
 @Observable

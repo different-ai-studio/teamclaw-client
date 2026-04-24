@@ -152,4 +152,11 @@ private actor FailingOnboardingStore: AppOnboardingStore {
     func createTeam(named name: String) async throws -> CreatedTeam {
         throw error
     }
+
+    func signIn(email: String, password: String) async throws { throw error }
+    func signUp(email: String, password: String) async throws { throw error }
+    func sendMagicLink(email: String) async throws { throw error }
+    func signInWithAppleCredential(idToken: String, nonce: String) async throws { throw error }
+    func signInWithGoogle() async throws { throw error }
+    func handleAuthCallback(url: URL) async throws { throw error }
 }
