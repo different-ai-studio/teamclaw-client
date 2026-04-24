@@ -788,6 +788,84 @@ public final class TeamclawService {
         return []
     }
 
+    /// Adds a workspace via daemon RPC. Returns a `(success, error)` pair —
+    /// daemon responds with `success=true, error=""` on accept; `success=false`
+    /// with a daemon-side reason on reject. Returns `(false, "timeout")` when no
+    /// response arrives within 10s.
+    public func addWorkspaceRpc(path: String) async -> (Bool, String) {
+        guard let mqtt else { return (false, "mqtt not configured") }
+
+        var add = Teamclaw_AddWorkspaceRequest()
+        add.path = path
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .addWorkspace(add)
+
+        let requestId = rpcReq.requestID
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let stream = mqtt.messages()
+
+        guard let data = try? rpcReq.serializedData() else {
+            return (false, "encode failed")
+        }
+        do {
+            try await mqtt.publish(topic: topic, payload: data, retain: false)
+        } catch {
+            return (false, "publish failed: \(error.localizedDescription)")
+        }
+
+        let deadline = Date().addingTimeInterval(10)
+        for await msg in stream {
+            if Date() > deadline { break }
+            if msg.topic == MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId),
+               let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
+               response.requestID == requestId {
+                return (response.success, response.error)
+            }
+        }
+        return (false, "timeout")
+    }
+
+    /// Removes a workspace via daemon RPC. Same `(success, error)` semantics as
+    /// `addWorkspaceRpc`.
+    public func removeWorkspaceRpc(workspaceId: String) async -> (Bool, String) {
+        guard let mqtt else { return (false, "mqtt not configured") }
+
+        var remove = Teamclaw_RemoveWorkspaceRequest()
+        remove.workspaceID = workspaceId
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .removeWorkspace(remove)
+
+        let requestId = rpcReq.requestID
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let stream = mqtt.messages()
+
+        guard let data = try? rpcReq.serializedData() else {
+            return (false, "encode failed")
+        }
+        do {
+            try await mqtt.publish(topic: topic, payload: data, retain: false)
+        } catch {
+            return (false, "publish failed: \(error.localizedDescription)")
+        }
+
+        let deadline = Date().addingTimeInterval(10)
+        for await msg in stream {
+            if Date() > deadline { break }
+            if msg.topic == MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId),
+               let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
+               response.requestID == requestId {
+                return (response.success, response.error)
+            }
+        }
+        return (false, "timeout")
+    }
+
     private func configureRuntime(
         mqtt: MQTTService,
         teamId: String,
