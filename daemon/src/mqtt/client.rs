@@ -4,7 +4,7 @@ use std::time::Duration;
 use tracing::info;
 
 use crate::config::DaemonConfig;
-use crate::proto::amux::DeviceStatus;
+use crate::proto::amux::DeviceState;
 use prost::Message;
 
 use super::Topics;
@@ -87,7 +87,7 @@ impl MqttClient {
         // LWT: publish offline status if daemon disconnects unexpectedly
         let team_id = config.team_id.as_deref().unwrap_or("teamclaw");
         let topics = Topics::new(team_id, &config.device.id);
-        let lwt_payload = DeviceStatus {
+        let lwt_payload = DeviceState {
             online: false,
             device_name: config.device.name.clone(),
             timestamp: chrono::Utc::now().timestamp(),
@@ -110,7 +110,7 @@ impl MqttClient {
     }
 
     pub async fn announce_online(&self, device_name: &str) -> Result<(), rumqttc::ClientError> {
-        let status = DeviceStatus {
+        let status = DeviceState {
             online: true,
             device_name: device_name.into(),
             timestamp: chrono::Utc::now().timestamp(),

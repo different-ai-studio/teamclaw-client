@@ -81,8 +81,8 @@ pub async fn run_watch(config: DaemonConfig) -> anyhow::Result<()> {
 
                 // Try to decode based on topic
                 if topic.ends_with("/status") {
-                    match amux::DeviceStatus::decode(payload.as_ref()) {
-                        Ok(s) => println!("📌 {} → DeviceStatus {{ online: {}, name: \"{}\" }}{}",
+                    match amux::DeviceState::decode(payload.as_ref()) {
+                        Ok(s) => println!("📌 {} → DeviceState {{ online: {}, name: \"{}\" }}{}",
                             topic, s.online, s.device_name, retained),
                         Err(_) => println!("❓ {} → {} bytes (decode failed){}", topic, payload.len(), retained),
                     }
@@ -444,8 +444,8 @@ fn print_publish(publish: &rumqttc::Publish) {
     let retained = if publish.retain { " [retained]" } else { "" };
 
     if topic.ends_with("/status") {
-        if let Ok(s) = amux::DeviceStatus::decode(payload.as_ref()) {
-            println!("📌 DeviceStatus {{ online: {}, name: \"{}\" }}{}", s.online, s.device_name, retained);
+        if let Ok(s) = amux::DeviceState::decode(payload.as_ref()) {
+            println!("📌 DeviceState {{ online: {}, name: \"{}\" }}{}", s.online, s.device_name, retained);
         }
     } else if topic.ends_with("/peers") {
         if let Ok(list) = amux::PeerList::decode(payload.as_ref()) {

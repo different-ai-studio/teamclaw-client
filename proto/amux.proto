@@ -324,7 +324,9 @@ message InviteCreated {
 //  Device status (LWT support)
 // ═══════════════════════════════════════════
 
-message DeviceStatus {
+// Payload of device/{id}/state (retained, LWT-backed from Phase 3 onward).
+// See spec: docs/superpowers/specs/2026-04-24-mqtt-topic-redesign-design.md
+message DeviceState {
   bool online = 1;
   string device_name = 2;
   int64 timestamp = 3;

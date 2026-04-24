@@ -23,7 +23,7 @@ public final class ConnectionMonitor {
 
             for await msg in stream {
                 guard msg.topic == statusTopic else { continue }
-                if let status = try? ProtoMQTTCoder.decode(Amux_DeviceStatus.self, from: msg.payload) {
+                if let status = try? ProtoMQTTCoder.decode(Amux_DeviceState.self, from: msg.payload) {
                     await MainActor.run {
                         self.daemonOnline = status.online
                         self.deviceName = status.deviceName

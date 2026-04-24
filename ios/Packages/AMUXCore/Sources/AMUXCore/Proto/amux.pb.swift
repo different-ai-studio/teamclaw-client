@@ -1310,7 +1310,9 @@ public struct Amux_InviteCreated: Sendable {
   public init() {}
 }
 
-public struct Amux_DeviceStatus: Sendable {
+/// Payload of device/{id}/state (retained, LWT-backed from Phase 3 onward).
+/// See spec: docs/superpowers/specs/2026-04-24-mqtt-topic-redesign-design.md
+public struct Amux_DeviceState: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -3919,8 +3921,8 @@ extension Amux_InviteCreated: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
   }
 }
 
-extension Amux_DeviceStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".DeviceStatus"
+extension Amux_DeviceState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DeviceState"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}online\0\u{3}device_name\0\u{1}timestamp\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -3950,7 +3952,7 @@ extension Amux_DeviceStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Amux_DeviceStatus, rhs: Amux_DeviceStatus) -> Bool {
+  public static func ==(lhs: Amux_DeviceState, rhs: Amux_DeviceState) -> Bool {
     if lhs.online != rhs.online {return false}
     if lhs.deviceName != rhs.deviceName {return false}
     if lhs.timestamp != rhs.timestamp {return false}
