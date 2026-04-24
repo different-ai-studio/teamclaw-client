@@ -54,8 +54,9 @@ impl TestClient {
 
         // Subscribe to all device-level and agent-level topics
         self.client.subscribe(self.topics.status(), QoS::AtLeastOnce).await?;
-        self.client.subscribe(self.topics.peers(), QoS::AtLeastOnce).await?;
-        // Legacy /collab subscription removed in Phase 3; Task 6 will retire
+        // Legacy /peers subscription removed (Phase 3 Task 3); iOS uses
+        // FetchPeers RPC + peers.changed notify. Legacy /collab subscription
+        // removed in Phase 3; Task 6 will retire
         // the now-dead publish helpers below. Wildcards stay for now.
         let team_id = self.config.team_id.as_deref().unwrap_or("teamclaw");
         self.client.subscribe(&format!("amux/{}/device/{}/agent/+/state", team_id, device_id), QoS::AtLeastOnce).await?;

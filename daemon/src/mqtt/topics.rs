@@ -20,14 +20,6 @@ impl Topics {
         format!("{}/status", self.device_base())
     }
 
-    pub fn peers(&self) -> String {
-        format!("{}/peers", self.device_base())
-    }
-
-    pub fn workspaces(&self) -> String {
-        format!("{}/workspaces", self.device_base())
-    }
-
     /// RPC response topic for an arbitrary device (used when replying to a
     /// request whose sender_device_id differs from our own device_id).
     pub fn rpc_res_for(&self, device_id: &str) -> String {
@@ -166,8 +158,6 @@ mod tests {
         // byte-identical to today's daemon output.
         let t = Topics::new("team1", "dev-a");
         assert_eq!(t.status(), "amux/team1/device/dev-a/status");
-        assert_eq!(t.peers(), "amux/team1/device/dev-a/peers");
-        assert_eq!(t.workspaces(), "amux/team1/device/dev-a/workspaces");
         assert_eq!(
             t.agent_state("a1"),
             "amux/team1/device/dev-a/agent/a1/state"

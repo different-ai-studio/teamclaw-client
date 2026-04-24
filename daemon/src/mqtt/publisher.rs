@@ -11,12 +11,6 @@ impl<'a> Publisher<'a> {
         Self { client }
     }
 
-    pub async fn publish_peer_list(&self, list: &amux::PeerList) -> Result<(), rumqttc::ClientError> {
-        self.client.client
-            .publish(self.client.topics.peers(), QoS::AtLeastOnce, true, list.encode_to_vec())
-            .await
-    }
-
     /// Dual-publishes Envelope to BOTH agent/{id}/events (legacy) and
     /// runtime/{id}/events during the Phase 1-2 compat window. Ephemeral;
     /// no retain.
@@ -52,12 +46,6 @@ impl<'a> Publisher<'a> {
             .await?;
         self.client.client
             .publish(self.client.topics.runtime_state(agent_id), QoS::AtLeastOnce, true, Vec::<u8>::new())
-            .await
-    }
-
-    pub async fn publish_workspace_list(&self, list: &amux::WorkspaceList) -> Result<(), rumqttc::ClientError> {
-        self.client.client
-            .publish(self.client.topics.workspaces(), QoS::AtLeastOnce, true, list.encode_to_vec())
             .await
     }
 
