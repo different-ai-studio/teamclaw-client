@@ -39,12 +39,41 @@ pub struct DaemonServer {
     sessions_path: PathBuf,
     history: EventHistory,
     teamclaw: Option<crate::teamclaw::SessionManager>,
-    supabase: Option<SupabaseClient>,
+    supabase: SupabaseClient,
+    actor_id: String,
 }
 
 impl DaemonServer {
-    pub fn new(config: DaemonConfig, config_path: &std::path::Path) -> crate::error::Result<Self> {
-        let mqtt = MqttClient::new(&config)?;
+    pub async fn new(config: DaemonConfig, config_path: &std::path::Path) -> crate::error::Result<Self> {
+        // Supabase is required — fail fast with a clear message if absent.
+        let supabase = match SupabaseConfig::default_path() {
+            Ok(path) if path.exists() => {
+                SupabaseConfig::load(&path)
+                    .and_then(SupabaseClient::new)
+                    .map_err(|e| crate::error::AmuxError::Config(
+                        format!("supabase init failed: {e}")
+                    ))?
+            }
+            _ => return Err(crate::error::AmuxError::Config(
+                "supabase.toml not found — run `amuxd init` to configure".into()
+            )),
+        };
+
+        info!(
+            actor_id = %supabase.config().actor_id,
+            team_id  = %supabase.config().team_id,
+            "Supabase client initialised"
+        );
+
+        let actor_id = supabase.config().actor_id.clone();
+
+        // Fetch first token — blocks here until Supabase is reachable.
+        let token = supabase.access_token().await
+            .map_err(|e| crate::error::AmuxError::Config(
+                format!("initial token fetch failed: {e}")
+            ))?;
+
+        let mqtt = MqttClient::new(&config, &actor_id, &token)?;
 
         let binary = config.agents.claude_code.as_ref()
             .map(|c| c.binary.clone())
@@ -53,7 +82,6 @@ impl DaemonServer {
             .map(|c| c.default_flags.clone())
             .unwrap_or_default();
 
-        // Members file is next to daemon.toml
         let members_path = config_path.parent()
             .unwrap_or(std::path::Path::new("."))
             .join("members.toml");
@@ -76,45 +104,25 @@ impl DaemonServer {
             .join("history");
         let history = EventHistory::new(&history_dir);
 
-        // Load Supabase client if supabase.toml is present (absent = legacy mode).
-        let supabase: Option<SupabaseClient> = match SupabaseConfig::default_path() {
-            Ok(path) if path.exists() => {
-                match SupabaseConfig::load(&path).and_then(SupabaseClient::new) {
-                    Ok(c) => {
-                        info!(
-                            actor_id = %c.config().actor_id,
-                            team_id = %c.config().team_id,
-                            "Supabase client initialised"
-                        );
-                        Some(c)
-                    }
-                    Err(e) => {
-                        warn!("Supabase config present but init failed: {e}");
-                        None
-                    }
-                }
-            }
-            _ => {
-                info!("No supabase.toml found; Supabase features disabled");
-                None
-            }
-        };
-
-        let agents = RuntimeManager::new(binary, flags, supabase.clone());
+        let agents = RuntimeManager::new(binary, flags, Some(supabase.clone()));
 
         let teamclaw = if let Some(team_id) = &config.team_id {
             Some(crate::teamclaw::SessionManager::new(
                 mqtt.client.clone(),
                 team_id,
                 &config.device.id,
-                supabase.as_ref().map(|c| c.config().actor_id.clone()),
+                Some(actor_id.clone()),
                 crate::config::DaemonConfig::config_dir(),
             )?)
         } else {
             None
         };
 
-        Ok(Self { config, mqtt, agents, auth, peers, permissions, workspaces, workspaces_path, sessions, sessions_path, history, teamclaw, supabase })
+        Ok(Self {
+            config, mqtt, agents, auth, peers, permissions,
+            workspaces, workspaces_path, sessions, sessions_path,
+            history, teamclaw, supabase, actor_id,
+        })
     }
 
     pub async fn run(mut self) -> crate::error::Result<()> {
@@ -157,7 +165,8 @@ impl DaemonServer {
 
         // Register our MQTT device_id on the agents row so iOS clients can
         // route publishes at `amux/{device_id}/…` without typing the UUID.
-        if let Some(sb) = self.supabase.clone() {
+        {
+            let sb = self.supabase.clone();
             let device_id = self.config.device.id.clone();
             tokio::spawn(async move {
                 if let Err(e) = sb.set_agent_device_id(&device_id).await {
@@ -166,8 +175,9 @@ impl DaemonServer {
             });
         }
 
-        // Spawn 60s Supabase heartbeat task (no-op when supabase is None)
-        if let Some(sb) = self.supabase.clone() {
+        // Spawn 60s Supabase heartbeat task
+        {
+            let sb = self.supabase.clone();
             tokio::spawn(async move {
                 let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
                 tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -268,9 +278,7 @@ impl DaemonServer {
     }
 
     async fn sync_workspace_to_supabase(&self, workspace: &mut crate::config::StoredWorkspace) -> bool {
-        let Some(sb) = &self.supabase else {
-            return false;
-        };
+        let sb = &self.supabase;
 
         let row = crate::supabase::WorkspaceUpsert {
             team_id: &sb.config().team_id,
@@ -413,7 +421,8 @@ impl DaemonServer {
             self.publish_runtime_state_by_id(agent_id).await;
 
             // Upsert agent_runtimes on status transitions
-            if let Some(sb) = &self.supabase {
+            {
+                let sb = &self.supabase;
                 let new_status = amux::AgentStatus::try_from(sc.new_status)
                     .unwrap_or(amux::AgentStatus::Unknown);
                 let supabase_status: &'static str = match new_status {
@@ -723,23 +732,22 @@ impl DaemonServer {
     /// peer/token role when the Supabase side isn't available.
     async fn resolve_role(&mut self, sender_actor_id: &str, peer_id: &str) -> amux::MemberRole {
         if !sender_actor_id.is_empty() {
-            if let Some(sb) = &self.supabase {
-                let my_agent_id = sb.config().actor_id.clone();
-                match sb.check_agent_permission(&my_agent_id, sender_actor_id).await {
-                    Ok(Some(level)) => {
-                        return match level.as_str() {
-                            "admin" => amux::MemberRole::Owner,
-                            "write" => amux::MemberRole::Member,
-                            _ => amux::MemberRole::Member,
-                        };
-                    }
-                    Ok(None) => {
-                        warn!(actor_id = %sender_actor_id, "no agent_member_access grant");
-                        return amux::MemberRole::Member;
-                    }
-                    Err(e) => {
-                        warn!(%e, "supabase permission check failed; falling back to peer role");
-                    }
+            let sb = &self.supabase;
+            let my_agent_id = sb.config().actor_id.clone();
+            match sb.check_agent_permission(&my_agent_id, sender_actor_id).await {
+                Ok(Some(level)) => {
+                    return match level.as_str() {
+                        "admin" => amux::MemberRole::Owner,
+                        "write" => amux::MemberRole::Member,
+                        _ => amux::MemberRole::Member,
+                    };
+                }
+                Ok(None) => {
+                    warn!(actor_id = %sender_actor_id, "no agent_member_access grant");
+                    return amux::MemberRole::Member;
+                }
+                Err(e) => {
+                    warn!(%e, "supabase permission check failed; falling back to peer role");
                 }
             }
         }

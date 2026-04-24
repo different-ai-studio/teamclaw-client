@@ -52,7 +52,7 @@ fn main() -> anyhow::Result<()> {
 
             let rt = tokio::runtime::Runtime::new()?;
             rt.block_on(async {
-                let server = daemon::DaemonServer::new(daemon_config, &config_path)?;
+                let server = daemon::DaemonServer::new(daemon_config, &config_path).await?;
                 tokio::select! {
                     res = server.run() => res,
                     _ = shutdown_signal() => {
