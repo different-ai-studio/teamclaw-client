@@ -40,20 +40,20 @@ Naming is inconsistent across layers — use this as the source of truth:
 | Concept | Supabase | MQTT | Daemon code |
 |---------|----------|------|-------------|
 | Developer machine running amuxd | `agents` row (`actor_type='agent'`) | `device_id` in topic path | `config.device` |
-| Individual Claude Code subprocess | `agent_runtimes` row | `agent/{agent_id}` in topic path | `AgentHandle` (called "agent" internally) |
+| Individual Claude Code subprocess | `agent_runtimes` row | `agent/{agent_id}` in topic path | `RuntimeHandle` |
 
 **Key identifiers:**
 - `agents.id` — Supabase UUID for the daemon identity; used as FK in `agent_runtimes.agent_id`
 - `agents.device_id` — short string from `daemon.toml`; used in MQTT topic paths as `{device_id}`; stored in Supabase so iOS can resolve the daemon without knowing its UUID
-- `AgentHandle.agent_id` — 8-char UUID generated at spawn; used in MQTT topic paths as `{agent_id}` under the device; maps to an `agent_runtimes` row (keyed on `agents.id` + `backend_session_id`)
+- `RuntimeHandle.agent_id` — 8-char UUID generated at spawn; used in MQTT topic paths as `{agent_id}` under the device; maps to an `agent_runtimes` row (keyed on `agents.id` + `backend_session_id`)
 
-**The naming trap:** The daemon's internal code (AgentManager, AgentHandle) calls each Claude Code subprocess an "agent". In the Supabase schema, "agent" means the daemon itself; each subprocess is an `agent_runtime`. When reading daemon code, mentally substitute "agent" → "runtime".
+**Naming note:** The daemon's structural types (`RuntimeManager`, `RuntimeHandle`) and module path (`daemon/src/runtime/`) now align with the Supabase `agent_runtimes` semantic. Local variable names like `agent_id` may still appear in function bodies as transient traces of the old naming; that's not a semantic trap — the wire-format topic path still contains `agent/{agent_id}`, so the id name is load-bearing there.
 
 ## Architecture Details
 
 ### Daemon Modules (`daemon/src/`)
-- `agent/adapter.rs` -- spawns Claude Code subprocess, parses stream-json stdout into AcpEvent protos
-- `agent/manager.rs` -- agent lifecycle (spawn/stop/list)
+- `runtime/adapter.rs` -- spawns Claude Code subprocess, parses stream-json stdout into AcpEvent protos
+- `runtime/manager.rs` -- runtime lifecycle (spawn/stop/list)
 - `daemon/server.rs` -- main event loop: polls MQTT, dispatches commands to agents, publishes events
 - `mqtt/` -- client (TLS connection), publisher (event->topic mapping), subscriber (topic->message parsing)
 - `collab/` -- member auth (token validation), peer tracking, permissions
