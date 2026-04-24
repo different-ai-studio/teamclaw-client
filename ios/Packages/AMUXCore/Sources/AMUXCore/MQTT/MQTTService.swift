@@ -224,6 +224,13 @@ public final class MQTTService: NSObject, @unchecked Sendable {
         }
     }
 
+    /// Test-only helper: pushes an incoming MQTT message into all active
+    /// `messages()` AsyncStream continuations. Use from XCTest with
+    /// `@testable import AMUXCore`. Not safe for production code paths.
+    internal func deliverForTesting(_ msg: MQTTIncoming) {
+        broadcast(msg)
+    }
+
     /// Atomically consumes `connectContinuation` — ensures only the first
     /// caller (whether the CONNACK delegate, the immediate-false return in
     /// `connect()`, or an unexpected mid-handshake `mqttDidDisconnect`) gets
