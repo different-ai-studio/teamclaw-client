@@ -5,6 +5,7 @@ public struct MembersTab: View {
     let pairing: PairingManager
     let mqtt: MQTTService
     let sessionViewModel: SessionListViewModel
+    let teamclawService: TeamclawService?
     let activeTeam: TeamSummary?
     let store: ActorStore
     let connectedAgentsStore: ConnectedAgentsStore?
@@ -16,6 +17,7 @@ public struct MembersTab: View {
     public init(pairing: PairingManager,
                 mqtt: MQTTService,
                 sessionViewModel: SessionListViewModel,
+                teamclawService: TeamclawService?,
                 activeTeam: TeamSummary?,
                 store: ActorStore,
                 connectedAgentsStore: ConnectedAgentsStore? = nil,
@@ -23,6 +25,7 @@ public struct MembersTab: View {
         self.pairing = pairing
         self.mqtt = mqtt
         self.sessionViewModel = sessionViewModel
+        self.teamclawService = teamclawService
         self.activeTeam = activeTeam
         self.store = store
         self.connectedAgentsStore = connectedAgentsStore
@@ -35,7 +38,8 @@ public struct MembersTab: View {
                 store: store,
                 pairing: pairing,
                 mqtt: mqtt,
-                sessionViewModel: sessionViewModel
+                sessionViewModel: sessionViewModel,
+                teamclawService: teamclawService
             )
                 .navigationTitle("Actors")
                 .navigationBarTitleDisplayMode(.large)

@@ -13,12 +13,20 @@ public struct MemberListContent: View {
     let pairing: PairingManager
     let mqtt: MQTTService
     let sessionViewModel: SessionListViewModel
+    let teamclawService: TeamclawService?
 
-    public init(store: ActorStore, pairing: PairingManager, mqtt: MQTTService, sessionViewModel: SessionListViewModel) {
+    public init(
+        store: ActorStore,
+        pairing: PairingManager,
+        mqtt: MQTTService,
+        sessionViewModel: SessionListViewModel,
+        teamclawService: TeamclawService?
+    ) {
         self.store = store
         self.pairing = pairing
         self.mqtt = mqtt
         self.sessionViewModel = sessionViewModel
+        self.teamclawService = teamclawService
     }
 
     private var filtered: [CachedActor] {
@@ -49,7 +57,8 @@ public struct MemberListContent: View {
                                 pairing: pairing,
                                 mqtt: mqtt,
                                 sessionViewModel: sessionViewModel,
-                                store: store
+                                store: store,
+                                teamclawService: teamclawService
                             )
                         } label: {
                             ActorRow(actor: a)
@@ -98,6 +107,7 @@ private struct ActorDetailView: View {
     let mqtt: MQTTService
     let sessionViewModel: SessionListViewModel
     let store: ActorStore
+    let teamclawService: TeamclawService?
     @Environment(\.dismiss) private var dismiss
     @State private var authorizedHumansStore: AgentAuthorizedHumansStore?
     @State private var workspaceStore: WorkspaceStore?
@@ -412,64 +422,27 @@ private struct ActorDetailView: View {
             workspaceErrorMessage = "MQTT is not connected."
             return
         }
+        guard let teamclawService else {
+            workspaceErrorMessage = "TeamclawService unavailable."
+            return
+        }
 
         isAddingWorkspace = true
         workspaceErrorMessage = nil
 
         Task {
-            var envelope = Amux_DeviceCommandEnvelope()
-            envelope.deviceID = daemonDeviceID
-            envelope.peerID = peerID
-            envelope.commandID = UUID().uuidString
-            envelope.timestamp = Int64(Date().timeIntervalSince1970)
-
-            var add = Amux_AddWorkspace()
-            add.path = path
-
-            var cmd = Amux_DeviceCollabCommand()
-            cmd.command = .addWorkspace(add)
-            envelope.command = cmd
-
-            do {
-                let data = try ProtoMQTTCoder.encode(envelope)
-                try await mqtt.publish(topic: MQTTTopics.deviceCollab(teamID: actor.teamId, deviceID: daemonDeviceID), payload: data)
-            } catch {
-                await MainActor.run {
-                    isAddingWorkspace = false
-                    workspaceErrorMessage = "Failed to send: \(error.localizedDescription)"
-                }
-                return
-            }
-
-            let stream = mqtt.messages()
-            let collabTopic = MQTTTopics.deviceCollab(teamID: actor.teamId, deviceID: daemonDeviceID)
-            let deadline = Date().addingTimeInterval(10)
-            for await msg in stream {
-                if Date() > deadline { break }
-                if msg.topic == collabTopic,
-                   let dce = try? ProtoMQTTCoder.decode(Amux_DeviceCollabEvent.self, from: msg.payload),
-                   case .workspaceResult(let result) = dce.event,
-                   result.commandID == envelope.commandID {
-                    await MainActor.run {
-                        isAddingWorkspace = false
-                        if result.success {
-                            newWorkspacePath = ""
-                            workspaceErrorMessage = nil
-                            let workspaceStore = self.workspaceStore
-                            Task {
-                                await workspaceStore?.reload(agentID: actor.actorId)
-                            }
-                        } else {
-                            workspaceErrorMessage = result.error
-                        }
-                    }
-                    return
-                }
-            }
-
+            let (ok, err) = await teamclawService.addWorkspaceRpc(path: path)
             await MainActor.run {
                 isAddingWorkspace = false
-                workspaceErrorMessage = "Timed out waiting for workspace response on \(collabTopic)"
+                if ok {
+                    newWorkspacePath = ""
+                    workspaceErrorMessage = nil
+                    let workspaceStore = self.workspaceStore
+                    let actorId = actor.actorId
+                    Task { await workspaceStore?.reload(agentID: actorId) }
+                } else {
+                    workspaceErrorMessage = err.isEmpty ? "Add failed" : err
+                }
             }
         }
     }
@@ -626,7 +599,7 @@ private struct AuthorizedMemberPickerSheet: View {
 
 #else
 struct MemberListContent: View {
-    init(store: ActorStore, pairing: PairingManager, mqtt: MQTTService, sessionViewModel: SessionListViewModel) {}
+    init(store: ActorStore, pairing: PairingManager, mqtt: MQTTService, sessionViewModel: SessionListViewModel, teamclawService: TeamclawService?) {}
     var body: some View { ContentUnavailableView("Actors", systemImage: "person.2") }
 }
 #endif

@@ -60,6 +60,7 @@ public struct RootTabView: View {
                     MembersTab(pairing: pairing,
                                mqtt: mqtt,
                                sessionViewModel: viewModel,
+                               teamclawService: teamclawService,
                                activeTeam: activeTeam,
                                store: actorStore,
                                connectedAgentsStore: connectedAgentsStore,
