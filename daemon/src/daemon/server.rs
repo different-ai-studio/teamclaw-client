@@ -575,7 +575,7 @@ impl DaemonServer {
             Some(Method::AddWorkspace(a)) => self.handle_add_workspace(&request, a).await,
             Some(Method::RemoveWorkspace(r)) => self.handle_remove_workspace(&request, r).await,
             Some(Method::RemoveMember(r)) => self.handle_remove_member(&request, r).await,
-            Some(Method::RuntimeStop(_)) => not_yet_implemented(&request, "runtime_stop"),
+            Some(Method::RuntimeStop(s)) => self.handle_stop_runtime(&request, s).await,
             Some(Method::RuntimeStart(_)) => not_yet_implemented(&request, "runtime_start"),
             None => RpcResponse {
                 request_id: request.request_id.clone(),
@@ -1569,6 +1569,77 @@ impl DaemonServer {
                 error,
             })),
         }
+    }
+
+    async fn handle_stop_runtime(
+        &mut self,
+        request: &crate::proto::teamclaw::RpcRequest,
+        stop: &crate::proto::teamclaw::RuntimeStopRequest,
+    ) -> crate::proto::teamclaw::RpcResponse {
+        use crate::proto::teamclaw::{rpc_response, RpcResponse, RuntimeStopResult};
+
+        let runtime_id = stop.runtime_id.clone();
+        if runtime_id.is_empty() {
+            return reject_stop(request, "runtime_id required");
+        }
+
+        // Reject if runtime is not known.
+        if self.agents.get_handle(&runtime_id).is_none() {
+            return reject_stop(request, &format!("unknown runtime_id: {}", runtime_id));
+        }
+
+        // Terminate via AgentManager (same path as AcpCommand::StopAgent).
+        if self.agents.stop_agent(&runtime_id).await.is_none() {
+            return reject_stop(request, &format!("stop failed for runtime_id: {}", runtime_id));
+        }
+
+        // Update session store to reflect stopped status (mirrors StopAgent side-effect).
+        if let Some(session) = self.sessions.find_by_id_mut(&runtime_id) {
+            session.status = amux::AgentStatus::Stopped as i32;
+            let _ = self.sessions.save(&self.sessions_path);
+        }
+
+        // Publish terminal RuntimeInfo to both retained state topics, then clear.
+        let stopped_info = amux::RuntimeInfo {
+            runtime_id: runtime_id.clone(),
+            state: amux::RuntimeLifecycle::Stopped as i32,
+            ..Default::default()
+        };
+        let publisher = Publisher::new(&self.mqtt);
+        let _ = publisher.publish_agent_state(&runtime_id, &stopped_info).await;
+        let _ = publisher.clear_agent_state(&runtime_id).await;
+
+        RpcResponse {
+            request_id: request.request_id.clone(),
+            success: true,
+            error: String::new(),
+            requester_client_id: request.requester_client_id.clone(),
+            requester_actor_id: request.requester_actor_id.clone(),
+            requester_device_id: request.requester_device_id.clone(),
+            result: Some(rpc_response::Result::RuntimeStopResult(RuntimeStopResult {
+                accepted: true,
+                rejected_reason: String::new(),
+            })),
+        }
+    }
+}
+
+fn reject_stop(
+    request: &crate::proto::teamclaw::RpcRequest,
+    reason: &str,
+) -> crate::proto::teamclaw::RpcResponse {
+    use crate::proto::teamclaw::{rpc_response, RpcResponse, RuntimeStopResult};
+    RpcResponse {
+        request_id: request.request_id.clone(),
+        success: false,
+        error: reason.to_string(),
+        requester_client_id: request.requester_client_id.clone(),
+        requester_actor_id: request.requester_actor_id.clone(),
+        requester_device_id: request.requester_device_id.clone(),
+        result: Some(rpc_response::Result::RuntimeStopResult(RuntimeStopResult {
+            accepted: false,
+            rejected_reason: reason.to_string(),
+        })),
     }
 }
 
