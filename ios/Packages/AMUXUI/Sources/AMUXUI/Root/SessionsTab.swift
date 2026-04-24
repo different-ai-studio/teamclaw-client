@@ -92,13 +92,13 @@ public struct SessionsTab: View {
                         connectedAgentsStore: connectedAgentsStore
                     )
                 } else {
-                    AgentDestinationView(
-                        agentId: id,
+                    RuntimeDestinationView(
+                        runtimeId: id,
                         mqtt: mqtt,
                         pairing: pairing,
                         navigationPath: $navigationPath,
                         connectedAgentsStore: connectedAgentsStore,
-                        allAgentIds: viewModel.agents.map(\.agentId)
+                        allAgentIds: viewModel.runtimes.map(\.runtimeId)
                     )
                 }
             }
@@ -131,8 +131,8 @@ public struct SessionsTab: View {
     }
 }
 
-private struct AgentDestinationView: View {
-    let agentId: String
+private struct RuntimeDestinationView: View {
+    let runtimeId: String
     let mqtt: MQTTService
     let pairing: PairingManager
     @Binding var navigationPath: [String]
@@ -140,13 +140,13 @@ private struct AgentDestinationView: View {
     let allAgentIds: [String]
 
     @Environment(\.modelContext) private var modelContext
-    @State private var agent: Agent?
+    @State private var runtime: Runtime?
     @State private var session: Session?
 
     var body: some View {
         Group {
             if let session {
-                AgentDetailView(
+                RuntimeDetailView(
                     session: session,
                     mqtt: mqtt,
                     deviceId: pairing.deviceId,
@@ -156,9 +156,9 @@ private struct AgentDestinationView: View {
                     connectedAgentsStore: connectedAgentsStore
                 )
                 .id("agent-session:\(session.sessionId)")
-            } else if let agent {
-                AgentDetailView(
-                    agent: agent,
+            } else if let runtime {
+                RuntimeDetailView(
+                    runtime: runtime,
                     mqtt: mqtt,
                     deviceId: pairing.deviceId,
                     peerId: "ios-\(pairing.authToken.prefix(6))",
@@ -166,25 +166,25 @@ private struct AgentDestinationView: View {
                     navigationPath: $navigationPath,
                     connectedAgentsStore: connectedAgentsStore
                 )
-                .id("agent:\(agent.agentId)")
+                .id("agent:\(runtime.runtimeId)")
             } else {
                 Text("Agent not found")
             }
         }
-        .task(id: agentId) {
+        .task(id: runtimeId) {
             await loadDestination()
         }
     }
 
     @MainActor
     private func loadDestination() {
-        let agentDescriptor = FetchDescriptor<Agent>(
-            predicate: #Predicate { $0.agentId == agentId }
+        let runtimeDescriptor = FetchDescriptor<Runtime>(
+            predicate: #Predicate { $0.runtimeId == runtimeId }
         )
-        agent = (try? modelContext.fetch(agentDescriptor))?.first
+        runtime = (try? modelContext.fetch(runtimeDescriptor))?.first
 
         let sessionDescriptor = FetchDescriptor<Session>()
-        session = (try? modelContext.fetch(sessionDescriptor))?.first(where: { $0.primaryAgentId == agentId })
+        session = (try? modelContext.fetch(sessionDescriptor))?.first(where: { $0.primaryAgentId == runtimeId })
     }
 }
 
@@ -214,12 +214,12 @@ private struct CollabSessionDestinationView: View {
                     )
                     .id("session:\(session.sessionId)")
                 } else {
-                    AgentDetailView(session: session, mqtt: mqtt,
-                                    deviceId: pairing.deviceId,
-                                    peerId: "ios-\(pairing.authToken.prefix(6))",
-                                    teamclawService: teamclawService,
-                                    navigationPath: $navigationPath,
-                                    connectedAgentsStore: connectedAgentsStore)
+                    RuntimeDetailView(session: session, mqtt: mqtt,
+                                      deviceId: pairing.deviceId,
+                                      peerId: "ios-\(pairing.authToken.prefix(6))",
+                                      teamclawService: teamclawService,
+                                      navigationPath: $navigationPath,
+                                      connectedAgentsStore: connectedAgentsStore)
                     .id("collab-agent:\(session.sessionId)")
                 }
             } else {

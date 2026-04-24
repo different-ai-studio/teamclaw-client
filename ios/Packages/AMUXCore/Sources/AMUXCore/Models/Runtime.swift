@@ -2,8 +2,8 @@ import Foundation
 import SwiftData
 
 @Model
-public final class Agent {
-    @Attribute(.unique) public var agentId: String
+public final class Runtime {
+    @Attribute(.unique) public var runtimeId: String
     public var agentType: Int
     public var worktree: String
     public var branch: String
@@ -23,10 +23,10 @@ public final class Agent {
     public var availableModelsJSON: String = ""
     public var currentModel: String?
 
-    public init(agentId: String, agentType: Int = 1, worktree: String = "", branch: String = "",
+    public init(runtimeId: String, agentType: Int = 1, worktree: String = "", branch: String = "",
                 status: Int = 1, startedAt: Date = .now, currentPrompt: String = "",
                 workspaceId: String = "") {
-        self.agentId = agentId
+        self.runtimeId = runtimeId
         self.agentType = agentType
         self.worktree = worktree
         self.branch = branch
@@ -64,7 +64,7 @@ public final class Agent {
     }
 }
 
-public extension Agent {
+public extension Runtime {
     var availableModels: [AvailableModel] {
         guard !availableModelsJSON.isEmpty,
               let data = availableModelsJSON.data(using: .utf8),

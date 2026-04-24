@@ -4,11 +4,11 @@ import UniformTypeIdentifiers
 import AMUXCore
 import AMUXSharedUI
 
-// MARK: - AgentDetailView (NetNewsWire Article-style)
+// MARK: - RuntimeDetailView (NetNewsWire Article-style)
 
-public struct AgentDetailView: View {
+public struct RuntimeDetailView: View {
     @Environment(\.modelContext) private var modelContext
-    @State private var viewModel: AgentDetailViewModel
+    @State private var viewModel: RuntimeDetailViewModel
     @State private var promptText = ""
     @State private var showReplySheet = false
     @State private var showSettings = false
@@ -26,11 +26,11 @@ public struct AgentDetailView: View {
     @Binding var navigationPath: [String]
     let connectedAgentsStore: ConnectedAgentsStore?
 
-    public init(agent: Agent, mqtt: MQTTService, deviceId: String, peerId: String,
+    public init(runtime: Runtime, mqtt: MQTTService, deviceId: String, peerId: String,
                 allAgentIds: [String], navigationPath: Binding<[String]>,
                 connectedAgentsStore: ConnectedAgentsStore? = nil) {
-        _viewModel = State(initialValue: AgentDetailViewModel(
-            agent: agent, mqtt: mqtt, deviceId: deviceId, peerId: peerId))
+        _viewModel = State(initialValue: RuntimeDetailViewModel(
+            runtime: runtime, mqtt: mqtt, deviceId: deviceId, peerId: peerId))
         self.allAgentIds = allAgentIds
         self._navigationPath = navigationPath
         self.connectedAgentsStore = connectedAgentsStore
@@ -39,15 +39,15 @@ public struct AgentDetailView: View {
     public init(session: Session, mqtt: MQTTService, deviceId: String, peerId: String,
                 teamclawService: TeamclawService?, navigationPath: Binding<[String]>,
                 connectedAgentsStore: ConnectedAgentsStore? = nil) {
-        _viewModel = State(initialValue: AgentDetailViewModel(
-            agent: nil, mqtt: mqtt, teamID: session.teamId, deviceId: deviceId, peerId: peerId, session: session, teamclawService: teamclawService))
+        _viewModel = State(initialValue: RuntimeDetailViewModel(
+            runtime: nil, mqtt: mqtt, teamID: session.teamId, deviceId: deviceId, peerId: peerId, session: session, teamclawService: teamclawService))
         self.allAgentIds = []
         self._navigationPath = navigationPath
         self.connectedAgentsStore = connectedAgentsStore
     }
 
     private var agentLogoName: String {
-        switch viewModel.agent?.agentType {
+        switch viewModel.runtime?.agentType {
         case 1: "ClaudeLogo"
         case 2: "OpenCodeLogo"
         case 3: "CodexLogo"
@@ -61,8 +61,8 @@ public struct AgentDetailView: View {
     }
 
     private var currentIndex: Int? {
-        guard let agentId = viewModel.agent?.agentId else { return nil }
-        return allAgentIds.firstIndex(of: agentId)
+        guard let runtimeId = viewModel.runtime?.runtimeId else { return nil }
+        return allAgentIds.firstIndex(of: runtimeId)
     }
     private var canGoUp: Bool { (currentIndex ?? 0) > 0 }
     private var canGoDown: Bool { (currentIndex ?? allAgentIds.count) < allAgentIds.count - 1 }
@@ -110,7 +110,7 @@ public struct AgentDetailView: View {
                             case .single(let event):
                                 EventBubbleView(
                                     event: event,
-                                    agent: viewModel.agent,
+                                    runtime: viewModel.runtime,
                                     onGrant: { id in Task { try? await viewModel.grantPermission(requestId: id) } },
                                     onDeny: { id in Task { try? await viewModel.denyPermission(requestId: id) } }
                                 ).id(event.id)
@@ -251,7 +251,7 @@ public struct AgentDetailView: View {
 
                     // Right group: agent avatar + action
                     HStack(spacing: 14) {
-                        if viewModel.hasAgent {
+                        if viewModel.hasRuntime {
                             Button { showSettings = true } label: {
                                 Image(agentLogoName, bundle: .module)
                                     .resizable()
@@ -278,8 +278,8 @@ public struct AgentDetailView: View {
             ReplySheet(text: $promptText,
                        isDisabled: !viewModel.isIdle,
                        isStreaming: viewModel.isStreaming,
-                       hasAgent: viewModel.hasAgent,
-                       agent: viewModel.agent,
+                       hasRuntime: viewModel.hasRuntime,
+                       runtime: viewModel.runtime,
                        availableCommands: viewModel.availableCommands,
                        onSend: { modelId in
                            let t = promptText; promptText = ""
@@ -289,9 +289,9 @@ public struct AgentDetailView: View {
                 .presentationDetents([.medium])
         }
         .sheet(isPresented: $showSettings) {
-            if let agent = viewModel.agent {
-                AgentSettingsSheet(
-                    agent: agent,
+            if let runtime = viewModel.runtime {
+                RuntimeSettingsSheet(
+                    runtime: runtime,
                     onSync: { Task { try? await viewModel.requestIncrementalSync(modelContext: modelContext) } },
                     isSyncing: viewModel.isSyncing
                 )
@@ -304,13 +304,13 @@ public struct AgentDetailView: View {
             // collaborators (humans + any agents they have access to).
             let accessible: Set<String> = {
                 var s = Set(connectedAgentsStore?.agents.map(\.id) ?? [])
-                if let current = viewModel.agent?.agentId { s.insert(current) }
+                if let current = viewModel.runtime?.runtimeId { s.insert(current) }
                 return s
             }()
             MemberListView(
                 selected: Set(collaborators.map(\.actorId)),
                 accessibleAgentIDs: accessible,
-                currentPrimaryAgentID: viewModel.agent?.agentId
+                currentPrimaryAgentID: viewModel.runtime?.runtimeId
             ) { selected in
                 collaborators = selected
                 if !selected.isEmpty {
@@ -323,16 +323,16 @@ public struct AgentDetailView: View {
     }
 
     private func forkToCollab(members: [CachedActor]) {
-        guard let agent = viewModel.agent else { return }
+        guard let runtime = viewModel.runtime else { return }
         // Use last output summary or session title as handoff context
-        let summary = agent.lastOutputSummary.isEmpty
-            ? "Forked from agent session: \(agent.sessionTitle.isEmpty ? agent.agentId : agent.sessionTitle)"
-            : agent.lastOutputSummary
+        let summary = runtime.lastOutputSummary.isEmpty
+            ? "Forked from agent session: \(runtime.sessionTitle.isEmpty ? runtime.runtimeId : runtime.sessionTitle)"
+            : runtime.lastOutputSummary
 
         var createReq = Teamclaw_CreateSessionRequest()
         createReq.sessionType = .collab
         createReq.teamID = viewModel.deviceIdRef  // v1: use deviceId as teamId
-        createReq.title = agent.sessionTitle.isEmpty ? "Collab: \(agent.worktree.split(separator: "/").last.map(String.init) ?? agent.agentId)" : "Collab: \(agent.sessionTitle)"
+        createReq.title = runtime.sessionTitle.isEmpty ? "Collab: \(runtime.worktree.split(separator: "/").last.map(String.init) ?? runtime.runtimeId)" : "Collab: \(runtime.sessionTitle)"
         createReq.summary = summary
         createReq.inviteActorIds = members.map(\.actorId)
 
@@ -358,8 +358,8 @@ private struct ReplySheet: View {
     @Binding var text: String
     let isDisabled: Bool
     let isStreaming: Bool
-    let hasAgent: Bool
-    let agent: Agent?
+    let hasRuntime: Bool
+    let runtime: Runtime?
     let availableCommands: [SlashCommand]
     let onSend: (String?) -> Void
     let onCancel: () -> Void
@@ -372,7 +372,7 @@ private struct ReplySheet: View {
 
     private var resolvedModelId: String? {
         if let selectedModelId, !selectedModelId.isEmpty { return selectedModelId }
-        if let current = agent?.currentModel, !current.isEmpty { return current }
+        if let current = runtime?.currentModel, !current.isEmpty { return current }
         return nil
     }
 
@@ -531,8 +531,8 @@ private struct ReplySheet: View {
 
                     Button { showFilePicker = true } label: { Image(systemName: "paperclip").font(.title3) }
 
-                    if hasAgent, let agent, !agent.availableModels.isEmpty {
-                        let models = agent.availableModels
+                    if hasRuntime, let runtime, !runtime.availableModels.isEmpty {
+                        let models = runtime.availableModels
                         let pickerLabel = models.first(where: { $0.id == resolvedModelId })?.displayName ?? "Default"
                         Menu {
                             ForEach(models) { model in
@@ -606,10 +606,10 @@ private struct SendButtonGlassModifier: ViewModifier {
     }
 }
 
-// MARK: - AgentSettingsSheet
+// MARK: - RuntimeSettingsSheet
 
-private struct AgentSettingsSheet: View {
-    let agent: Agent
+private struct RuntimeSettingsSheet: View {
+    let runtime: Runtime
     let onSync: () -> Void
     var isSyncing: Bool
     @Environment(\.dismiss) private var dismiss
@@ -618,14 +618,14 @@ private struct AgentSettingsSheet: View {
         NavigationStack {
             List {
                 Section("Agent") {
-                    LabeledContent("ID", value: agent.agentId)
-                    LabeledContent("Type", value: agent.agentTypeLabel)
-                    HStack { Text("Status"); Spacer(); StatusBadge(status: agent.status) }
-                    LabeledContent("Worktree", value: agent.worktree)
+                    LabeledContent("ID", value: runtime.runtimeId)
+                    LabeledContent("Type", value: runtime.agentTypeLabel)
+                    HStack { Text("Status"); Spacer(); StatusBadge(status: runtime.status) }
+                    LabeledContent("Worktree", value: runtime.worktree)
                 }
-                if !agent.branch.isEmpty {
+                if !runtime.branch.isEmpty {
                     Section("Git") {
-                        LabeledContent("Branch", value: agent.branch)
+                        LabeledContent("Branch", value: runtime.branch)
                     }
                 }
                 Section {

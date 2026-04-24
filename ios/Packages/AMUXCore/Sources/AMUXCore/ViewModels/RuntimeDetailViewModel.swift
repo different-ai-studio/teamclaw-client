@@ -16,9 +16,9 @@ public struct SlashCommand: Identifiable, Equatable, Hashable, Sendable {
 }
 
 @Observable @MainActor
-public final class AgentDetailViewModel {
+public final class RuntimeDetailViewModel {
     public var events: [AgentEvent] = []
-    /// Slash commands announced by the attached agent via
+    /// Slash commands announced by the attached runtime via
     /// ACP `AvailableCommandsUpdate`. Replaced wholesale on each push.
     /// In-memory only — not persisted to SwiftData.
     public var availableCommands: [SlashCommand] = []
@@ -33,7 +33,7 @@ public final class AgentDetailViewModel {
     /// so the synthesized event in stop()/idle flush carries the model too.
     private var streamingModel: String?
     public var isDaemonOnline = true
-    public var agent: Agent?
+    public var runtime: Runtime?
     public let session: Session?
     private let mqtt: MQTTService
     private let deviceId: String
@@ -48,49 +48,49 @@ public final class AgentDetailViewModel {
     public var peerIdRef: String { peerId }
 
     public var sessionTitle: String {
-        if let agent, !agent.sessionTitle.isEmpty { return agent.sessionTitle }
-        if let agent {
-            let wt = agent.worktree
+        if let runtime, !runtime.sessionTitle.isEmpty { return runtime.sessionTitle }
+        if let runtime {
+            let wt = runtime.worktree
             if !wt.isEmpty {
                 let last = wt.split(separator: "/").last.map(String.init) ?? wt
                 if last != "." { return last }
             }
-            return agent.agentId
+            return runtime.runtimeId
         }
         if let session, !session.title.isEmpty { return session.title }
         return "Session"
     }
 
-    public var isActive: Bool { agent?.isActive ?? false }
-    public var isIdle: Bool { agent?.isIdle ?? true }
+    public var isActive: Bool { runtime?.isActive ?? false }
+    public var isIdle: Bool { runtime?.isIdle ?? true }
     public var participantCount: Int { session?.participantCount ?? 0 }
-    public var hasAgent: Bool { agent != nil }
+    public var hasRuntime: Bool { runtime != nil }
 
-    public init(agent: Agent?, mqtt: MQTTService, teamID: String = "", deviceId: String, peerId: String, session: Session? = nil, teamclawService: TeamclawService? = nil) {
-        self.agent = agent; self.mqtt = mqtt; self.deviceId = deviceId; self.teamID = teamID; self.peerId = peerId
+    public init(runtime: Runtime?, mqtt: MQTTService, teamID: String = "", deviceId: String, peerId: String, session: Session? = nil, teamclawService: TeamclawService? = nil) {
+        self.runtime = runtime; self.mqtt = mqtt; self.deviceId = deviceId; self.teamID = teamID; self.peerId = peerId
         self.session = session; self.teamclawService = teamclawService
     }
 
-    private func resolveAgent(modelContext: ModelContext) -> Agent? {
-        if let agent {
-            return agent
+    private func resolveRuntime(modelContext: ModelContext) -> Runtime? {
+        if let runtime {
+            return runtime
         }
         guard let primaryAgentId = session?.primaryAgentId, !primaryAgentId.isEmpty else {
             return nil
         }
-        let descriptor = FetchDescriptor<Agent>(
-            predicate: #Predicate { $0.agentId == primaryAgentId }
+        let descriptor = FetchDescriptor<Runtime>(
+            predicate: #Predicate { $0.runtimeId == primaryAgentId }
         )
         let resolved = (try? modelContext.fetch(descriptor))?.first
         if let resolved {
-            agent = resolved
+            runtime = resolved
         } else if let session {
-            let placeholder = Agent(agentId: primaryAgentId, status: 1)
+            let placeholder = Runtime(runtimeId: primaryAgentId, status: 1)
             placeholder.sessionTitle = session.title
             placeholder.currentPrompt = session.summary
-            agent = placeholder
+            runtime = placeholder
         }
-        return agent
+        return runtime
     }
 
     /// Rebuilds `groupedEvents` from `events`. Call after any mutation that
@@ -213,27 +213,27 @@ public final class AgentDetailViewModel {
         task?.cancel()
         startModelContext = modelContext
 
-        guard let agent = resolveAgent(modelContext: modelContext) else {
-            // No agent — collab-only session, nothing to subscribe to yet
+        guard let runtime = resolveRuntime(modelContext: modelContext) else {
+            // No runtime — collab-only session, nothing to subscribe to yet
             return
         }
 
         // Clear unread badge when user opens the session
-        agent.hasUnread = false
+        runtime.hasUnread = false
         try? modelContext.save()
 
         // Load cached events immediately (works offline)
-        let agentId = agent.agentId
+        let runtimeId = runtime.runtimeId
         let descriptor = FetchDescriptor<AgentEvent>(
-            predicate: #Predicate { $0.agentId == agentId },
+            predicate: #Predicate { $0.agentId == runtimeId },
             sortBy: [SortDescriptor(\.sequence)]
         )
         events = (try? modelContext.fetch(descriptor)) ?? []
         rebuildIndexes()
 
         // Insert initial prompt as first user bubble if not already present
-        let initialPrompt = if !agent.currentPrompt.isEmpty {
-            agent.currentPrompt
+        let initialPrompt = if !runtime.currentPrompt.isEmpty {
+            runtime.currentPrompt
         } else if let session, !session.summary.isEmpty {
             session.summary
         } else {
@@ -241,7 +241,7 @@ public final class AgentDetailViewModel {
         }
 
         if !initialPrompt.isEmpty && !events.contains(where: { $0.eventType == "user_prompt" }) {
-            let promptEvent = AgentEvent(agentId: agentId, sequence: 0, eventType: "user_prompt")
+            let promptEvent = AgentEvent(agentId: runtimeId, sequence: 0, eventType: "user_prompt")
             promptEvent.text = initialPrompt
             modelContext.insert(promptEvent)
             events.insert(promptEvent, at: 0)
@@ -259,14 +259,14 @@ public final class AgentDetailViewModel {
             let lastOutput = events[idx]
             streamingText = lastOutput.text ?? ""
             streamingModel = lastOutput.model
-            isStreaming = agent.isActive
+            isStreaming = runtime.isActive
             modelContext.delete(lastOutput)
             removeEvent(at: idx)
         }
 
         recomputeGroups()
 
-        let eventsTopic = MQTTTopics.runtimeEvents(teamID: teamID, deviceID: deviceId, runtimeID: agentId)
+        let eventsTopic = MQTTTopics.runtimeEvents(teamID: teamID, deviceID: deviceId, runtimeID: runtimeId)
         task = Task {
             // Outer loop: each iteration represents a fresh MQTT connection lifecycle.
             // When the inner stream finishes (e.g. after disconnect clears continuations),
@@ -281,7 +281,7 @@ public final class AgentDetailViewModel {
 
                 let stream = mqtt.messages()
                 try? await mqtt.subscribe(eventsTopic)
-                print("[AgentDetailVM] subscribed to \(eventsTopic)")
+                print("[RuntimeDetailVM] subscribed to \(eventsTopic)")
 
                 // Pull any events we missed while disconnected (no-op on first
                 // connect if local cache is empty and daemon has nothing newer).
@@ -294,7 +294,7 @@ public final class AgentDetailViewModel {
                 }
                 // Stream finished — connection likely dropped. Loop and resubscribe.
                 if Task.isCancelled { return }
-                print("[AgentDetailVM] stream ended, waiting to resubscribe…")
+                print("[RuntimeDetailVM] stream ended, waiting to resubscribe…")
             }
         }
     }
@@ -304,9 +304,9 @@ public final class AgentDetailViewModel {
 
         // Flush any in-progress streaming text to a persisted event
         // so it's visible when the user returns
-        if isStreaming, !streamingText.isEmpty, let agent, let ctx = startModelContext {
+        if isStreaming, !streamingText.isEmpty, let runtime, let ctx = startModelContext {
             let seq = (events.last?.sequence ?? 0) + 1
-            let event = AgentEvent(agentId: agent.agentId, sequence: seq, eventType: "output")
+            let event = AgentEvent(agentId: runtime.runtimeId, sequence: seq, eventType: "output")
             event.text = streamingText
             event.isComplete = false
             event.model = streamingModel
@@ -356,7 +356,7 @@ public final class AgentDetailViewModel {
                     if let modelStamp { events[idx].model = modelStamp }
                     lastIncompleteOutputIndex = nil
                 } else {
-                    let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "output")
+                    let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "output")
                     event.text = o.text; event.isComplete = true
                     event.model = modelStamp
                     modelContext.insert(event); appendEvent(event)
@@ -384,14 +384,14 @@ public final class AgentDetailViewModel {
                 last.text = (last.text ?? "") + t.text
                 if let modelStamp { last.model = modelStamp }
             } else {
-                let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "thinking")
+                let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "thinking")
                 event.text = t.text
                 event.model = modelStamp
                 modelContext.insert(event); appendEvent(event)
             }
             dirty = true
         case .toolUse(let tu):
-            let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "tool_use")
+            let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "tool_use")
             event.toolName = tu.toolName; event.toolId = tu.toolID; event.text = tu.description_p
             modelContext.insert(event); appendEvent(event)
             dirty = true
@@ -400,17 +400,17 @@ public final class AgentDetailViewModel {
                 events[idx].success = tr.success
                 events[idx].isComplete = true
             } else {
-                let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "tool_result")
+                let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "tool_result")
                 event.toolId = tr.toolID; event.success = tr.success; event.text = tr.summary
                 modelContext.insert(event); appendEvent(event)
             }
             dirty = true
         case .error(let e):
-            let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "error")
+            let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "error")
             event.text = e.message; modelContext.insert(event); appendEvent(event)
             dirty = true
         case .permissionRequest(let pr):
-            let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "permission_request")
+            let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "permission_request")
             event.toolName = pr.toolName; event.toolId = pr.requestID; event.text = pr.description_p
             modelContext.insert(event); appendEvent(event)
             dirty = true
@@ -427,17 +427,17 @@ public final class AgentDetailViewModel {
             if let idx = todoUpdateIndex, idx < events.count, events[idx].eventType == "todo_update" {
                 events[idx].text = text
             } else {
-                let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "todo_update")
+                let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "todo_update")
                 event.text = text
                 modelContext.insert(event); appendEvent(event)
             }
             dirty = true
         case .statusChange(let sc):
-            agent?.status = Int(sc.newStatus.rawValue)
+            runtime?.status = Int(sc.newStatus.rawValue)
             dirty = true
             if sc.newStatus == .idle {
                 if isStreaming && !streamingText.isEmpty {
-                    let event = AgentEvent(agentId: agent!.agentId, sequence: sequence, eventType: "output")
+                    let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "output")
                     event.text = streamingText; event.isComplete = true
                     event.model = streamingModel
                     modelContext.insert(event); appendEvent(event)
@@ -479,10 +479,10 @@ public final class AgentDetailViewModel {
     private func handleCollabEvent(_ collab: Amux_CollabEvent, sequence: Int) {
         switch collab.event {
         case .promptAccepted:
-            // Confirmation: set agent to active (triggers typing indicator)
-            agent?.status = Int(Amux_AgentStatus.active.rawValue)
+            // Confirmation: set runtime to active (triggers typing indicator)
+            runtime?.status = Int(Amux_AgentStatus.active.rawValue)
         case .promptRejected(let pr):
-            let event = AgentEvent(agentId: agent?.agentId ?? "", sequence: sequence, eventType: "error")
+            let event = AgentEvent(agentId: runtime?.runtimeId ?? "", sequence: sequence, eventType: "error")
             event.text = "Rejected: \(pr.reason)"
             appendEvent(event)
             recomputeGroups()
@@ -547,14 +547,14 @@ public final class AgentDetailViewModel {
     /// Also clears any stale streaming UI state: if the app was backgrounded
     /// mid-stream and missed the `isComplete=true` or `status_change=idle`
     /// event, `isStreaming` could be stuck showing a typing indicator. The
-    /// history batch will restore the correct state (and if the agent is
+    /// history batch will restore the correct state (and if the runtime is
     /// actually still streaming, incoming deltas will flip `isStreaming` back).
     public func requestIncrementalSync(modelContext: ModelContext) async throws {
-        guard agent != nil else { return }
+        guard runtime != nil else { return }
         self.syncModelContext = modelContext
         isSyncing = true
         // Clear stale streaming state — will be re-established by the batch
-        // (if agent is idle now) or by fresh deltas (if it's still active).
+        // (if runtime is idle now) or by fresh deltas (if it's still active).
         isStreaming = false
         streamingText = ""
         streamingModel = nil
@@ -571,22 +571,22 @@ public final class AgentDetailViewModel {
     }
 
     private func sendCommand(_ makeCommand: (inout Amux_AcpCommand) -> Void) async throws {
-        guard let agent else { return }
+        guard let runtime else { return }
         var cmd = Amux_RuntimeCommandEnvelope()
-        cmd.runtimeID = agent.agentId; cmd.deviceID = deviceId; cmd.peerID = peerId
+        cmd.runtimeID = runtime.runtimeId; cmd.deviceID = deviceId; cmd.peerID = peerId
         cmd.commandID = UUID().uuidString; cmd.timestamp = Int64(Date().timeIntervalSince1970)
         var acpCmd = Amux_AcpCommand()
         makeCommand(&acpCmd)
         cmd.acpCommand = acpCmd
         let data = try ProtoMQTTCoder.encode(cmd)
-        try await mqtt.publish(topic: MQTTTopics.runtimeCommands(teamID: teamID, deviceID: deviceId, runtimeID: agent.agentId), payload: data)
+        try await mqtt.publish(topic: MQTTTopics.runtimeCommands(teamID: teamID, deviceID: deviceId, runtimeID: runtime.runtimeId), payload: data)
     }
 
     public func sendPrompt(_ text: String, modelId: String? = nil, modelContext: ModelContext? = nil) async throws {
-        if let agent {
-            // Agent session: send ACP command
+        if let runtime {
+            // Runtime session: send ACP command
             let seq = (events.last?.sequence ?? 0) + 1
-            let userEvent = AgentEvent(agentId: agent.agentId, sequence: seq, eventType: "user_prompt")
+            let userEvent = AgentEvent(agentId: runtime.runtimeId, sequence: seq, eventType: "user_prompt")
             userEvent.text = text
             if let ctx = modelContext ?? syncModelContext { ctx.insert(userEvent); try? ctx.save() }
             appendEvent(userEvent)

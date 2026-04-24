@@ -29,12 +29,12 @@ public final class AgentEvent {
 }
 
 public extension AgentEvent {
-    /// Returns the human display name for `model` resolved against the agent's
+    /// Returns the human display name for `model` resolved against the runtime's
     /// available models, or nil if no model is stamped. Falls back to the raw
     /// model id when no display name is registered (e.g. proto-only model id
     /// from a future daemon).
-    func modelDisplayName(via agent: Agent) -> String? {
+    func modelDisplayName(via runtime: Runtime) -> String? {
         guard let modelId = self.model, !modelId.isEmpty else { return nil }
-        return agent.availableModels.first(where: { $0.id == modelId })?.displayName ?? modelId
+        return runtime.availableModels.first(where: { $0.id == modelId })?.displayName ?? modelId
     }
 }

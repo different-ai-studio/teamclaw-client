@@ -2,16 +2,16 @@ import SwiftUI
 import AMUXCore
 
 /// Small pill that shows the current agent status (Starting / Active / Idle /
-/// Error / Stopped). Because Agent is a SwiftData @Model, the pill re-renders
-/// automatically when AgentDetailViewModel writes a new status in response to
+/// Error / Stopped). Because Runtime is a SwiftData @Model, the pill re-renders
+/// automatically when RuntimeDetailViewModel writes a new status in response to
 /// an Amux_AcpStatusChange event.
 public struct AgentStatusPill: View {
-    public let agent: Agent
+    public let runtime: Runtime
 
     @State private var breathe = false
 
-    public init(agent: Agent) {
-        self.agent = agent
+    public init(runtime: Runtime) {
+        self.runtime = runtime
     }
 
     public var body: some View {
@@ -19,15 +19,15 @@ public struct AgentStatusPill: View {
             Circle()
                 .fill(color)
                 .frame(width: 6, height: 6)
-                .opacity(agent.isActive ? (breathe ? 0.35 : 1.0) : 1.0)
+                .opacity(runtime.isActive ? (breathe ? 0.35 : 1.0) : 1.0)
                 .animation(
-                    agent.isActive
+                    runtime.isActive
                         ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
                         : .default,
                     value: breathe
                 )
                 .onAppear { breathe = true }
-            Text(agent.statusLabel)
+            Text(runtime.statusLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -37,7 +37,7 @@ public struct AgentStatusPill: View {
     }
 
     private var color: Color {
-        switch agent.status {
+        switch runtime.status {
         case 1: return .yellow   // Starting
         case 2: return .green    // Active
         case 3: return .secondary // Idle

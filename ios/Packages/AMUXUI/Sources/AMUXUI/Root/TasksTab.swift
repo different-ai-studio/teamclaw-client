@@ -91,7 +91,7 @@ public struct TasksTab: View {
                             if session.primaryAgentId == nil || !pairing.isPaired {
                                 SessionView(session: session, teamclawService: teamclawService)
                             } else {
-                                AgentDetailView(
+                                RuntimeDetailView(
                                     session: session,
                                     mqtt: mqtt,
                                     deviceId: pairing.deviceId,
@@ -104,13 +104,13 @@ public struct TasksTab: View {
                         } else {
                             Text("Session not found")
                         }
-                    } else if let agent = sessionViewModel.agents.first(where: { $0.agentId == id }) {
-                        AgentDetailView(
-                            agent: agent,
+                    } else if let runtime = sessionViewModel.runtimes.first(where: { $0.runtimeId == id }) {
+                        RuntimeDetailView(
+                            runtime: runtime,
                             mqtt: mqtt,
                             deviceId: pairing.deviceId,
                             peerId: "ios-\(pairing.authToken.prefix(6))",
-                            allAgentIds: sessionViewModel.agents.map(\.agentId),
+                            allAgentIds: sessionViewModel.runtimes.map(\.runtimeId),
                             navigationPath: $navigationPath,
                             connectedAgentsStore: connectedAgentsStore
                         )

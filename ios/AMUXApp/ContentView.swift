@@ -79,7 +79,7 @@ struct ContentView: View {
             // clean disconnect callback, so `connectionState` can stay
             // `.connected` on a dead socket ("zombie"). On foreground we
             // force a full reconnect regardless of reported state; the
-            // AgentDetailViewModel loop will resubscribe and trigger an
+            // RuntimeDetailViewModel loop will resubscribe and trigger an
             // incremental history sync once MQTT is back up.
             if phase == .active && pairing.isPaired && onboarding.route == .ready {
                 logger.info("App became active, forcing MQTT reconnect…")

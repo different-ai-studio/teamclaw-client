@@ -34,8 +34,8 @@ public struct SearchTab: View {
         self._sessionsPath = sessionsPath
     }
 
-    private var agentMatches: [Agent] {
-        viewModel.agents.filter {
+    private var runtimeMatches: [Runtime] {
+        viewModel.runtimes.filter {
             SearchMatcher.matchesAny(
                 fields: [$0.sessionTitle, $0.currentPrompt, $0.worktree],
                 query: query
@@ -66,16 +66,16 @@ public struct SearchTab: View {
                         systemImage: "magnifyingglass",
                         description: Text("Search sessions, tasks, and members."))
                 } else {
-                    if !agentMatches.isEmpty {
+                    if !runtimeMatches.isEmpty {
                         Section("Sessions") {
-                            ForEach(agentMatches, id: \.agentId) { agent in
+                            ForEach(runtimeMatches, id: \.runtimeId) { runtime in
                                 Button {
                                     rootSelection = .sessions
-                                    sessionsPath.append(agent.agentId)
+                                    sessionsPath.append(runtime.runtimeId)
                                 } label: {
                                     AgentRowView(
-                                        agent: agent,
-                                        workspaceName: workspaceName(for: agent)
+                                        runtime: runtime,
+                                        workspaceName: workspaceName(for: runtime)
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -106,7 +106,7 @@ public struct SearchTab: View {
                         }
                     }
 
-                    if agentMatches.isEmpty && taskMatches.isEmpty && memberMatches.isEmpty {
+                    if runtimeMatches.isEmpty && taskMatches.isEmpty && memberMatches.isEmpty {
                         ContentUnavailableView.search(text: query)
                     }
                 }
@@ -117,7 +117,7 @@ public struct SearchTab: View {
         }
     }
 
-    private func workspaceName(for agent: Agent) -> String {
-        viewModel.workspaces.first(where: { $0.workspaceId == agent.workspaceId })?.displayName ?? ""
+    private func workspaceName(for runtime: Runtime) -> String {
+        viewModel.workspaces.first(where: { $0.workspaceId == runtime.workspaceId })?.displayName ?? ""
     }
 }

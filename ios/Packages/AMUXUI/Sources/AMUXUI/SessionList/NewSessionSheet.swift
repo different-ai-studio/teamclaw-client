@@ -752,13 +752,13 @@ public struct NewSessionSheet: View {
     private func persistPlaceholderAgent(agentID: String, title: String, prompt: String) {
         guard !agentID.isEmpty else { return }
 
-        let fetch = FetchDescriptor<Agent>(
-            predicate: #Predicate { $0.agentId == agentID }
+        let fetch = FetchDescriptor<Runtime>(
+            predicate: #Predicate { $0.runtimeId == agentID }
         )
 
-        let agent = (try? modelContext.fetch(fetch))?.first ?? {
-            let created = Agent(
-                agentId: agentID,
+        let runtime = (try? modelContext.fetch(fetch))?.first ?? {
+            let created = Runtime(
+                runtimeId: agentID,
                 agentType: Int(selectedAgentType.rawValue),
                 status: 1,
                 startedAt: .now,
@@ -769,18 +769,18 @@ public struct NewSessionSheet: View {
             return created
         }()
 
-        agent.agentType = Int(selectedAgentType.rawValue)
-        agent.status = 1
-        agent.currentPrompt = prompt
+        runtime.agentType = Int(selectedAgentType.rawValue)
+        runtime.status = 1
+        runtime.currentPrompt = prompt
         if let workspaceId = selectedWorkspaceRecord?.id, !workspaceId.isEmpty {
-            agent.workspaceId = workspaceId
+            runtime.workspaceId = workspaceId
         }
-        agent.sessionTitle = title
-        agent.lastEventTime = .now
+        runtime.sessionTitle = title
+        runtime.lastEventTime = .now
         try? modelContext.save()
 
-        viewModel.agents = (try? modelContext.fetch(
-            FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)])
+        viewModel.runtimes = (try? modelContext.fetch(
+            FetchDescriptor<Runtime>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)])
         )) ?? []
     }
 

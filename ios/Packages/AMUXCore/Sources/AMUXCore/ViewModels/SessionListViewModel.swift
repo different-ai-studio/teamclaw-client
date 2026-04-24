@@ -2,22 +2,22 @@ import Foundation
 import Observation
 import SwiftData
 
-// MARK: - AgentGroup
+// MARK: - SessionItem
 
 public enum SessionItem: Identifiable {
-    case agent(Agent)
+    case runtime(Runtime)
     case collab(Session)
 
     public var id: String {
         switch self {
-        case .agent(let a): return a.agentId
+        case .runtime(let r): return r.runtimeId
         case .collab(let c): return "collab:\(c.sessionId)"
         }
     }
 
     public var date: Date {
         switch self {
-        case .agent(let a): return a.lastEventTime ?? a.startedAt
+        case .runtime(let r): return r.lastEventTime ?? r.startedAt
         case .collab(let c): return c.lastMessageAt ?? c.createdAt
         }
     }
@@ -31,7 +31,7 @@ public struct SessionGroup: Identifiable {
 
 @Observable @MainActor
 public final class SessionListViewModel {
-    public var agents: [Agent] = []
+    public var runtimes: [Runtime] = []
     public var workspaces: [Workspace] = []
     public var sessions: [Session] = []
     public var isLoading = true
@@ -46,7 +46,7 @@ public final class SessionListViewModel {
         let ctx = ModelContext(container)
 
         // Load cached data immediately
-        agents = (try? ctx.fetch(FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
+        runtimes = (try? ctx.fetch(FetchDescriptor<Runtime>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
         workspaces = (try? ctx.fetch(FetchDescriptor<Workspace>(sortBy: [SortDescriptor(\.displayName)]))) ?? []
         sessions = (try? ctx.fetch(FetchDescriptor<Session>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
 
@@ -70,8 +70,8 @@ public final class SessionListViewModel {
             // Outer loop: each iteration represents a fresh MQTT connection
             // lifecycle. When the inner stream ends (disconnect clears
             // continuations), loop back, wait for reconnect, and resubscribe
-            // so the broker re-delivers retained agent/workspace lists.
-            // Mirrors the pattern AgentDetailViewModel uses.
+            // so the broker re-delivers retained runtime/workspace lists.
+            // Mirrors the pattern RuntimeDetailViewModel uses.
             while !Task.isCancelled {
                 var waited = 0
                 while mqtt.connectionState != .connected {
@@ -115,16 +115,16 @@ public final class SessionListViewModel {
                 for await msg in stream {
                     guard msg.topic.hasPrefix(runtimeStatePrefix),
                           msg.topic.hasSuffix(runtimeStateSuffix) else { continue }
-                    // Empty retained payload = the daemon cleared this agent's
+                    // Empty retained payload = the daemon cleared this runtime's
                     // slot (session deletion). Drop the local row to match.
                     if msg.payload.isEmpty {
-                        let agentId = String(msg.topic.dropFirst(runtimeStatePrefix.count).dropLast(runtimeStateSuffix.count))
-                        removeAgent(agentId: agentId, modelContext: ctx)
+                        let runtimeId = String(msg.topic.dropFirst(runtimeStatePrefix.count).dropLast(runtimeStateSuffix.count))
+                        removeRuntime(runtimeId: runtimeId, modelContext: ctx)
                         refreshSessions(modelContext: ctx)
                         continue
                     }
                     guard let info = try? ProtoMQTTCoder.decode(Amux_RuntimeInfo.self, from: msg.payload) else { continue }
-                    syncAgent(info, modelContext: ctx)
+                    syncRuntime(info, modelContext: ctx)
                     refreshSessions(modelContext: ctx)
                 }
                 if Task.isCancelled { return }
@@ -135,9 +135,9 @@ public final class SessionListViewModel {
 
     public func stop() { task?.cancel(); task = nil }
 
-    private func syncAgent(_ proto: Amux_RuntimeInfo, modelContext: ModelContext) {
+    private func syncRuntime(_ proto: Amux_RuntimeInfo, modelContext: ModelContext) {
         let id = proto.runtimeID
-        let descriptor = FetchDescriptor<Agent>(predicate: #Predicate { $0.agentId == id })
+        let descriptor = FetchDescriptor<Runtime>(predicate: #Predicate { $0.runtimeId == id })
         if let existing = try? modelContext.fetch(descriptor).first {
             // Mark unread and update timestamp if there's new activity
             if existing.lastOutputSummary != proto.lastOutputSummary
@@ -154,7 +154,7 @@ public final class SessionListViewModel {
             existing.lastOutputSummary = proto.lastOutputSummary
             existing.toolUseCount = Int(proto.toolUseCount)
             // Historical sessions publish an empty available_models list; only
-            // overwrite when the live agent actually provided one so the
+            // overwrite when the live runtime actually provided one so the
             // cached model list from a prior live publish survives.
             if !proto.availableModels.isEmpty {
                 let models = proto.availableModels.map { AvailableModel(id: $0.id, displayName: $0.displayName) }
@@ -165,8 +165,8 @@ public final class SessionListViewModel {
             }
             existing.currentModel = proto.currentModel.isEmpty ? nil : proto.currentModel
         } else {
-            let newAgent = Agent(
-                agentId: proto.runtimeID,
+            let newRuntime = Runtime(
+                runtimeId: proto.runtimeID,
                 agentType: Int(proto.agentType.rawValue),
                 worktree: proto.worktree,
                 branch: proto.branch,
@@ -175,27 +175,27 @@ public final class SessionListViewModel {
                 currentPrompt: proto.currentPrompt,
                 workspaceId: proto.workspaceID
             )
-            newAgent.lastEventTime = .now
-            newAgent.hasUnread = true
+            newRuntime.lastEventTime = .now
+            newRuntime.hasUnread = true
             let models = proto.availableModels.map { AvailableModel(id: $0.id, displayName: $0.displayName) }
             if let json = try? JSONEncoder().encode(models),
                let str = String(data: json, encoding: .utf8) {
-                newAgent.availableModelsJSON = str
+                newRuntime.availableModelsJSON = str
             }
-            newAgent.currentModel = proto.currentModel.isEmpty ? nil : proto.currentModel
-            modelContext.insert(newAgent)
+            newRuntime.currentModel = proto.currentModel.isEmpty ? nil : proto.currentModel
+            modelContext.insert(newRuntime)
         }
         try? modelContext.save()
-        agents = (try? modelContext.fetch(FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
+        runtimes = (try? modelContext.fetch(FetchDescriptor<Runtime>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
     }
 
-    private func removeAgent(agentId: String, modelContext: ModelContext) {
-        let descriptor = FetchDescriptor<Agent>(predicate: #Predicate { $0.agentId == agentId })
+    private func removeRuntime(runtimeId: String, modelContext: ModelContext) {
+        let descriptor = FetchDescriptor<Runtime>(predicate: #Predicate { $0.runtimeId == runtimeId })
         if let existing = try? modelContext.fetch(descriptor).first {
             modelContext.delete(existing)
             try? modelContext.save()
         }
-        agents = (try? modelContext.fetch(FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
+        runtimes = (try? modelContext.fetch(FetchDescriptor<Runtime>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
     }
 
     private func syncWorkspaces(_ infos: [Amux_WorkspaceInfo], modelContext: ModelContext) {
@@ -284,19 +284,19 @@ public final class SessionListViewModel {
         reloadSessions(modelContext: modelContext)
     }
 
-    public var filteredAgents: [Agent] {
-        if searchText.isEmpty { return agents }
+    public var filteredRuntimes: [Runtime] {
+        if searchText.isEmpty { return runtimes }
         let q = searchText.lowercased()
-        return agents.filter {
-            $0.worktree.lowercased().contains(q) || $0.currentPrompt.lowercased().contains(q) || $0.agentId.lowercased().contains(q)
+        return runtimes.filter {
+            $0.worktree.lowercased().contains(q) || $0.currentPrompt.lowercased().contains(q) || $0.runtimeId.lowercased().contains(q)
         }
     }
 
     // MARK: - Time Grouping
 
     public var groupedSessions: [SessionGroup] {
-        // Merge agents and shared sessions into one list
-        var allItems: [SessionItem] = filteredAgents.map { .agent($0) }
+        // Merge runtimes and shared sessions into one list
+        var allItems: [SessionItem] = filteredRuntimes.map { .runtime($0) }
         for session in sessions {
             if searchText.isEmpty || session.title.lowercased().contains(searchText.lowercased()) {
                 allItems.append(.collab(session))

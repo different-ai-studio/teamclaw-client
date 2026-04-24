@@ -67,22 +67,22 @@ struct SessionListContent: View {
     @ViewBuilder
     private func sessionRow(_ item: SessionItem) -> some View {
         switch item {
-        case .agent(let agent):
+        case .runtime(let runtime):
             HStack(spacing: 10) {
                 if isEditing {
-                    Image(systemName: selectedIDs.contains(agent.agentId) ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(selectedIDs.contains(agent.agentId) ? .blue : .secondary)
+                    Image(systemName: selectedIDs.contains(runtime.runtimeId) ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(selectedIDs.contains(runtime.runtimeId) ? .blue : .secondary)
                         .font(.title3)
-                        .onTapGesture { toggleSelection(agent.agentId) }
+                        .onTapGesture { toggleSelection(runtime.runtimeId) }
                 }
-                AgentRowView(agent: agent, workspaceName: workspaceName(for: agent))
+                AgentRowView(runtime: runtime, workspaceName: workspaceName(for: runtime))
             }
             .contentShape(Rectangle())
             .onTapGesture {
                 if isEditing {
-                    toggleSelection(agent.agentId)
+                    toggleSelection(runtime.runtimeId)
                 } else {
-                    navigationPath.append(agent.agentId)
+                    navigationPath.append(runtime.runtimeId)
                 }
             }
             .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
@@ -97,8 +97,8 @@ struct SessionListContent: View {
         }
     }
 
-    private func workspaceName(for agent: Agent) -> String {
-        viewModel.workspaces.first(where: { $0.workspaceId == agent.workspaceId })?.displayName ?? ""
+    private func workspaceName(for runtime: Runtime) -> String {
+        viewModel.workspaces.first(where: { $0.workspaceId == runtime.workspaceId })?.displayName ?? ""
     }
 
     private func toggleSelection(_ id: String) {
@@ -110,33 +110,33 @@ struct SessionListContent: View {
 // MARK: - AgentRowView
 
 struct AgentRowView: View {
-    let agent: Agent
+    let runtime: Runtime
     let workspaceName: String
 
     @State private var breathe = false
 
     private var displayTitle: String {
-        if !agent.sessionTitle.isEmpty { return agent.sessionTitle }
+        if !runtime.sessionTitle.isEmpty { return runtime.sessionTitle }
         return "Untitled Session"
     }
 
-    private var isUnread: Bool { agent.hasUnread }
-    private var isRunning: Bool { agent.status == 2 }
+    private var isUnread: Bool { runtime.hasUnread }
+    private var isRunning: Bool { runtime.status == 2 }
 
     private var avatarInitial: String {
-        let name = agent.worktree.isEmpty ? agent.agentId : agent.worktree
+        let name = runtime.worktree.isEmpty ? runtime.runtimeId : runtime.worktree
         let lastComponent = name.split(separator: "/").last.map(String.init) ?? name
         return String(lastComponent.prefix(1)).uppercased()
     }
 
     private var avatarColor: Color {
         let colors: [Color] = [.blue, .purple, .orange, .green, .pink, .teal, .indigo, .mint]
-        let hash = agent.agentId.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
+        let hash = runtime.runtimeId.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
         return colors[abs(hash) % colors.count]
     }
 
     private var agentLogoName: String {
-        switch agent.agentType {
+        switch runtime.agentType {
         case 1: "ClaudeLogo"
         case 2: "OpenCodeLogo"
         case 3: "CodexLogo"
@@ -187,8 +187,8 @@ struct AgentRowView: View {
                     .fontWeight(.semibold)
                     .lineLimit(1)
 
-                if !agent.currentPrompt.isEmpty {
-                    Text(agent.currentPrompt)
+                if !runtime.currentPrompt.isEmpty {
+                    Text(runtime.currentPrompt)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -208,7 +208,7 @@ struct AgentRowView: View {
 
                     Spacer(minLength: 0)
 
-                    Text(formatTime(agent.lastEventTime ?? agent.startedAt))
+                    Text(formatTime(runtime.lastEventTime ?? runtime.startedAt))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

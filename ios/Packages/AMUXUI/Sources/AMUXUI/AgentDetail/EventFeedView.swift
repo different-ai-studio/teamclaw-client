@@ -6,25 +6,25 @@ import AMUXSharedUI
 
 public struct EventBubbleView: View {
     let event: AgentEvent
-    let agent: Agent?
+    let runtime: Runtime?
     let onGrant: ((String) -> Void)?
     let onDeny: ((String) -> Void)?
 
     @Environment(\.horizontalSizeClass) private var sizeClass
 
-    public init(event: AgentEvent, agent: Agent? = nil, onGrant: ((String) -> Void)? = nil, onDeny: ((String) -> Void)? = nil) {
+    public init(event: AgentEvent, runtime: Runtime? = nil, onGrant: ((String) -> Void)? = nil, onDeny: ((String) -> Void)? = nil) {
         self.event = event
-        self.agent = agent
+        self.runtime = runtime
         self.onGrant = onGrant
         self.onDeny = onDeny
     }
 
     /// Display name for the model that produced this event (assistant reply
-    /// types only). Returns nil for non-stamped events or when no agent is
+    /// types only). Returns nil for non-stamped events or when no runtime is
     /// available to resolve the display name.
     private var modelDisplayName: String? {
-        guard let agent else { return nil }
-        return event.modelDisplayName(via: agent)
+        guard let runtime else { return nil }
+        return event.modelDisplayName(via: runtime)
     }
 
     public var body: some View {

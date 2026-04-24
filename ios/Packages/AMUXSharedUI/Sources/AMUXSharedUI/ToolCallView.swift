@@ -258,7 +258,7 @@ public struct ToolRunSummaryBar: View {
 
 // MARK: - Event Grouping
 
-// GroupedEvent and groupEvents live in AMUXCore so AgentDetailViewModel
+// GroupedEvent and groupEvents live in AMUXCore so RuntimeDetailViewModel
 // can maintain a cached grouping that updates only when events change,
 // avoiding an O(n) regroup on every body recompute (streaming deltas
 // previously forced a regroup on every frame).
