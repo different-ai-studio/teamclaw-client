@@ -1,8 +1,9 @@
 use crate::proto::teamclaw::{self, RpcRequest, RpcResponse};
+use crate::mqtt::Topics;
 use crate::teamclaw::{
     LivePublisher, MessageStore, NotifyPublisher, RpcServer, StoredClaim, StoredMessage,
     StoredParticipant, StoredSession, StoredSubmission, StoredTask, TaskStore,
-    TeamclawSessionStore, TeamclawTopics,
+    TeamclawSessionStore,
 };
 use chrono::Utc;
 use rumqttc::{AsyncClient, QoS};
@@ -14,7 +15,7 @@ use uuid::Uuid;
 const RECENT_EVENT_CACHE_LIMIT: usize = 512;
 
 pub struct SessionManager {
-    topics: TeamclawTopics,
+    topics: Topics,
     client: AsyncClient,
     live_publisher: LivePublisher,
     notify_publisher: NotifyPublisher,
@@ -40,7 +41,7 @@ impl SessionManager {
         actor_id: Option<String>,
         config_dir: PathBuf,
     ) -> crate::error::Result<Self> {
-        let topics = TeamclawTopics::new(team_id, device_id);
+        let topics = Topics::new(team_id, device_id);
         let live_publisher = LivePublisher::new(
             client.clone(),
             team_id.to_string(),

@@ -4,18 +4,18 @@ use rumqttc::{AsyncClient, QoS};
 use uuid::Uuid;
 
 use crate::proto::teamclaw::{LiveEventEnvelope, Participant, SessionMessageEnvelope, TaskEvent};
-use crate::teamclaw::TeamclawTopics;
+use crate::mqtt::Topics;
 
 pub struct LivePublisher {
     client: AsyncClient,
-    topics: TeamclawTopics,
+    topics: Topics,
 }
 
 impl LivePublisher {
     pub fn new(client: AsyncClient, team_id: String, device_id: String) -> Self {
         Self {
             client,
-            topics: TeamclawTopics::new(&team_id, &device_id),
+            topics: Topics::new(&team_id, &device_id),
         }
     }
 

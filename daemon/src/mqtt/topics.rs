@@ -51,4 +51,41 @@ impl Topics {
     pub fn all_agent_commands(&self) -> String {
         format!("{}/agent/+/commands", self.device_base())
     }
+
+    // ─── Teamclaw (absorbed from teamclaw/topics.rs in Phase 1a) ───
+
+    pub fn device_rpc_req(&self) -> String {
+        format!("{}/rpc/req", self.device_base())
+    }
+
+    pub fn device_rpc_res(&self) -> String {
+        format!("{}/rpc/res", self.device_base())
+    }
+
+    pub fn device_notify(&self) -> String {
+        format!("{}/notify", self.device_base())
+    }
+
+    pub fn session_live(&self, session_id: &str) -> String {
+        format!("amux/{}/session/{}/live", self.team_id, session_id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn absorbed_rpc_paths() {
+        let t = Topics::new("team1", "dev-a");
+        assert_eq!(t.device_rpc_req(), "amux/team1/device/dev-a/rpc/req");
+        assert_eq!(t.device_rpc_res(), "amux/team1/device/dev-a/rpc/res");
+    }
+
+    #[test]
+    fn absorbed_notify_and_session_live() {
+        let t = Topics::new("team1", "dev-a");
+        assert_eq!(t.device_notify(), "amux/team1/device/dev-a/notify");
+        assert_eq!(t.session_live("s1"), "amux/team1/session/s1/live");
+    }
 }

@@ -4,7 +4,7 @@ use rumqttc::{AsyncClient, QoS};
 use uuid::Uuid;
 
 use crate::proto::teamclaw::NotifyEnvelope;
-use crate::teamclaw::TeamclawTopics;
+use crate::mqtt::Topics;
 
 pub struct NotifyPublisher {
     client: AsyncClient,
@@ -32,7 +32,7 @@ impl NotifyPublisher {
         }
         .encode_to_vec();
 
-        let topic = TeamclawTopics::new(&self.team_id, target_device_id).device_notify();
+        let topic = Topics::new(&self.team_id, target_device_id).device_notify();
         self.client
             .publish(topic, QoS::AtLeastOnce, false, payload)
             .await?;
