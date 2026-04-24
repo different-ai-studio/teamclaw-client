@@ -92,6 +92,9 @@ impl MqttClient {
             device_name: config.device.name.clone(),
             timestamp: chrono::Utc::now().timestamp(),
         };
+        // Phase 1a: LWT stays on device/{id}/status. /state is dual-published
+        // for normal transitions but NOT LWT-backed in Phase 1-2. Phase 3
+        // retargets LWT to /state when /status is retired.
         let lwt = rumqttc::LastWill::new(
             topics.status(),
             lwt_payload.encode_to_vec(),

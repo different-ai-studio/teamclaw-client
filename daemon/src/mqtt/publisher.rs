@@ -72,4 +72,18 @@ impl<'a> Publisher<'a> {
             .publish(self.client.topics.workspaces(), QoS::AtLeastOnce, true, list.encode_to_vec())
             .await
     }
+
+    /// Publishes DeviceState (online/offline) to BOTH legacy /status and
+    /// new /state retained topics. Used for normal online/offline
+    /// transitions. LWT (crash path) still fires only on /status until
+    /// Phase 3 retargets it.
+    pub async fn publish_device_state(&self, state: &amux::DeviceState) -> Result<(), rumqttc::ClientError> {
+        let payload = state.encode_to_vec();
+        self.client.client
+            .publish(self.client.topics.status(), QoS::AtLeastOnce, true, payload.clone())
+            .await?;
+        self.client.client
+            .publish(self.client.topics.device_state(), QoS::AtLeastOnce, true, payload)
+            .await
+    }
 }

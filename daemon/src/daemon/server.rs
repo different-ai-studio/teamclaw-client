@@ -120,8 +120,6 @@ impl DaemonServer {
         }
 
         // Now connected — publish and subscribe
-        self.mqtt.announce_online(&self.config.device.name).await
-            .map_err(crate::error::AmuxError::Mqtt)?;
         self.mqtt.subscribe_all().await
             .map_err(crate::error::AmuxError::Mqtt)?;
 
@@ -132,6 +130,11 @@ impl DaemonServer {
         self.register_startup_workspace().await;
 
         let publisher = Publisher::new(&self.mqtt);
+        publisher.publish_device_state(&crate::proto::amux::DeviceState {
+            online: true,
+            device_name: self.config.device.name.clone(),
+            timestamp: chrono::Utc::now().timestamp(),
+        }).await.map_err(crate::error::AmuxError::Mqtt)?;
         publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await
             .map_err(crate::error::AmuxError::Mqtt)?;
         publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await
@@ -181,12 +184,16 @@ impl DaemonServer {
                 Ok(Ok(Event::Incoming(Packet::ConnAck(_)))) => {
                     // Reconnected — re-subscribe and re-publish all retained state
                     info!("MQTT reconnected, re-publishing state");
-                    let _ = self.mqtt.announce_online(&self.config.device.name).await;
                     let _ = self.mqtt.subscribe_all().await;
                     if let Some(tc) = &mut self.teamclaw {
                         let _ = tc.subscribe_all().await;
                     }
                     let publisher = Publisher::new(&self.mqtt);
+                    let _ = publisher.publish_device_state(&crate::proto::amux::DeviceState {
+                        online: true,
+                        device_name: self.config.device.name.clone(),
+                        timestamp: chrono::Utc::now().timestamp(),
+                    }).await;
                     let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
                     let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
                     self.publish_all_agent_states().await;
