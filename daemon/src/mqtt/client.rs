@@ -92,11 +92,11 @@ impl MqttClient {
             device_name: config.device.name.clone(),
             timestamp: chrono::Utc::now().timestamp(),
         };
-        // Phase 1a: LWT stays on device/{id}/status. /state is dual-published
-        // for normal transitions but NOT LWT-backed in Phase 1-2. Phase 3
-        // retargets LWT to /state when /status is retired.
+        // Phase 3: LWT now fires on device/{id}/state. Legacy /status topic
+        // has been retired; iOS dual-subscribes during the migration window
+        // and treats offline-on-/state as authoritative (offline-wins merge).
         let lwt = rumqttc::LastWill::new(
-            topics.status(),
+            topics.device_state(),
             lwt_payload.encode_to_vec(),
             QoS::AtLeastOnce,
             true,
@@ -120,7 +120,7 @@ impl MqttClient {
         };
         self.client
             .publish(
-                self.topics.status(),
+                self.topics.device_state(),
                 QoS::AtLeastOnce,
                 true,
                 status.encode_to_vec(),

@@ -35,15 +35,12 @@ impl<'a> Publisher<'a> {
             .await
     }
 
-    /// Publishes DeviceState (online/offline) to BOTH legacy /status and
-    /// new /state retained topics. Used for normal online/offline
-    /// transitions. LWT (crash path) still fires only on /status until
-    /// Phase 3 retargets it.
+    /// Publishes DeviceState (online/offline) to the retained
+    /// device/{id}/state topic. Phase 3 retired the legacy /status topic
+    /// and retargeted LWT here, so this is the single authoritative
+    /// retained channel for daemon presence.
     pub async fn publish_device_state(&self, state: &amux::DeviceState) -> Result<(), rumqttc::ClientError> {
         let payload = state.encode_to_vec();
-        self.client.client
-            .publish(self.client.topics.status(), QoS::AtLeastOnce, true, payload.clone())
-            .await?;
         self.client.client
             .publish(self.client.topics.device_state(), QoS::AtLeastOnce, true, payload)
             .await

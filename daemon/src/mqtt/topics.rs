@@ -16,10 +16,6 @@ impl Topics {
         format!("amux/{}/device/{}", self.team_id, self.device_id)
     }
 
-    pub fn status(&self) -> String {
-        format!("{}/status", self.device_base())
-    }
-
     /// RPC response topic for an arbitrary device (used when replying to a
     /// request whose sender_device_id differs from our own device_id).
     pub fn rpc_res_for(&self, device_id: &str) -> String {
@@ -136,11 +132,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn legacy_paths_still_work() {
-        // Regression — the dual-write window relies on these staying
-        // byte-identical to today's daemon output.
-        let t = Topics::new("team1", "dev-a");
-        assert_eq!(t.status(), "amux/team1/device/dev-a/status");
-    }
 }

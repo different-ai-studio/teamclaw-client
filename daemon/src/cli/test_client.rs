@@ -53,7 +53,7 @@ impl TestClient {
         let device_id = &self.config.device.id;
 
         // Subscribe to all device-level and agent-level topics
-        self.client.subscribe(self.topics.status(), QoS::AtLeastOnce).await?;
+        self.client.subscribe(self.topics.device_state(), QoS::AtLeastOnce).await?;
         // Legacy /peers subscription removed (Phase 3 Task 3); iOS uses
         // FetchPeers RPC + peers.changed notify. Legacy /collab subscription
         // removed in Phase 3; Task 6 will retire
