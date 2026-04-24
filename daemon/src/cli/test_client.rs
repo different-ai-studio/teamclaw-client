@@ -183,7 +183,7 @@ pub async fn run_start_agent(config: DaemonConfig, worktree: &str, prompt: &str)
     // Give connection time to establish
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-    let envelope = amux::CommandEnvelope {
+    let envelope = amux::RuntimeCommandEnvelope {
         runtime_id: String::new(), // daemon will assign
         device_id: tc.config.device.id.clone(),
         peer_id: tc.peer_id.clone(),
@@ -253,7 +253,7 @@ pub async fn run_e2e(config: DaemonConfig, _token: &str, worktree: &str, prompt:
 
     // Phase 2: StartAgent
     println!("\n--- Phase 2: Start Agent ---");
-    let start_cmd = amux::CommandEnvelope {
+    let start_cmd = amux::RuntimeCommandEnvelope {
         runtime_id: String::new(),
         device_id: device_id.clone(),
         peer_id: peer_id.clone(),

@@ -572,7 +572,7 @@ public final class AgentDetailViewModel {
 
     private func sendCommand(_ makeCommand: (inout Amux_AcpCommand) -> Void) async throws {
         guard let agent else { return }
-        var cmd = Amux_CommandEnvelope()
+        var cmd = Amux_RuntimeCommandEnvelope()
         cmd.runtimeID = agent.agentId; cmd.deviceID = deviceId; cmd.peerID = peerId
         cmd.commandID = UUID().uuidString; cmd.timestamp = Int64(Date().timeIntervalSince1970)
         var acpCmd = Amux_AcpCommand()

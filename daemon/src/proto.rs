@@ -26,7 +26,6 @@ impl_encode!(
     amux::RuntimeInfo,
     amux::PeerList,
     amux::MemberList,
-    amux::DeviceCollabEvent,
     amux::WorkspaceList
 );
 
@@ -42,13 +41,7 @@ impl_encode!(
     teamclaw::Notify
 );
 
-impl amux::CommandEnvelope {
-    pub fn decode_from(buf: &[u8]) -> crate::error::Result<Self> {
-        Ok(Self::decode(buf)?)
-    }
-}
-
-impl amux::DeviceCommandEnvelope {
+impl amux::RuntimeCommandEnvelope {
     pub fn decode_from(buf: &[u8]) -> crate::error::Result<Self> {
         Ok(Self::decode(buf)?)
     }

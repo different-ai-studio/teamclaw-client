@@ -129,15 +129,6 @@ message LiveEventEnvelope {
   bytes body = 6;
 }
 
-message NotifyEnvelope {
-  string event_id = 1;
-  string event_type = 2;
-  string target_device_id = 3;
-  string session_id = 4;
-  int64 sent_at = 5;
-  string reason = 6;
-}
-
 // --- RPC ---
 
 message RpcRequest {

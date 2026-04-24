@@ -69,9 +69,9 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
             modelContainer: container
         )
 
-        var notify = Teamclaw_NotifyEnvelope()
+        var notify = Teamclaw_Notify()
         notify.eventType = "membership.refresh"
-        notify.sessionID = "sess-1"
+        notify.refreshHint = "sess-1"
 
         await service.handleIncomingForTesting(
             MQTTIncoming(
@@ -101,9 +101,9 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
             modelContainer: container
         )
 
-        var notify = Teamclaw_NotifyEnvelope()
+        var notify = Teamclaw_Notify()
         notify.eventType = "membership.refresh"
-        notify.sessionID = "sess-background"
+        notify.refreshHint = "sess-background"
 
         await service.handleIncomingForTesting(
             MQTTIncoming(
@@ -138,9 +138,9 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         try await service.beginForegroundSession("sess-foreground")
         XCTAssertEqual(service.fetchRecentMessagesCalls, ["sess-foreground"])
 
-        var notify = Teamclaw_NotifyEnvelope()
+        var notify = Teamclaw_Notify()
         notify.eventType = "membership.refresh"
-        notify.sessionID = "sess-foreground"
+        notify.refreshHint = "sess-foreground"
 
         await service.handleIncomingForTesting(
             MQTTIncoming(

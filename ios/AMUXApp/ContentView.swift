@@ -113,33 +113,12 @@ struct ContentView: View {
                 clientId: clientId, useTLS: pairing.useTLS)
             logger.info("mqtt.connect() returned successfully")
 
-            var cmd = Amux_DeviceCommandEnvelope()
-            cmd.deviceID = pairing.deviceId
-            cmd.peerID = "ios-\(pairing.authToken.prefix(6))"
-            cmd.commandID = UUID().uuidString
-            cmd.timestamp = Int64(Date().timeIntervalSince1970)
-            var announce = Amux_PeerAnnounce()
-            announce.authToken = pairing.authToken
-            var peerInfo = Amux_PeerInfo()
-            peerInfo.peerID = cmd.peerID
-            peerInfo.displayName = UIDevice.current.name
-            peerInfo.deviceType = "ios"
-            peerInfo.connectedAt = cmd.timestamp
-            announce.peer = peerInfo
-            var collabCmd = Amux_DeviceCollabCommand()
-            collabCmd.command = .peerAnnounce(announce)
-            cmd.command = collabCmd
-            let data = try ProtoMQTTCoder.encode(cmd)
-            let activeTeamID = onboarding.currentContext?.team.id ?? ""
-            try await mqtt.publish(
-                topic: MQTTTopics.deviceCollab(teamID: activeTeamID, deviceID: pairing.deviceId),
-                payload: data
-            )
-
-            // Subscribe to device-level collab topic for rejections, peer events, etc.
-            try await mqtt.subscribe(MQTTTopics.deviceCollab(teamID: activeTeamID, deviceID: pairing.deviceId))
-
-            logger.info("MQTT connected, PeerAnnounce sent, collab subscribed")
+            // Legacy PeerAnnounce publish on device/{id}/collab was retired in
+            // Phase 3 — the daemon no longer subscribes to that topic. Broker-
+            // level JWT auth now handles peer authentication; peer presence is
+            // driven by `device/{id}/peers` retained state published by the
+            // daemon.
+            logger.info("MQTT connected")
 
             // Start TeamclawService for work items and collab sessions
             teamclawService.start(

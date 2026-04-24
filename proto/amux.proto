@@ -19,51 +19,23 @@ message Envelope {
   }
 }
 
-// Upstream: clients → daemon (agent-level, sent to agent/{agentId}/commands topic)
-message CommandEnvelope {
-  string runtime_id = 1;
-  string device_id = 2;
-  string peer_id = 3;
-  string command_id = 4;          // For response correlation
-  int64 timestamp = 5;
-  // Supabase `actors.id` of the iOS user sending this command. The daemon
-  // uses it to look up `agent_member_access.permission_level` instead of
-  // the legacy MQTT token-derived role.
-  string sender_actor_id = 6;
-  // Device-scoped reply target. When set, command results should be routed
-  // back to this device's collab topic instead of the daemon's own device
-  // namespace.
-  string reply_to_device_id = 7;
-
-  AcpCommand acp_command = 10;    // Agent command (maps to ACP request)
-}
-
-// New envelope for device/{id}/runtime/{id}/commands (Phase 1+ topic).
-// Structurally identical to CommandEnvelope; exists separately so both old
-// and new topics can coexist during the dual-publish migration window.
-// CommandEnvelope is retired in Phase 5.
+// Upstream: clients → daemon (sent to device/{id}/runtime/{id}/commands topic).
 message RuntimeCommandEnvelope {
   string runtime_id = 1;
   string device_id = 2;
   string peer_id = 3;
   string command_id = 4;
   int64 timestamp = 5;
+  // Supabase `actors.id` of the iOS user sending this command. The daemon
+  // uses it to look up `agent_member_access.permission_level` instead of
+  // the legacy MQTT token-derived role.
   string sender_actor_id = 6;
+  // Device-scoped reply target. When set, command results should be routed
+  // back to this device's reply topic instead of the daemon's own device
+  // namespace.
   string reply_to_device_id = 7;
 
   AcpCommand acp_command = 10;
-}
-
-// Upstream: clients → daemon (device-level, sent to {deviceId}/collab topic)
-message DeviceCommandEnvelope {
-  string device_id = 1;
-  string peer_id = 2;
-  string command_id = 3;
-  int64 timestamp = 4;
-  // Same Supabase actor id as `CommandEnvelope.sender_actor_id`.
-  string sender_actor_id = 5;
-
-  DeviceCollabCommand command = 10;
 }
 
 // ═══════════════════════════════════════════
@@ -220,23 +192,6 @@ message HistoryBatch {
   uint64 next_after_sequence = 4; // Use as after_sequence for next page
 }
 
-// Device-level collab events (flow through {deviceId}/collab topic)
-message DeviceCollabEvent {
-  string device_id = 10;
-  int64 timestamp = 11;
-  oneof event {
-    PeerJoined peer_joined = 1;
-    PeerLeft peer_left = 2;
-    PeerKicked peer_kicked = 3;
-    MemberListChanged member_list_changed = 4;
-    AuthResult auth_result = 5;
-    InviteCreated invite_created = 6;
-    PromptRejected command_rejected = 7;
-    WorkspaceResult workspace_result = 8;
-    LegacyAgentStartResult agent_start_result = 9;
-  }
-}
-
 message PromptAccepted {
   string command_id = 1;
 }
@@ -246,46 +201,10 @@ message PromptRejected {
   string reason = 2;
 }
 
-message PeerJoined {
-  PeerInfo peer = 1;
-}
-
-message PeerLeft {
-  string peer_id = 1;
-}
-
-message PeerKicked {
-  string peer_id = 1;
-  string reason = 2;
-}
-
-message MemberListChanged {
-  repeated MemberInfo members = 1;
-}
-
-message AuthResult {
-  string peer_id = 1;
-  bool accepted = 2;
-  string reason = 3;
-  MemberRole role = 4;
-}
-
 message PermissionResolved {
   string request_id = 1;
   string resolved_by_peer_id = 2;
   bool granted = 3;
-}
-
-// Device-level collab commands (sent to {deviceId}/collab topic)
-message DeviceCollabCommand {
-  oneof command {
-    PeerAnnounce peer_announce = 1;
-    PeerDisconnect peer_disconnect = 2;
-    InviteMember invite_member = 3;
-    RemoveMember remove_member = 4;
-    AddWorkspace add_workspace = 5;
-    RemoveWorkspace remove_workspace = 6;
-  }
 }
 
 message AddWorkspace {
@@ -296,48 +215,13 @@ message RemoveWorkspace {
   string workspace_id = 1;
 }
 
-message WorkspaceResult {
-  string command_id = 1;
-  bool success = 2;
-  string error = 3;
-  WorkspaceInfo workspace = 4;
-}
-
-// Legacy start result delivered via DeviceCollabEvent on /collab topic.
-// Kept during Phase 0–4 for dual-path compatibility; deleted in Phase 5 along
-// with the rest of DeviceCollabEvent. The new accepted-only runtime-start
-// reply is teamclaw.RuntimeStartResult (Phase 1).
-message LegacyAgentStartResult {
-  string command_id = 1;
-  bool success = 2;
-  string error = 3;
-  string runtime_id = 4;              // was agent_id
-  string session_id = 5;
-}
-
 message PeerAnnounce {
   PeerInfo peer = 1;
   string auth_token = 2;
 }
 
-message PeerDisconnect {}
-
-message InviteMember {
-  string display_name = 1;
-  string request_id = 2;
-  MemberRole role = 3;          // Owner or Member (default: Member)
-}
-
 message RemoveMember {
   string member_id = 1;
-}
-
-// Response to InviteMember
-message InviteCreated {
-  string request_id = 1;
-  string invite_token = 2;
-  string deeplink = 3;
-  int64 expires_at = 4;
 }
 
 // ═══════════════════════════════════════════
