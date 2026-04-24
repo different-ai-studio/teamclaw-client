@@ -129,6 +129,9 @@ mod tests {
         let req = RpcRequest {
             request_id: "req123".to_string(),
             sender_device_id: "dev-b".to_string(),
+            requester_client_id: String::new(),
+            requester_actor_id: String::new(),
+            requester_device_id: String::new(),
             method: Some(crate::proto::teamclaw::rpc_request::Method::FetchSession(
                 crate::proto::teamclaw::FetchSessionRequest {
                     session_id: "s1".to_string(),
@@ -181,6 +184,9 @@ mod tests {
                 request_id: "req123".to_string(),
                 success: true,
                 error: String::new(),
+                requester_client_id: String::new(),
+                requester_actor_id: String::new(),
+                requester_device_id: String::new(),
                 result: None,
             };
             let payload = response.encode_to_vec();
@@ -209,6 +215,9 @@ mod tests {
                 request_id: "req999".to_string(),
                 success: true,
                 error: String::new(),
+                requester_client_id: String::new(),
+                requester_actor_id: String::new(),
+                requester_device_id: String::new(),
                 result: None,
             };
             let payload = response.encode_to_vec();
