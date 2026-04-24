@@ -615,20 +615,7 @@ impl DaemonServer {
         use prost::Message as ProstMessage;
         match msg {
             subscriber::IncomingMessage::RuntimeCommand { runtime_id, envelope } => {
-                // During Phase 1-2, runtime_id on the new path is the same
-                // 8-char UUID used on the legacy path. Route into the same
-                // ACP handler as AgentCommand by translating the envelope.
-                let legacy_envelope = amux::CommandEnvelope {
-                    runtime_id: envelope.runtime_id,
-                    device_id: envelope.device_id,
-                    peer_id: envelope.peer_id,
-                    command_id: envelope.command_id,
-                    timestamp: envelope.timestamp,
-                    sender_actor_id: envelope.sender_actor_id,
-                    reply_to_device_id: envelope.reply_to_device_id,
-                    acp_command: envelope.acp_command,
-                };
-                self.handle_agent_command(&runtime_id, legacy_envelope).await;
+                self.handle_agent_command(&runtime_id, envelope).await;
             }
             subscriber::IncomingMessage::TeamclawRpc { topic, payload } => {
                 self.handle_rpc_request(&topic, &payload).await;
@@ -706,32 +693,18 @@ impl DaemonServer {
                 }
             }
             subscriber::IncomingMessage::TeamclawNotify { device_id: _, payload } => {
-                // Phase 2b: device/{id}/notify carries two wire shapes during the
-                // compat window — new Teamclaw_Notify (event_type + refresh_hint)
-                // and legacy NotifyEnvelope (pre-Phase-2b daemons still emit it).
-                // Field numbers are wire-incompatible: try Notify first (smaller
-                // schema, safer false-positive on short payloads), fall back to
-                // NotifyEnvelope for old-format messages.
-                let parsed: Option<(String, String)> = if let Ok(n) =
-                    crate::proto::teamclaw::Notify::decode(payload.as_slice())
-                {
-                    Some((n.event_type, n.refresh_hint))
-                } else if let Ok(env) =
-                    crate::proto::teamclaw::NotifyEnvelope::decode(payload.as_slice())
-                {
-                    Some((env.event_type, env.session_id))
-                } else {
-                    warn!("failed to decode device/notify payload as Notify or NotifyEnvelope");
-                    None
-                };
-
-                if let Some((event_type, refresh_hint)) = parsed {
-                    if event_type == "membership.refresh" && !refresh_hint.is_empty() {
-                        if let Some(tc) = &mut self.teamclaw {
-                            if let Err(err) = tc.refresh_membership_subscriptions().await {
-                                warn!(?err, session_id = %refresh_hint, "failed to refresh membership subscriptions after notify");
+                match crate::proto::teamclaw::Notify::decode(payload.as_slice()) {
+                    Ok(n) => {
+                        if n.event_type == "membership.refresh" && !n.refresh_hint.is_empty() {
+                            if let Some(tc) = &mut self.teamclaw {
+                                if let Err(err) = tc.refresh_membership_subscriptions().await {
+                                    warn!(?err, session_id = %n.refresh_hint, "failed to refresh membership subscriptions after notify");
+                                }
                             }
                         }
+                    }
+                    Err(err) => {
+                        warn!(?err, "failed to decode device/notify payload as Notify");
                     }
                 }
             }
@@ -777,7 +750,7 @@ impl DaemonServer {
             })
     }
 
-    async fn handle_agent_command(&mut self, agent_id: &str, envelope: amux::CommandEnvelope) {
+    async fn handle_agent_command(&mut self, agent_id: &str, envelope: amux::RuntimeCommandEnvelope) {
         let peer_id = envelope.peer_id.clone();
         let command_id = envelope.command_id.clone();
         let sender_actor_id = envelope.sender_actor_id.clone();
