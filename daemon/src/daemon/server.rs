@@ -810,8 +810,13 @@ impl DaemonServer {
         let role = self.resolve_role(&sender_actor_id, &peer_id).await;
 
         if let Err(reason) = self.permissions.check_command_permission(role, &cmd) {
-            warn!(peer_id, %reason, "command rejected");
-            self.publish_command_rejected(&reply_device_id, command_id, reason).await;
+            warn!(
+                peer_id,
+                reply_device_id = %reply_device_id,
+                command_id = %command_id,
+                %reason,
+                "command rejected; legacy collab NACK no longer published"
+            );
             return;
         }
 
@@ -839,29 +844,25 @@ impl DaemonServer {
 
                 match outcome {
                     Ok(res) => {
-                        info!(agent_id = %res.runtime_id, peer_id, "agent started");
-                        self.publish_agent_start_result(
-                            &reply_device_id,
-                            command_id.clone(),
-                            true,
-                            String::new(),
-                            res.runtime_id,
-                            res.session_id,
-                        )
-                        .await;
+                        info!(
+                            agent_id = %res.runtime_id,
+                            peer_id,
+                            reply_device_id = %reply_device_id,
+                            command_id = %command_id,
+                            session_id = %res.session_id,
+                            "agent started; legacy collab AgentStartResult no longer published"
+                        );
                     }
                     Err(err) => {
                         let reason = err.error_message.clone();
-                        error!(peer_id, "startAgent failed: {}", reason);
-                        self.publish_agent_start_result(
-                            &reply_device_id,
-                            command_id.clone(),
-                            false,
-                            reason,
-                            String::new(),
-                            start.session_id.clone(),
-                        )
-                        .await;
+                        error!(
+                            peer_id,
+                            reply_device_id = %reply_device_id,
+                            command_id = %command_id,
+                            session_id = %start.session_id,
+                            "startAgent failed: {}; legacy collab AgentStartResult no longer published",
+                            reason
+                        );
                     }
                 }
             }
@@ -1082,85 +1083,6 @@ impl DaemonServer {
         }
     }
 
-    async fn handle_device_collab(&mut self, envelope: amux::DeviceCommandEnvelope) {
-        let peer_id = envelope.peer_id.clone();
-        let command_id = envelope.command_id.clone();
-
-        let cmd = match envelope.command.and_then(|c| c.command) {
-            Some(c) => c,
-            None => return,
-        };
-
-        match cmd {
-            amux::device_collab_command::Command::PeerAnnounce(announce) => {
-                let (accepted, _error, _role) = self.apply_peer_announce(&announce).await;
-                if accepted {
-                    // Legacy behavior: new peer sees current state via retained
-                    // peer_list / workspace_list publishes. Phase 3 replaces
-                    // these with FetchPeers/FetchWorkspaces RPC + notify.
-                    let publisher = Publisher::new(&self.mqtt);
-                    let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
-                    let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
-                }
-            }
-            amux::device_collab_command::Command::PeerDisconnect(_) => {
-                let (accepted, _error) = self.apply_peer_disconnect(&peer_id).await;
-                if accepted {
-                    let publisher = Publisher::new(&self.mqtt);
-                    let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
-                }
-            }
-            amux::device_collab_command::Command::InviteMember(_invite) => {
-                // Legacy MQTT invite flow removed. Invites are now issued via
-                // the Supabase create_team_invite RPC from iOS directly.
-                warn!(peer_id, "InviteMember command received but handler removed; use Supabase invite flow");
-            }
-            amux::device_collab_command::Command::RemoveMember(remove) => {
-                let is_owner = self
-                    .peers
-                    .get_peer(&peer_id)
-                    .map(|p| p.role == amux::MemberRole::Owner)
-                    .unwrap_or(false);
-                let (success, _error) = self.apply_remove_member(&remove, is_owner).await;
-                if success {
-                    let publisher = Publisher::new(&self.mqtt);
-                    let _ = publisher
-                        .publish_peer_list(&self.peers.to_proto_peer_list())
-                        .await;
-                }
-            }
-            amux::device_collab_command::Command::AddWorkspace(add) => {
-                let (success, error, workspace) = self.apply_add_workspace(&add).await;
-                let publisher = Publisher::new(&self.mqtt);
-                let _ = publisher
-                    .publish_workspace_list(&self.workspaces.to_proto_list())
-                    .await;
-                let event = amux::DeviceCollabEvent {
-                    device_id: self.config.device.id.clone(),
-                    timestamp: chrono::Utc::now().timestamp(),
-                    event: Some(amux::device_collab_event::Event::WorkspaceResult(
-                        amux::WorkspaceResult {
-                            command_id,
-                            success,
-                            error,
-                            workspace,
-                        },
-                    )),
-                };
-                let _ = publisher.publish_device_collab_event(&event).await;
-            }
-            amux::device_collab_command::Command::RemoveWorkspace(remove) => {
-                let (success, _error) = self.apply_remove_workspace(&remove).await;
-                if success {
-                    let publisher = Publisher::new(&self.mqtt);
-                    let _ = publisher
-                        .publish_workspace_list(&self.workspaces.to_proto_list())
-                        .await;
-                }
-            }
-        }
-    }
-
     /// Publish a collab event on the agent's events topic
     async fn publish_collab_event(&self, agent_id: &str, event: amux::CollabEvent) {
         let envelope = amux::Envelope {
@@ -1173,50 +1095,6 @@ impl DaemonServer {
         };
         let publisher = Publisher::new(&self.mqtt);
         let _ = publisher.publish_agent_event(agent_id, &envelope).await;
-    }
-
-    async fn publish_command_rejected(&self, reply_device_id: &str, command_id: String, reason: String) {
-        info!(
-            reply_device_id = %reply_device_id,
-            command_id = %command_id,
-            reason = %reason,
-            "publishing command rejected event"
-        );
-        let reject_event = command_rejected_event(reply_device_id, command_id, reason);
-        let _ = Publisher::new(&self.mqtt)
-            .publish_device_collab_event_to(reply_device_id, &reject_event)
-            .await;
-    }
-
-    async fn publish_agent_start_result(
-        &self,
-        reply_device_id: &str,
-        command_id: String,
-        success: bool,
-        error: String,
-        agent_id: String,
-        session_id: String,
-    ) {
-        info!(
-            reply_device_id = %reply_device_id,
-            command_id = %command_id,
-            success,
-            error = %error,
-            agent_id = %agent_id,
-            session_id = %session_id,
-            "publishing agent start result"
-        );
-        let event = agent_start_result_event(
-            reply_device_id,
-            command_id,
-            success,
-            error,
-            agent_id,
-            session_id,
-        );
-        let _ = Publisher::new(&self.mqtt)
-            .publish_device_collab_event_to(reply_device_id, &event)
-            .await;
     }
 
     // ─── Non-session RPC handlers ───
@@ -1817,43 +1695,6 @@ fn reject_stop(
     }
 }
 
-fn command_rejected_event(
-    device_id: &str,
-    command_id: String,
-    reason: String,
-) -> amux::DeviceCollabEvent {
-    amux::DeviceCollabEvent {
-        device_id: device_id.to_string(),
-        timestamp: chrono::Utc::now().timestamp(),
-        event: Some(amux::device_collab_event::Event::CommandRejected(
-            amux::PromptRejected { command_id, reason },
-        )),
-    }
-}
-
-fn agent_start_result_event(
-    device_id: &str,
-    command_id: String,
-    success: bool,
-    error: String,
-    agent_id: String,
-    session_id: String,
-) -> amux::DeviceCollabEvent {
-    amux::DeviceCollabEvent {
-        device_id: device_id.to_string(),
-        timestamp: chrono::Utc::now().timestamp(),
-        event: Some(amux::device_collab_event::Event::AgentStartResult(
-            amux::LegacyAgentStartResult {
-                command_id,
-                success,
-                error,
-                runtime_id: agent_id,
-                session_id,
-            },
-        )),
-    }
-}
-
 /// Shrinks an `AcpAvailableCommands` list in place so the serialized message
 /// stays under the broker's per-packet cap. Strategy: walk the description
 /// length down (80 → 40 → 20 → 0) until the encoded size fits; if stripping
@@ -1912,50 +1753,3 @@ fn not_yet_implemented(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{agent_start_result_event, command_rejected_event};
-    use crate::proto::amux;
-
-    #[test]
-    fn command_rejected_event_carries_command_id_and_reason() {
-        let event = command_rejected_event(
-            "device-1",
-            "cmd-123".to_string(),
-            "Failed to start agent".to_string(),
-        );
-
-        assert_eq!(event.device_id, "device-1");
-        match event.event {
-            Some(amux::device_collab_event::Event::CommandRejected(rejected)) => {
-                assert_eq!(rejected.command_id, "cmd-123");
-                assert_eq!(rejected.reason, "Failed to start agent");
-            }
-            other => panic!("expected command_rejected event, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn agent_start_result_event_carries_correlation_and_payload() {
-        let event = agent_start_result_event(
-            "ios-device-1",
-            "cmd-456".to_string(),
-            true,
-            String::new(),
-            "agent-1".to_string(),
-            "sess-1".to_string(),
-        );
-
-        assert_eq!(event.device_id, "ios-device-1");
-        match event.event {
-            Some(amux::device_collab_event::Event::AgentStartResult(result)) => {
-                assert_eq!(result.command_id, "cmd-456");
-                assert!(result.success);
-                assert_eq!(result.runtime_id, "agent-1");
-                assert_eq!(result.session_id, "sess-1");
-                assert!(result.error.is_empty());
-            }
-            other => panic!("expected agent_start_result event, got {:?}", other),
-        }
-    }
-}

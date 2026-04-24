@@ -28,14 +28,6 @@ impl Topics {
         format!("{}/workspaces", self.device_base())
     }
 
-    pub fn collab(&self) -> String {
-        format!("{}/collab", self.device_base())
-    }
-
-    pub fn collab_for(&self, device_id: &str) -> String {
-        format!("amux/{}/device/{}/collab", self.team_id, device_id)
-    }
-
     /// RPC response topic for an arbitrary device (used when replying to a
     /// request whose sender_device_id differs from our own device_id).
     pub fn rpc_res_for(&self, device_id: &str) -> String {
@@ -176,7 +168,6 @@ mod tests {
         assert_eq!(t.status(), "amux/team1/device/dev-a/status");
         assert_eq!(t.peers(), "amux/team1/device/dev-a/peers");
         assert_eq!(t.workspaces(), "amux/team1/device/dev-a/workspaces");
-        assert_eq!(t.collab(), "amux/team1/device/dev-a/collab");
         assert_eq!(
             t.agent_state("a1"),
             "amux/team1/device/dev-a/agent/a1/state"

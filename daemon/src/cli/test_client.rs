@@ -55,8 +55,8 @@ impl TestClient {
         // Subscribe to all device-level and agent-level topics
         self.client.subscribe(self.topics.status(), QoS::AtLeastOnce).await?;
         self.client.subscribe(self.topics.peers(), QoS::AtLeastOnce).await?;
-        self.client.subscribe(self.topics.collab(), QoS::AtLeastOnce).await?;
-        // Wildcard for all agent topics
+        // Legacy /collab subscription removed in Phase 3; Task 6 will retire
+        // the now-dead publish helpers below. Wildcards stay for now.
         let team_id = self.config.team_id.as_deref().unwrap_or("teamclaw");
         self.client.subscribe(&format!("amux/{}/device/{}/agent/+/state", team_id, device_id), QoS::AtLeastOnce).await?;
         self.client.subscribe(&format!("amux/{}/device/{}/agent/+/events", team_id, device_id), QoS::AtLeastOnce).await?;
@@ -302,8 +302,10 @@ pub async fn run_announce(config: DaemonConfig, token: &str) -> anyhow::Result<(
     };
 
     let payload = envelope.encode_to_vec();
-    tc.client.publish(tc.topics.collab(), QoS::AtLeastOnce, false, payload).await?;
-    println!("📤 Sent PeerAnnounce (peer_id={}, token={}...)", tc.peer_id, &token[..8.min(token.len())]);
+    let team_id = tc.config.team_id.as_deref().unwrap_or("teamclaw");
+    let collab_topic = format!("amux/{}/device/{}/collab", team_id, tc.config.device.id);
+    tc.client.publish(&collab_topic, QoS::AtLeastOnce, false, payload).await?;
+    println!("📤 Sent PeerAnnounce (peer_id={}, token={}...) — NOTE: daemon no longer subscribes to /collab", tc.peer_id, &token[..8.min(token.len())]);
 
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     let _ = connect_task.await;
@@ -355,8 +357,10 @@ pub async fn run_e2e(config: DaemonConfig, token: &str, worktree: &str, prompt: 
             })),
         }),
     };
-    tc.client.publish(tc.topics.collab(), QoS::AtLeastOnce, false, announce.encode_to_vec()).await?;
-    println!("📤 PeerAnnounce sent");
+    let team_id = tc.config.team_id.as_deref().unwrap_or("teamclaw");
+    let collab_topic = format!("amux/{}/device/{}/collab", team_id, device_id);
+    tc.client.publish(&collab_topic, QoS::AtLeastOnce, false, announce.encode_to_vec()).await?;
+    println!("📤 PeerAnnounce sent (NOTE: daemon no longer subscribes to /collab)");
 
     let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(5);
     loop {
