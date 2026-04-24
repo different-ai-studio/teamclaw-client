@@ -171,6 +171,11 @@ public struct NewSessionSheet: View {
                     }
                 }
             }
+            // Refresh the connected-agents set each time the picker opens so
+            // agents that came online since the last fetch aren't filtered out.
+            // @Observable on ConnectedAgentsStore propagates the reload into
+            // accessibleAgentIDs without an explicit re-bind.
+            .task { await connectedAgentsStore?.reload() }
         }
         .sheet(isPresented: Binding(
             get: { !primaryAgentCandidates.isEmpty },

@@ -317,6 +317,9 @@ public struct RuntimeDetailView: View {
                     forkToCollab(members: selected)
                 }
             }
+            // Refresh connected-agents so agents that came online since last
+            // fetch appear in the picker (same pattern as NewSessionSheet).
+            .task { await connectedAgentsStore?.reload() }
         }
         .task { viewModel.start(modelContext: modelContext) }
         .onDisappear { viewModel.stop() }
