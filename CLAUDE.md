@@ -10,7 +10,7 @@ AMUX (Agent Multiplexer) is a multi-platform system for remotely monitoring and 
 - **iOS client** in `ios/` -- SwiftUI app that connects to the daemon via MQTT to monitor agents, send prompts, and handle permission requests
 - **Protobuf schema** in `proto/amux.proto` -- single source of truth for all cross-platform message types
 
-Communication flows: daemon <-> MQTT broker (HiveMQ, TLS) <-> iOS client. Messages are Protobuf-encoded, QoS 1, with sequence-numbered Envelopes for deduplication.
+Communication flows: daemon <-> MQTT broker (EMQX, TLS) <-> iOS client. Messages are Protobuf-encoded, QoS 1, with sequence-numbered Envelopes for deduplication.
 
 ## Build Commands
 

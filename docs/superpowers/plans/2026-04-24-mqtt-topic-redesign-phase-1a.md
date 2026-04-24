@@ -13,7 +13,7 @@
 **Out of scope for Phase 1a:**
 - Real RPC handlers for the Phase 0 placeholder match arms (`StartRuntime`, `StopRuntime`, `AnnouncePeer`, `DisconnectPeer`, `RemoveMember`, `AddWorkspace`, `RemoveWorkspace`, `FetchPeers`, `FetchWorkspaces`) — these stay as `"... not yet implemented"` stubs; Phase 1b replaces them.
 - Runtime lifecycle state machine (STARTING → ACTIVE → FAILED/STOPPED publishing with stage transitions) — Phase 1b. Phase 1a only sets `state = ACTIVE` on steady-state publishes of already-running runtimes; no new startup or failure publishes.
-- `user/{actor}/notify` publishes + transactional outbox — Phase 1c. Both infrastructure prerequisites (Supabase `user_inbox` table, HiveMQ JWT auth) must ship first. The `Topics::user_notify()` path builder IS added in this phase but no callers use it yet.
+- `user/{actor}/notify` publishes + transactional outbox — Phase 1c. Both infrastructure prerequisites (Supabase `user_inbox` table, EMQX JWT auth) must ship first. The `Topics::user_notify()` path builder IS added in this phase but no callers use it yet.
 - iOS subscription changes — all Phase 2.
 - Internal Rust renames (`AgentManager` → `RuntimeManager`, `agent/` module → `runtime/`) — Phase 4.
 - Legacy proto deletion — Phase 5.
@@ -976,4 +976,4 @@ At this point:
 
 **Next plan (Phase 1b):** replace the 9 Phase 0 placeholder `Method::*` arms in `session_manager.rs` with real handlers. Includes the full runtime lifecycle state machine (STARTING/FAILED/STOPPED transitions, stage, error fields) so `StartRuntime` publishes state updates through the retained topic as the spawn progresses.
 
-**Phase 1c (gated):** `user/{actor}/notify` publish via transactional outbox — only after Supabase `user_inbox` table exists and HiveMQ JWT auth migration ships.
+**Phase 1c (gated):** `user/{actor}/notify` publish via transactional outbox — only after Supabase `user_inbox` table exists and EMQX JWT auth migration ships.

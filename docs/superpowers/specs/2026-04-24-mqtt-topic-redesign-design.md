@@ -62,7 +62,7 @@ Read path: client reconciles by `SELECT ... WHERE actor_id = me AND read_at IS N
 Current state: daemon (`daemon/src/mqtt/client.rs`) and iOS (`MQTTService.swift`) both use static username/password credentials. `user/{actor}/notify` ACL requires the broker to know *which actor* is on a connection, which username/password cannot express without a separate user per actor.
 
 Migration:
-- Broker (HiveMQ) configured to validate JWTs signed by Supabase auth
+- Broker (EMQX) configured to validate JWTs signed by Supabase auth
 - Daemon/iOS issue a Supabase-signed JWT with `actor_id` / `team_ids` claims at CONNECT
 - Broker ACL: `SUBSCRIBE user/{actor}/notify` allowed iff `actor_id` claim matches the path segment
 
@@ -245,7 +245,7 @@ amux/{team}/user/{actor}/notify
 - All clients logged in as `actor` within this team subscribe, regardless of which daemon they are paired with
 - Payload: `Notify { event_type, refresh_hint, sent_at }` — hint only, never full state. Authoritative data lives in Supabase; the client pulls on hint. Same `Notify` shape is reused on `device/{id}/notify`.
 - **Offline delivery is explicitly NOT provided by MQTT.** If every client of `actor` is disconnected at publish time, the notify is lost on the wire. The authoritative record has already been written to Supabase (the `user_inbox` table, or equivalent) by whoever caused the event; online recovery is "reconnect, reconcile Supabase table, clear reconciled rows." Offline wake-up is APNs, not MQTT. This preserves the "MQTT is signaling, not storage" principle from the prior spec.
-- Broker ACL must restrict `SUBSCRIBE` on `user/{actor}/notify` to the matching authenticated actor (enforced via HiveMQ JWT claim `actor_id`).
+- Broker ACL must restrict `SUBSCRIBE` on `user/{actor}/notify` to the matching authenticated actor (enforced via EMQX JWT claim `actor_id`).
 
 ### `device/notify` vs `user/notify` scoping
 
