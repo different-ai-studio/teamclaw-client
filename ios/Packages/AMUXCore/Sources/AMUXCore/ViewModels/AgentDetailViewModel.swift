@@ -266,7 +266,7 @@ public final class AgentDetailViewModel {
 
         recomputeGroups()
 
-        let eventsTopic = MQTTTopics.agentEvents(teamID: teamID, deviceID: deviceId, agentID: agentId)
+        let eventsTopic = MQTTTopics.runtimeEvents(teamID: teamID, deviceID: deviceId, runtimeID: agentId)
         task = Task {
             // Outer loop: each iteration represents a fresh MQTT connection lifecycle.
             // When the inner stream finishes (e.g. after disconnect clears continuations),
@@ -579,7 +579,7 @@ public final class AgentDetailViewModel {
         makeCommand(&acpCmd)
         cmd.acpCommand = acpCmd
         let data = try ProtoMQTTCoder.encode(cmd)
-        try await mqtt.publish(topic: MQTTTopics.agentCommands(teamID: teamID, deviceID: deviceId, agentID: agent.agentId), payload: data)
+        try await mqtt.publish(topic: MQTTTopics.runtimeCommands(teamID: teamID, deviceID: deviceId, runtimeID: agent.agentId), payload: data)
     }
 
     public func sendPrompt(_ text: String, modelId: String? = nil, modelContext: ModelContext? = nil) async throws {
