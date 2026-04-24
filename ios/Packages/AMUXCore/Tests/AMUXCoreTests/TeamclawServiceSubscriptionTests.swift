@@ -45,7 +45,6 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
             [
                 MQTTTopics.deviceNotify(teamID: "team1", deviceID: "device1"),
                 MQTTTopics.deviceRpcResponse(teamID: "team1", deviceID: "device1"),
-                MQTTTopics.devicePeers(teamID: "team1", deviceID: "device1"),
                 MQTTTopics.sessionLive(teamID: "team1", sessionID: "sess-1"),
             ]
         )
@@ -211,19 +210,9 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
             modelContainer: container
         )
 
-        var peers = Amux_PeerList()
-        var mine = Amux_PeerInfo()
-        mine.peerID = "peer1"
-        mine.memberID = "member1"
-        peers.peers = [mine]
-
-        await service.handleIncomingForTesting(
-            MQTTIncoming(
-                topic: MQTTTopics.devicePeers(teamID: "team1", deviceID: "device1"),
-                payload: try peers.serializedData(),
-                retained: false
-            )
-        )
+        // Phase 2b: localMemberId is now resolved via FetchPeers RPC on connect.
+        // Set it directly so sendMessage's actor-id guard passes in this unit test.
+        service.setLocalMemberIdForTesting("member1")
 
         service.sendMessage(sessionId: "sess-1", content: "hello")
         try await Task.sleep(for: .milliseconds(50))

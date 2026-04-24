@@ -80,9 +80,16 @@ public final class TeamclawService {
             // Subscribe to core teamclaw topics
             try? await mqtt.subscribe(MQTTTopics.deviceNotify(teamID: teamId, deviceID: deviceId))
             try? await mqtt.subscribe(MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId))
-            // amux-side peer list — used to resolve our local member id.
-            try? await mqtt.subscribe(MQTTTopics.devicePeers(teamID: teamId, deviceID: deviceId))
             await rehydrateForegroundSessionSubscriptions(on: mqtt)
+
+            // Phase 2b: peers come from FetchPeers RPC instead of retained
+            // devicePeers subscription. One-shot fetch after subscribe; notify
+            // handler does follow-ups on peers.changed / members.changed.
+            Task { [weak self] in
+                guard let self else { return }
+                let peers = await self.fetchPeers()
+                self.syncPeers(peers)
+            }
 
             isConnected = true
             print("[TeamclawService] subscribed to teamclaw topics for team: \(teamId)")
@@ -112,20 +119,6 @@ public final class TeamclawService {
     private func handleIncoming(_ incoming: MQTTIncoming, modelContext: ModelContext) async {
         let topic = incoming.topic
 
-        if topic == MQTTTopics.devicePeers(teamID: teamId, deviceID: deviceId) {
-            if let list = try? Amux_PeerList(serializedBytes: incoming.payload) {
-                if let mine = list.peers.first(where: { $0.peerID == peerId }) {
-                    if !mine.memberID.isEmpty, mine.memberID != localMemberId {
-                        localMemberId = mine.memberID
-                    }
-                    if !mine.displayName.isEmpty {
-                        localDisplayName = mine.displayName
-                    }
-                }
-            }
-            return
-        }
-
         if topic == MQTTTopics.deviceNotify(teamID: teamId, deviceID: deviceId) {
             // Phase 2b: device/{id}/notify carries two wire shapes during the
             // compat window — new Teamclaw_Notify (event_type + refresh_hint,
@@ -150,9 +143,8 @@ public final class TeamclawService {
                     await refreshSessionState(for: refreshHint, modelContext: modelContext)
                 }
             case "peers.changed":
-                // Placeholder: Task 5 wires the returned array into state.
-                // Firing the RPC now lets us validate the daemon path end-to-end.
-                _ = await fetchPeers()
+                let peers = await fetchPeers()
+                syncPeers(peers)
             case "workspaces.changed":
                 // Placeholder: Task 6 wires the returned array into state.
                 _ = await fetchWorkspaces()
@@ -174,6 +166,18 @@ public final class TeamclawService {
     }
 
     // MARK: - Sync Handlers
+
+    /// Updates `localMemberId` and `localDisplayName` from a peer list returned
+    /// by the FetchPeers RPC. Replaces the former retained devicePeers handler.
+    private func syncPeers(_ peers: [Amux_PeerInfo]) {
+        guard let mine = peers.first(where: { $0.peerID == peerId }) else { return }
+        if !mine.memberID.isEmpty, mine.memberID != localMemberId {
+            localMemberId = mine.memberID
+        }
+        if !mine.displayName.isEmpty {
+            localDisplayName = mine.displayName
+        }
+    }
 
     private func syncSessionMeta(_ proto: Teamclaw_SessionInfo, modelContext: ModelContext) {
         let sessionId = proto.sessionID
@@ -830,6 +834,12 @@ public final class TeamclawService {
     internal func handleIncomingForTesting(_ incoming: MQTTIncoming) async {
         guard let modelContainer else { return }
         await handleIncoming(incoming, modelContext: ModelContext(modelContainer))
+    }
+
+    /// Sets `localMemberId` directly for unit tests that need `sendMessage`
+    /// to pass its actor-id guard without going through the FetchPeers RPC.
+    internal func setLocalMemberIdForTesting(_ memberId: String) {
+        localMemberId = memberId
     }
 
     private func fetchRecentMessagesForForegroundSession(_ sessionId: String) async {
