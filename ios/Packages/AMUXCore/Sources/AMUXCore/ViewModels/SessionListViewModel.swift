@@ -59,13 +59,13 @@ public final class SessionListViewModel {
 
         task?.cancel()
         // Daemon fans each session out to its own retained topic
-        // `device/{id}/agent/{agent}/state` (one RuntimeInfo per message) so a
-        // single publish never relies on a large broker packet limit. We
+        // `device/{id}/runtime/{runtime}/state` (one RuntimeInfo per message)
+        // so a single publish never relies on a large broker packet limit. We
         // subscribe to the wildcard and rebuild our dict as retained
         // messages arrive.
-        let agentStatePrefix = MQTTTopics.agentStatePrefix(teamID: teamID, deviceID: deviceId)
-        let agentStateSuffix = "/state"
-        let agentStateWildcard = MQTTTopics.agentStateWildcard(teamID: teamID, deviceID: deviceId)
+        let runtimeStatePrefix = MQTTTopics.runtimeStatePrefix(teamID: teamID, deviceID: deviceId)
+        let runtimeStateSuffix = "/state"
+        let runtimeStateWildcard = MQTTTopics.runtimeStateWildcard(teamID: teamID, deviceID: deviceId)
         let workspacesTopic = MQTTTopics.deviceWorkspaces(teamID: teamID, deviceID: deviceId)
         task = Task {
             // Outer loop: each iteration represents a fresh MQTT connection
@@ -94,10 +94,10 @@ public final class SessionListViewModel {
                 }
 
                 let stream = mqtt.messages()
-                try? await mqtt.subscribe(agentStateWildcard)
+                try? await mqtt.subscribe(runtimeStateWildcard)
                 try? await mqtt.subscribe(workspacesTopic)
                 isLoading = false
-                NSLog("[SessionListVM] subscribed to %@ + %@", agentStateWildcard, workspacesTopic)
+                NSLog("[SessionListVM] subscribed to %@ + %@", runtimeStateWildcard, workspacesTopic)
 
                 for await msg in stream {
                     if msg.topic == workspacesTopic {
@@ -111,12 +111,12 @@ public final class SessionListViewModel {
                         continue
                     }
 
-                    guard msg.topic.hasPrefix(agentStatePrefix),
-                          msg.topic.hasSuffix(agentStateSuffix) else { continue }
+                    guard msg.topic.hasPrefix(runtimeStatePrefix),
+                          msg.topic.hasSuffix(runtimeStateSuffix) else { continue }
                     // Empty retained payload = the daemon cleared this agent's
                     // slot (session deletion). Drop the local row to match.
                     if msg.payload.isEmpty {
-                        let agentId = String(msg.topic.dropFirst(agentStatePrefix.count).dropLast(agentStateSuffix.count))
+                        let agentId = String(msg.topic.dropFirst(runtimeStatePrefix.count).dropLast(runtimeStateSuffix.count))
                         removeAgent(agentId: agentId, modelContext: ctx)
                         refreshSessions(modelContext: ctx)
                         continue
