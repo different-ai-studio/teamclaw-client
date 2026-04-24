@@ -297,7 +297,7 @@ impl DaemonServer {
 
     /// Build merged agent list: active agents + historical (non-active) sessions.
     /// Now only used by `publish_all_agent_states` to iterate startup/reconnect state.
-    /// Per-agent updates should go through `publish_agent_state_by_id`.
+    /// Per-agent updates should go through `publish_runtime_state_by_id`.
     fn merged_agent_list(&self) -> amux::AgentList {
         let mut agent_list = self.agents.to_proto_agent_list();
         let active_ids: std::collections::HashSet<String> = agent_list.runtimes.iter().map(|a| a.runtime_id.clone()).collect();
@@ -319,10 +319,10 @@ impl DaemonServer {
 
     /// Publish retained RuntimeInfo for a single agent on its per-agent state
     /// topic. Swallows errors (same convention as other publish helpers).
-    async fn publish_agent_state_by_id(&self, agent_id: &str) {
+    async fn publish_runtime_state_by_id(&self, agent_id: &str) {
         if let Some(info) = self.agent_info_by_id(agent_id) {
             let publisher = Publisher::new(&self.mqtt);
-            let _ = publisher.publish_agent_state(agent_id, &info).await;
+            let _ = publisher.publish_runtime_state(agent_id, &info).await;
         }
     }
 
@@ -335,7 +335,7 @@ impl DaemonServer {
     async fn publish_all_agent_states(&self) {
         let publisher = Publisher::new(&self.mqtt);
         for info in self.merged_agent_list().runtimes {
-            let _ = publisher.publish_agent_state(&info.runtime_id, &info).await;
+            let _ = publisher.publish_runtime_state(&info.runtime_id, &info).await;
         }
     }
 
@@ -368,7 +368,7 @@ impl DaemonServer {
                 let title = String::from_utf8_lossy(&raw.json_payload).to_string();
                 if let Some(handle) = self.agents.get_handle_mut(agent_id) {
                     handle.session_title = title;
-                    self.publish_agent_state_by_id(agent_id).await;
+                    self.publish_runtime_state_by_id(agent_id).await;
                 }
                 return;
             }
@@ -395,7 +395,7 @@ impl DaemonServer {
                     };
                     self.history.append(agent_id, &envelope);
                     let publisher = Publisher::new(&self.mqtt);
-                    let _ = publisher.publish_agent_event(agent_id, &envelope).await;
+                    let _ = publisher.publish_runtime_event(agent_id, &envelope).await;
                 }
                 return;
             }
@@ -410,7 +410,7 @@ impl DaemonServer {
                 session.status = sc.new_status;
                 let _ = self.sessions.save(&self.sessions_path);
             }
-            self.publish_agent_state_by_id(agent_id).await;
+            self.publish_runtime_state_by_id(agent_id).await;
 
             // Upsert agent_runtimes on status transitions
             if let Some(sb) = &self.supabase {
@@ -529,7 +529,7 @@ impl DaemonServer {
             self.history.append(agent_id, &envelope);
         }
         let publisher = Publisher::new(&self.mqtt);
-        if let Err(e) = publisher.publish_agent_event(agent_id, &envelope).await {
+        if let Err(e) = publisher.publish_runtime_event(agent_id, &envelope).await {
             warn!(agent_id, "failed to publish agent event: {}", e);
         }
     }
@@ -662,7 +662,7 @@ impl DaemonServer {
                                                             warn!(?e, "send_set_model from live message failed");
                                                         } else {
                                                             self.agents.set_current_model(&agent_actor_id, &desired_model);
-                                                            self.publish_agent_state_by_id(&agent_actor_id).await;
+                                                            self.publish_runtime_state_by_id(&agent_actor_id).await;
                                                         }
                                                     }
                                                 }
@@ -867,7 +867,7 @@ impl DaemonServer {
                         session.status = amux::AgentStatus::Stopped as i32;
                         let _ = self.sessions.save(&self.sessions_path);
                     }
-                    self.publish_agent_state_by_id(agent_id).await;
+                    self.publish_runtime_state_by_id(agent_id).await;
                     info!(agent_id, peer_id, "agent stopped");
                 }
             }
@@ -923,7 +923,7 @@ impl DaemonServer {
                                         command_id,
                                     })),
                                 }).await;
-                                self.publish_agent_state_by_id(agent_id).await;
+                                self.publish_runtime_state_by_id(agent_id).await;
                             }
                             Err(e) => {
                                 warn!(agent_id, "lazy resume failed: {}", e);
@@ -962,7 +962,7 @@ impl DaemonServer {
                         match self.agents.send_set_model(agent_id, &desired_model).await {
                             Ok(()) => {
                                 self.agents.set_current_model(agent_id, &desired_model);
-                                self.publish_agent_state_by_id(agent_id).await;
+                                self.publish_runtime_state_by_id(agent_id).await;
                             }
                             Err(e) => {
                                 warn!(agent_id, model_id = %desired_model, "send_set_model failed: {}", e);
@@ -988,7 +988,7 @@ impl DaemonServer {
                                 command_id,
                             })),
                         }).await;
-                        self.publish_agent_state_by_id(agent_id).await;
+                        self.publish_runtime_state_by_id(agent_id).await;
                     }
                     Err(e) => {
                         warn!(agent_id, "failed to send prompt: {}", e);
@@ -1003,7 +1003,7 @@ impl DaemonServer {
                             handle.status = amux::AgentStatus::Idle;
                         }
                         info!(agent_id, peer_id, "agent cancelled via ACP");
-                        self.publish_agent_state_by_id(agent_id).await;
+                        self.publish_runtime_state_by_id(agent_id).await;
                     }
                     Err(e) => {
                         warn!(agent_id, "failed to cancel agent: {}", e);
@@ -1088,7 +1088,7 @@ impl DaemonServer {
             payload: Some(amux::envelope::Payload::CollabEvent(event)),
         };
         let publisher = Publisher::new(&self.mqtt);
-        let _ = publisher.publish_agent_event(agent_id, &envelope).await;
+        let _ = publisher.publish_runtime_event(agent_id, &envelope).await;
     }
 
     // ─── Non-session RPC handlers ───
@@ -1424,7 +1424,7 @@ impl DaemonServer {
     /// Lifecycle publishes:
     ///   - STARTING (stage "spawning_process") published retained right after
     ///     spawn_agent returns the new runtime_id, before StoredSession upsert.
-    ///   - ACTIVE published retained via publish_agent_state_by_id after
+    ///   - ACTIVE published retained via publish_runtime_state_by_id after
     ///     StoredSession upsert (that call reads the now-populated RuntimeHandle).
     ///   - No FAILED publish here — spawn_agent error path returns before any
     ///     runtime_id is allocated, so there is no retained topic to write to.
@@ -1524,7 +1524,7 @@ impl DaemonServer {
             started_at: chrono::Utc::now().timestamp(),
             ..Default::default()
         };
-        let _ = publisher.publish_agent_state(&new_id, &starting_info).await;
+        let _ = publisher.publish_runtime_state(&new_id, &starting_info).await;
 
         // Persist session + transition to ACTIVE.
         let acp_sid = self
@@ -1548,10 +1548,10 @@ impl DaemonServer {
         self.sessions.upsert(stored);
         let _ = self.sessions.save(&self.sessions_path);
 
-        // ACTIVE — publish_agent_state_by_id reads the live RuntimeHandle and
+        // ACTIVE — publish_runtime_state_by_id reads the live RuntimeHandle and
         // dual-publishes to agent/{id}/state + runtime/{id}/state. The handle
         // today encodes state=ACTIVE (Phase 1a Task 4).
-        self.publish_agent_state_by_id(&new_id).await;
+        self.publish_runtime_state_by_id(&new_id).await;
 
         Ok(StartRuntimeOutcome {
             runtime_id: new_id,
@@ -1594,8 +1594,8 @@ impl DaemonServer {
             ..Default::default()
         };
         let publisher = Publisher::new(&self.mqtt);
-        let _ = publisher.publish_agent_state(&runtime_id, &stopped_info).await;
-        let _ = publisher.clear_agent_state(&runtime_id).await;
+        let _ = publisher.publish_runtime_state(&runtime_id, &stopped_info).await;
+        let _ = publisher.clear_runtime_state(&runtime_id).await;
 
         RpcResponse {
             request_id: request.request_id.clone(),

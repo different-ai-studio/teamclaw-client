@@ -12,7 +12,7 @@ impl<'a> Publisher<'a> {
     }
 
     /// Publishes Envelope to runtime/{id}/events. Ephemeral; no retain.
-    pub async fn publish_agent_event(&self, agent_id: &str, envelope: &amux::Envelope) -> Result<(), rumqttc::ClientError> {
+    pub async fn publish_runtime_event(&self, agent_id: &str, envelope: &amux::Envelope) -> Result<(), rumqttc::ClientError> {
         let payload = envelope.encode_to_vec();
         self.client.client
             .publish(self.client.topics.runtime_events(agent_id), QoS::AtLeastOnce, false, payload)
@@ -20,7 +20,7 @@ impl<'a> Publisher<'a> {
     }
 
     /// Publishes RuntimeInfo to the retained runtime/{id}/state topic.
-    pub async fn publish_agent_state(&self, agent_id: &str, info: &amux::RuntimeInfo) -> Result<(), rumqttc::ClientError> {
+    pub async fn publish_runtime_state(&self, agent_id: &str, info: &amux::RuntimeInfo) -> Result<(), rumqttc::ClientError> {
         let payload = info.encode_to_vec();
         self.client.client
             .publish(self.client.topics.runtime_state(agent_id), QoS::AtLeastOnce, true, payload)
@@ -29,7 +29,7 @@ impl<'a> Publisher<'a> {
 
     /// Clears retained state on runtime/{id}/state. Otherwise subscribers
     /// would see ghost state after runtime termination.
-    pub async fn clear_agent_state(&self, agent_id: &str) -> Result<(), rumqttc::ClientError> {
+    pub async fn clear_runtime_state(&self, agent_id: &str) -> Result<(), rumqttc::ClientError> {
         self.client.client
             .publish(self.client.topics.runtime_state(agent_id), QoS::AtLeastOnce, true, Vec::<u8>::new())
             .await
@@ -64,7 +64,7 @@ impl<'a> Publisher<'a> {
             failed_stage: failed_stage.to_string(),
             ..Default::default()
         };
-        self.publish_agent_state(runtime_id, &info).await
+        self.publish_runtime_state(runtime_id, &info).await
     }
 
     /// Publishes a Notify hint to the daemon's own device/{id}/notify topic.
