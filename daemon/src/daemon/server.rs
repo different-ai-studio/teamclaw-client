@@ -570,8 +570,8 @@ impl DaemonServer {
             // Phase 1b Tasks 3-9 replace these stubs with real handlers.
             Some(Method::FetchPeers(_)) => self.handle_fetch_peers(&request).await,
             Some(Method::FetchWorkspaces(_)) => self.handle_fetch_workspaces(&request).await,
-            Some(Method::AnnouncePeer(_)) => not_yet_implemented(&request, "announce_peer"),
-            Some(Method::DisconnectPeer(_)) => not_yet_implemented(&request, "disconnect_peer"),
+            Some(Method::AnnouncePeer(ann)) => self.handle_announce_peer(&request, ann).await,
+            Some(Method::DisconnectPeer(d)) => self.handle_disconnect_peer(&request, d).await,
             Some(Method::AddWorkspace(_)) => not_yet_implemented(&request, "add_workspace"),
             Some(Method::RemoveWorkspace(_)) => not_yet_implemented(&request, "remove_workspace"),
             Some(Method::RemoveMember(_)) => not_yet_implemented(&request, "remove_member"),
@@ -1109,7 +1109,6 @@ impl DaemonServer {
     async fn handle_device_collab(&mut self, envelope: amux::DeviceCommandEnvelope) {
         let peer_id = envelope.peer_id.clone();
         let command_id = envelope.command_id.clone();
-        let publisher = Publisher::new(&self.mqtt);
 
         let cmd = match envelope.command.and_then(|c| c.command) {
             Some(c) => c,
@@ -1118,33 +1117,20 @@ impl DaemonServer {
 
         match cmd {
             amux::device_collab_command::Command::PeerAnnounce(announce) => {
-                match self.auth.authenticate(&announce.auth_token) {
-                    AuthResult::Accepted { member } => {
-                        info!(peer_id, member_id = %member.member_id, "peer authenticated");
-                        let pi = announce.peer.as_ref();
-                        self.peers.add_peer(PeerState {
-                            peer_id: pi.map(|p| p.peer_id.clone()).unwrap_or_default(),
-                            member_id: member.member_id.clone(),
-                            display_name: member.display_name.clone(),
-                            device_type: pi.map(|p| p.device_type.clone()).unwrap_or_default(),
-                            role: if member.is_owner() { amux::MemberRole::Owner } else { amux::MemberRole::Member },
-                            connected_at: chrono::Utc::now().timestamp(),
-                        });
-                        // Publish all lists so the new peer gets current state.
-                        // Agent list is fanned out as retained per-agent topics; the new
-                        // peer receives them via its wildcard subscription without us
-                        // needing to re-publish here.
-                        let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
-                        let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
-                    }
-                    AuthResult::Rejected { reason } => {
-                        warn!(peer_id, %reason, "peer rejected");
-                    }
+                let (accepted, _error, _role) = self.apply_peer_announce(&announce).await;
+                if accepted {
+                    // Legacy behavior: new peer sees current state via retained
+                    // peer_list / workspace_list publishes. Phase 3 replaces
+                    // these with FetchPeers/FetchWorkspaces RPC + notify.
+                    let publisher = Publisher::new(&self.mqtt);
+                    let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
+                    let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
                 }
             }
             amux::device_collab_command::Command::PeerDisconnect(_) => {
-                if self.peers.remove_peer(&peer_id).is_some() {
-                    info!(peer_id, "peer disconnected");
+                let (accepted, _error) = self.apply_peer_disconnect(&peer_id).await;
+                if accepted {
+                    let publisher = Publisher::new(&self.mqtt);
                     let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
                 }
             }
@@ -1164,6 +1150,7 @@ impl DaemonServer {
                     for p in &kicked {
                         info!(peer_id = %p.peer_id, "peer kicked");
                     }
+                    let publisher = Publisher::new(&self.mqtt);
                     let _ = publisher.publish_peer_list(&self.peers.to_proto_peer_list()).await;
                 }
             }
@@ -1181,6 +1168,7 @@ impl DaemonServer {
                         if should_save {
                             let _ = self.workspaces.save(&self.workspaces_path);
                         }
+                        let publisher = Publisher::new(&self.mqtt);
                         let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
                         info!(workspace_id = %ws.workspace_id, path = %ws.path, "workspace added");
                         let event = amux::DeviceCollabEvent {
@@ -1215,6 +1203,7 @@ impl DaemonServer {
                                 },
                             )),
                         };
+                        let publisher = Publisher::new(&self.mqtt);
                         let _ = publisher.publish_device_collab_event(&event).await;
                     }
                 }
@@ -1222,6 +1211,7 @@ impl DaemonServer {
             amux::device_collab_command::Command::RemoveWorkspace(remove) => {
                 if self.workspaces.remove(&remove.workspace_id) {
                     let _ = self.workspaces.save(&self.workspaces_path);
+                    let publisher = Publisher::new(&self.mqtt);
                     let _ = publisher.publish_workspace_list(&self.workspaces.to_proto_list()).await;
                     info!(workspace_id = %remove.workspace_id, "workspace removed");
                 }
@@ -1326,6 +1316,119 @@ impl DaemonServer {
             result: Some(rpc_response::Result::FetchWorkspacesResult(
                 FetchWorkspacesResult { workspaces },
             )),
+        }
+    }
+
+    // ─── Peer mutation helpers (shared by legacy collab path + RPC handlers) ───
+
+    /// Authenticates and adds a peer. Returns (accepted, error_text, assigned_role).
+    /// Does NOT publish anything — the caller is responsible for any broadcasts
+    /// (legacy collab arm republishes peer_list + workspace_list; RPC handler
+    /// publishes Notify "peers.changed").
+    async fn apply_peer_announce(
+        &mut self,
+        announce: &amux::PeerAnnounce,
+    ) -> (bool, String, amux::MemberRole) {
+        match self.auth.authenticate(&announce.auth_token) {
+            AuthResult::Accepted { member } => {
+                let role = if member.is_owner() {
+                    amux::MemberRole::Owner
+                } else {
+                    amux::MemberRole::Member
+                };
+                let pi = announce.peer.as_ref();
+                let peer_id_str = pi.map(|p| p.peer_id.clone()).unwrap_or_default();
+                info!(peer_id = %peer_id_str, member_id = %member.member_id, "peer authenticated");
+                self.peers.add_peer(PeerState {
+                    peer_id: peer_id_str,
+                    member_id: member.member_id.clone(),
+                    display_name: member.display_name.clone(),
+                    device_type: pi.map(|p| p.device_type.clone()).unwrap_or_default(),
+                    role,
+                    connected_at: chrono::Utc::now().timestamp(),
+                });
+                (true, String::new(), role)
+            }
+            AuthResult::Rejected { reason } => {
+                warn!(%reason, "peer rejected");
+                (false, reason, amux::MemberRole::Member)
+            }
+        }
+    }
+
+    /// Removes a peer by peer_id. Returns (accepted, error_text).
+    /// Does NOT publish anything — the caller is responsible for any broadcasts.
+    async fn apply_peer_disconnect(&mut self, peer_id: &str) -> (bool, String) {
+        if self.peers.remove_peer(peer_id).is_some() {
+            info!(peer_id, "peer disconnected");
+            (true, String::new())
+        } else {
+            (false, format!("unknown peer_id: {}", peer_id))
+        }
+    }
+
+    // ─── AnnouncePeer / DisconnectPeer RPC handlers ───
+
+    async fn handle_announce_peer(
+        &mut self,
+        request: &crate::proto::teamclaw::RpcRequest,
+        announce: &crate::proto::teamclaw::AnnouncePeerRequest,
+    ) -> crate::proto::teamclaw::RpcResponse {
+        use crate::proto::teamclaw::{rpc_response, AnnouncePeerResult, RpcResponse};
+
+        // Construct amux::PeerAnnounce that apply_peer_announce expects.
+        let amux_announce = amux::PeerAnnounce {
+            peer: announce.peer.clone(),
+            auth_token: announce.auth_token.clone(),
+        };
+        let (accepted, error, assigned_role) = self.apply_peer_announce(&amux_announce).await;
+
+        // Hint subscribers to re-fetch peers.
+        if accepted {
+            let publisher = Publisher::new(&self.mqtt);
+            let _ = publisher.publish_notify("peers.changed", "").await;
+        }
+
+        RpcResponse {
+            request_id: request.request_id.clone(),
+            success: accepted,
+            error: error.clone(),
+            requester_client_id: request.requester_client_id.clone(),
+            requester_actor_id: request.requester_actor_id.clone(),
+            requester_device_id: request.requester_device_id.clone(),
+            result: Some(rpc_response::Result::AnnouncePeerResult(AnnouncePeerResult {
+                accepted,
+                error,
+                assigned_role: assigned_role as i32,
+            })),
+        }
+    }
+
+    async fn handle_disconnect_peer(
+        &mut self,
+        request: &crate::proto::teamclaw::RpcRequest,
+        disconnect: &crate::proto::teamclaw::DisconnectPeerRequest,
+    ) -> crate::proto::teamclaw::RpcResponse {
+        use crate::proto::teamclaw::{rpc_response, DisconnectPeerResult, RpcResponse};
+
+        let (accepted, error) = self.apply_peer_disconnect(&disconnect.peer_id).await;
+
+        if accepted {
+            let publisher = Publisher::new(&self.mqtt);
+            let _ = publisher.publish_notify("peers.changed", "").await;
+        }
+
+        RpcResponse {
+            request_id: request.request_id.clone(),
+            success: accepted,
+            error: error.clone(),
+            requester_client_id: request.requester_client_id.clone(),
+            requester_actor_id: request.requester_actor_id.clone(),
+            requester_device_id: request.requester_device_id.clone(),
+            result: Some(rpc_response::Result::DisconnectPeerResult(DisconnectPeerResult {
+                accepted,
+                error,
+            })),
         }
     }
 }
