@@ -921,30 +921,41 @@ public final class TeamclawService {
             return .rejected("publish failed: \(error.localizedDescription)")
         }
 
+        print("[runtimeStartRpc] published requestID=\(requestId) to \(reqTopic) (awaiting response on any rpc/res with matching requestID)")
+
         let deadline = Date().addingTimeInterval(15)
         defer {
             if needsTargetSubscribe {
                 Task { try? await mqtt.unsubscribe(resTopic) }
             }
         }
+        // Accept the response on ANY `rpc/res` topic. Daemon publishes to
+        // `device/{request.sender_device_id}/rpc/res` which may differ from
+        // our `target` in multi-daemon setups, so we filter on the (unique)
+        // requestID instead of locking the match to a single topic string.
         for await msg in stream {
             if Date() > deadline { break }
-            if msg.topic == resTopic,
-               let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
-               response.requestID == requestId {
-                if case .runtimeStartResult(let result)? = response.result {
-                    if result.accepted {
-                        return .accepted(runtimeID: result.runtimeID, sessionID: result.sessionID)
-                    } else {
-                        let reason = result.rejectedReason.isEmpty
-                            ? (response.error.isEmpty ? "rejected" : response.error)
-                            : result.rejectedReason
-                        return .rejected(reason)
-                    }
-                }
-                return .rejected(response.error.isEmpty ? "no result" : response.error)
+            guard msg.topic.hasSuffix("/rpc/res") else { continue }
+            guard let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload) else {
+                print("[runtimeStartRpc] failed to decode response on \(msg.topic)")
+                continue
             }
+            guard response.requestID == requestId else { continue }
+
+            print("[runtimeStartRpc] matched response on \(msg.topic) success=\(response.success) error=\(response.error)")
+            if case .runtimeStartResult(let result)? = response.result {
+                if result.accepted {
+                    return .accepted(runtimeID: result.runtimeID, sessionID: result.sessionID)
+                } else {
+                    let reason = result.rejectedReason.isEmpty
+                        ? (response.error.isEmpty ? "rejected" : response.error)
+                        : result.rejectedReason
+                    return .rejected(reason)
+                }
+            }
+            return .rejected(response.error.isEmpty ? "no result" : response.error)
         }
+        print("[runtimeStartRpc] TIMEOUT waiting for response to requestID=\(requestId)")
         return .rejected("timeout")
     }
 

@@ -601,6 +601,12 @@ impl DaemonServer {
         // Publish response on the sender's rpc/res topic (mirrors RpcServer::respond).
         let res_topic = self.mqtt.topics.rpc_res_for(&request.sender_device_id);
         let bytes = response.encode_to_vec();
+        info!(
+            request_id = %request.request_id,
+            res_topic = %res_topic,
+            success = response.success,
+            "publishing RpcResponse"
+        );
         if let Err(e) = self
             .mqtt
             .client
