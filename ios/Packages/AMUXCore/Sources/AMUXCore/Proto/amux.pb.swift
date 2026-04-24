@@ -206,7 +206,7 @@ public struct Amux_Envelope: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var agentID: String = String()
+  public var runtimeID: String = String()
 
   public var deviceID: String = String()
 
@@ -257,7 +257,7 @@ public struct Amux_CommandEnvelope: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var agentID: String = String()
+  public var runtimeID: String = String()
 
   public var deviceID: String = String()
 
@@ -1637,7 +1637,7 @@ extension Amux_MemberRole: SwiftProtobuf._ProtoNameProviding {
 
 extension Amux_Envelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Envelope"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agent_id\0\u{3}device_id\0\u{3}source_peer_id\0\u{1}timestamp\0\u{1}sequence\0\u{4}\u{5}acp_event\0\u{3}collab_event\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}runtime_id\0\u{3}device_id\0\u{3}source_peer_id\0\u{1}timestamp\0\u{1}sequence\0\u{4}\u{5}acp_event\0\u{3}collab_event\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1645,7 +1645,7 @@ extension Amux_Envelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.agentID) }()
+      case 1: try { try decoder.decodeSingularStringField(value: &self.runtimeID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.deviceID) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.sourcePeerID) }()
       case 4: try { try decoder.decodeSingularInt64Field(value: &self.timestamp) }()
@@ -1686,8 +1686,8 @@ extension Amux_Envelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.agentID.isEmpty {
-      try visitor.visitSingularStringField(value: self.agentID, fieldNumber: 1)
+    if !self.runtimeID.isEmpty {
+      try visitor.visitSingularStringField(value: self.runtimeID, fieldNumber: 1)
     }
     if !self.deviceID.isEmpty {
       try visitor.visitSingularStringField(value: self.deviceID, fieldNumber: 2)
@@ -1716,7 +1716,7 @@ extension Amux_Envelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
   }
 
   public static func ==(lhs: Amux_Envelope, rhs: Amux_Envelope) -> Bool {
-    if lhs.agentID != rhs.agentID {return false}
+    if lhs.runtimeID != rhs.runtimeID {return false}
     if lhs.deviceID != rhs.deviceID {return false}
     if lhs.sourcePeerID != rhs.sourcePeerID {return false}
     if lhs.timestamp != rhs.timestamp {return false}
@@ -1729,7 +1729,7 @@ extension Amux_Envelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
 
 extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CommandEnvelope"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agent_id\0\u{3}device_id\0\u{3}peer_id\0\u{3}command_id\0\u{1}timestamp\0\u{3}sender_actor_id\0\u{3}reply_to_device_id\0\u{4}\u{3}acp_command\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}runtime_id\0\u{3}device_id\0\u{3}peer_id\0\u{3}command_id\0\u{1}timestamp\0\u{3}sender_actor_id\0\u{3}reply_to_device_id\0\u{4}\u{3}acp_command\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1737,7 +1737,7 @@ extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.agentID) }()
+      case 1: try { try decoder.decodeSingularStringField(value: &self.runtimeID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.deviceID) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.peerID) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.commandID) }()
@@ -1755,8 +1755,8 @@ extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.agentID.isEmpty {
-      try visitor.visitSingularStringField(value: self.agentID, fieldNumber: 1)
+    if !self.runtimeID.isEmpty {
+      try visitor.visitSingularStringField(value: self.runtimeID, fieldNumber: 1)
     }
     if !self.deviceID.isEmpty {
       try visitor.visitSingularStringField(value: self.deviceID, fieldNumber: 2)
@@ -1783,7 +1783,7 @@ extension Amux_CommandEnvelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
   }
 
   public static func ==(lhs: Amux_CommandEnvelope, rhs: Amux_CommandEnvelope) -> Bool {
-    if lhs.agentID != rhs.agentID {return false}
+    if lhs.runtimeID != rhs.runtimeID {return false}
     if lhs.deviceID != rhs.deviceID {return false}
     if lhs.peerID != rhs.peerID {return false}
     if lhs.commandID != rhs.commandID {return false}

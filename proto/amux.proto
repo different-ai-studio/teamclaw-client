@@ -7,7 +7,7 @@ package amux;
 
 // Downstream: daemon → clients
 message Envelope {
-  string agent_id = 1;
+  string runtime_id = 1;
   string device_id = 2;
   string source_peer_id = 3;      // Who triggered (empty if agent-initiated)
   int64 timestamp = 4;
@@ -21,7 +21,7 @@ message Envelope {
 
 // Upstream: clients → daemon (agent-level, sent to agent/{agentId}/commands topic)
 message CommandEnvelope {
-  string agent_id = 1;
+  string runtime_id = 1;
   string device_id = 2;
   string peer_id = 3;
   string command_id = 4;          // For response correlation

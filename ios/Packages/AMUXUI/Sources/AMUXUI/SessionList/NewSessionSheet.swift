@@ -748,7 +748,7 @@ public struct NewSessionSheet: View {
 
     private func makeStartAgentCommand(initialPrompt: String, sessionID: String) -> Amux_CommandEnvelope {
         var cmd = Amux_CommandEnvelope()
-        cmd.agentID = ""
+        cmd.runtimeID = ""
         cmd.deviceID = effectiveDeviceID
         cmd.replyToDeviceID = requesterDeviceID
         cmd.peerID = peerId

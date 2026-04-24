@@ -113,7 +113,7 @@ pub async fn run_watch(config: DaemonConfig) -> anyhow::Result<()> {
                 } else if topic.ends_with("/events") {
                     match amux::Envelope::decode(payload.as_ref()) {
                         Ok(env) => {
-                            let agent_id = &env.agent_id;
+                            let agent_id = &env.runtime_id;
                             let seq = env.sequence;
                             match &env.payload {
                                 Some(amux::envelope::Payload::AcpEvent(acp)) => {
@@ -228,7 +228,7 @@ pub async fn run_start_agent(config: DaemonConfig, worktree: &str, prompt: &str)
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     let envelope = amux::CommandEnvelope {
-        agent_id: String::new(), // daemon will assign
+        runtime_id: String::new(), // daemon will assign
         device_id: tc.config.device.id.clone(),
         peer_id: tc.peer_id.clone(),
         command_id: Uuid::new_v4().to_string(),
@@ -371,7 +371,7 @@ pub async fn run_e2e(config: DaemonConfig, token: &str, worktree: &str, prompt: 
     // Phase 3: StartAgent
     println!("\n--- Phase 3: Start Agent ---");
     let start_cmd = amux::CommandEnvelope {
-        agent_id: String::new(),
+        runtime_id: String::new(),
         device_id: device_id.clone(),
         peer_id: peer_id.clone(),
         command_id: Uuid::new_v4().to_string(),
@@ -458,7 +458,7 @@ fn print_publish(publish: &rumqttc::Publish) {
         }
     } else if topic.ends_with("/events") {
         if let Ok(env) = amux::Envelope::decode(payload.as_ref()) {
-            let id = &env.agent_id;
+            let id = &env.runtime_id;
             let seq = env.sequence;
             match &env.payload {
                 Some(amux::envelope::Payload::AcpEvent(acp)) => match &acp.event {

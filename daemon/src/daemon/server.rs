@@ -368,7 +368,7 @@ impl DaemonServer {
                     };
                     let seq = self.agents.get_handle_mut(agent_id).map(|h| h.next_sequence()).unwrap_or(0);
                     let envelope = amux::Envelope {
-                        agent_id: agent_id.into(),
+                        runtime_id: agent_id.into(),
                         device_id: self.config.device.id.clone(),
                         source_peer_id: String::new(),
                         timestamp: chrono::Utc::now().timestamp(),
@@ -499,7 +499,7 @@ impl DaemonServer {
         }
 
         let envelope = amux::Envelope {
-            agent_id: agent_id.into(),
+            runtime_id: agent_id.into(),
             device_id: self.config.device.id.clone(),
             source_peer_id: String::new(), // agent-initiated
             timestamp: chrono::Utc::now().timestamp(),
@@ -1137,7 +1137,7 @@ impl DaemonServer {
     /// Publish a collab event on the agent's events topic
     async fn publish_collab_event(&self, agent_id: &str, event: amux::CollabEvent) {
         let envelope = amux::Envelope {
-            agent_id: agent_id.into(),
+            runtime_id: agent_id.into(),
             device_id: self.config.device.id.clone(),
             source_peer_id: String::new(),
             timestamp: chrono::Utc::now().timestamp(),
