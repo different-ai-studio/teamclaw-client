@@ -90,7 +90,7 @@ impl SessionStore {
             tool_use_count: s.tool_use_count,
             // Historical (non-active) sessions have no live model state.
             // Live agents are merged in by `DaemonServer::merged_agent_list`
-            // from `AgentManager::to_proto_agent_list`, which populates
+            // from `RuntimeManager::to_proto_agent_list`, which populates
             // these fields from the running adapter.
             available_models: vec![],
             current_model: String::new(),

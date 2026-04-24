@@ -5,7 +5,7 @@ use crate::config::{DaemonConfig, MemberStore, SessionStore, StoredSession, Work
 use crate::mqtt::{MqttClient, publisher::Publisher, subscriber};
 use crate::supabase::{SupabaseClient, SupabaseConfig};
 use std::path::PathBuf;
-use crate::runtime::AgentManager;
+use crate::runtime::RuntimeManager;
 use crate::collab::{AuthManager, AuthResult, PeerTracker, PeerState, PermissionManager};
 use crate::history::EventHistory;
 use crate::proto::amux;
@@ -29,7 +29,7 @@ struct StartRuntimeError {
 pub struct DaemonServer {
     config: DaemonConfig,
     mqtt: MqttClient,
-    agents: AgentManager,
+    agents: RuntimeManager,
     auth: AuthManager,
     peers: PeerTracker,
     permissions: PermissionManager,
@@ -100,7 +100,7 @@ impl DaemonServer {
             }
         };
 
-        let agents = AgentManager::new(binary, flags, supabase.clone());
+        let agents = RuntimeManager::new(binary, flags, supabase.clone());
 
         let teamclaw = if let Some(team_id) = &config.team_id {
             Some(crate::teamclaw::SessionManager::new(
@@ -536,7 +536,7 @@ impl DaemonServer {
 
     /// Returns the primary (first running) agent ID for this daemon.
     /// Used to stamp new sessions with the host's agent without passing
-    /// AgentManager into SessionManager.
+    /// RuntimeManager into SessionManager.
     fn primary_agent_id(&self) -> Option<String> {
         self.agents.first_running_agent_id()
     }
@@ -1576,7 +1576,7 @@ impl DaemonServer {
             return reject_stop(request, &format!("unknown runtime_id: {}", runtime_id));
         }
 
-        // Terminate via AgentManager (same path as AcpCommand::StopAgent).
+        // Terminate via RuntimeManager (same path as AcpCommand::StopAgent).
         if self.agents.stop_agent(&runtime_id).await.is_none() {
             return reject_stop(request, &format!("stop failed for runtime_id: {}", runtime_id));
         }

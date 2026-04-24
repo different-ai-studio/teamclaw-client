@@ -996,7 +996,7 @@ impl SessionManager {
     /// Publish an agent's output as a session message.
     ///
     /// `model` is the model id the agent was running on when it produced this
-    /// reply (looked up from `AgentManager.current_model` by the caller).
+    /// reply (looked up from `RuntimeManager.current_model` by the caller).
     /// Pass an empty string for legacy / unknown.
     pub async fn publish_agent_message(
         &self,

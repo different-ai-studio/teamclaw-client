@@ -8,7 +8,7 @@ use chrono::Utc;
 use super::adapter;
 use super::handle::AgentHandle;
 
-pub struct AgentManager {
+pub struct RuntimeManager {
     agents: HashMap<String, AgentHandle>,
     claude_binary: String,
     /// Tracks the model id currently applied to each agent's ACP session.
@@ -20,7 +20,7 @@ pub struct AgentManager {
     supabase: Option<SupabaseClient>,
 }
 
-impl AgentManager {
+impl RuntimeManager {
     pub fn new(binary: String, _flags: Vec<String>, supabase: Option<SupabaseClient>) -> Self {
         Self {
             agents: HashMap::new(),
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn set_current_model_records_value() {
-        let mut mgr = AgentManager::new("claude".to_string(), vec![], None);
+        let mut mgr = RuntimeManager::new("claude".to_string(), vec![], None);
         mgr.set_current_model("agent-1", "claude-sonnet-4-6");
         assert_eq!(
             mgr.current_model("agent-1").map(|s| s.as_str()),
@@ -340,7 +340,7 @@ mod tests {
 
     #[test]
     fn current_model_returns_none_for_unknown_agent() {
-        let mgr = AgentManager::new("claude".to_string(), vec![], None);
+        let mgr = RuntimeManager::new("claude".to_string(), vec![], None);
         assert_eq!(mgr.current_model("agent-1"), None);
     }
 }

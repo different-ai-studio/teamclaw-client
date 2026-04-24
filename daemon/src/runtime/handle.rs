@@ -57,7 +57,7 @@ impl AgentHandle {
     /// Build a `RuntimeInfo` for this agent.
     ///
     /// `available_models` and `current_model` are passed in by the caller
-    /// (typically `AgentManager`) so that the handle does not need to know
+    /// (typically `RuntimeManager`) so that the handle does not need to know
     /// about the model registry or the daemon-side `current_model_per_agent`
     /// map. Pass an empty Vec / empty String for unknown / unset.
     pub fn to_proto_info(
