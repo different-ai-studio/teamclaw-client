@@ -41,3 +41,7 @@ ios/Gemfile.lock
 # XcodeGen output
 mac/AMUXMac.xcodeproj/
 
+# Xcode build output
+ios/build/
+mac/build/
+
