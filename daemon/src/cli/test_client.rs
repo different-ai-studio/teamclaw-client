@@ -27,7 +27,7 @@ impl TestClient {
         let use_tls = config.mqtt.broker_url.starts_with("mqtts://");
 
         let mut opts = MqttOptions::new(&client_id, host, 8883);
-        opts.set_credentials(&config.mqtt.username, &config.mqtt.password);
+        opts.set_credentials("test-client", "");
         opts.set_keep_alive(std::time::Duration::from_secs(30));
         opts.set_clean_session(true);
 

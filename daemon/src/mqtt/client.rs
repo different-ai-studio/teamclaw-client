@@ -68,7 +68,7 @@ impl MqttClient {
         };
 
         let mut opts = MqttOptions::new(&client_id, &host, port);
-        opts.set_credentials(&config.mqtt.username, &config.mqtt.password);
+        opts.set_credentials("amuxd", "");
         opts.set_keep_alive(Duration::from_secs(30));
         opts.set_clean_session(true);
 
