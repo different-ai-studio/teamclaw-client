@@ -225,7 +225,13 @@ impl DaemonServer {
             }
 
             // ── 5. Subscribe and announce ──
-            self.mqtt.subscribe_all().await.map_err(crate::error::AmuxError::Mqtt)?;
+            // Errors here are transient (rumqttc channel full, typically under
+            // burst) — warn and `continue 'outer` so we rebuild rather than
+            // exiting run() and terminating the daemon.
+            if let Err(e) = self.mqtt.subscribe_all().await {
+                warn!("subscribe_all failed after CONNACK: {e}, reconnecting");
+                continue 'outer;
+            }
             if let Some(tc) = &mut self.teamclaw {
                 if let Err(e) = tc.subscribe_all().await {
                     warn!("teamclaw subscribe failed: {e}, reconnecting");
@@ -234,11 +240,14 @@ impl DaemonServer {
             }
             {
                 let publisher = Publisher::new(&self.mqtt);
-                publisher.publish_device_state(&crate::proto::amux::DeviceState {
+                if let Err(e) = publisher.publish_device_state(&crate::proto::amux::DeviceState {
                     online: true,
                     device_name: self.config.device.name.clone(),
                     timestamp: chrono::Utc::now().timestamp(),
-                }).await.map_err(crate::error::AmuxError::Mqtt)?;
+                }).await {
+                    warn!("publish_device_state failed after CONNACK: {e}, reconnecting");
+                    continue 'outer;
+                }
             }
             self.publish_all_agent_states().await;
             info!(device_id = %self.config.device.id, "MQTT connected, listening for commands");
@@ -277,6 +286,12 @@ impl DaemonServer {
                     // Proactive: token is about to expire.
                     _ = &mut reconnect => {
                         info!("token expiring, reconnecting MQTT");
+                        // Queue a graceful DISCONNECT; the post-inner-loop
+                        // drain below gives rumqttc a chance to write the
+                        // packet before we drop the eventloop. Suppresses
+                        // the LWT that would otherwise fire on TCP close
+                        // and briefly flash iOS as offline.
+                        let _ = self.mqtt.client.disconnect().await;
                         break 'inner;
                     }
 
@@ -319,6 +334,21 @@ impl DaemonServer {
                             Ok(Ok(_)) | Err(_) => {} // other events or 50 ms timeout
                         }
                     }
+                }
+            }
+
+            // Drain the eventloop briefly so any queued DISCONNECT (from the
+            // proactive path above) is actually written to the socket before
+            // the next outer iteration drops this MqttClient. Bounded by a
+            // short per-poll timeout and a small iteration cap so we never
+            // block long on an already-dead connection.
+            for _ in 0..3 {
+                match tokio::time::timeout(
+                    Duration::from_millis(50),
+                    self.mqtt.eventloop.poll(),
+                ).await {
+                    Ok(Err(_)) | Err(_) => break,
+                    Ok(Ok(_)) => {}
                 }
             }
             // inner loop exited → outer loop: get fresh token and reconnect
