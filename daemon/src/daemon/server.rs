@@ -524,6 +524,83 @@ impl DaemonServer {
         }
     }
 
+    /// Returns the primary (first running) agent ID for this daemon.
+    /// Used to stamp new sessions with the host's agent without passing
+    /// AgentManager into SessionManager.
+    fn primary_agent_id(&self) -> Option<String> {
+        self.agents.first_running_agent_id()
+    }
+
+    /// Server-level RPC dispatch. Decodes the wire payload, matches on Method,
+    /// delegates session/task methods to SessionManager, and handles non-session
+    /// methods locally. Publishes the response to the sender's rpc/res topic.
+    async fn handle_rpc_request(&mut self, topic: &str, payload: &[u8]) {
+        use crate::proto::teamclaw::{rpc_request::Method, RpcRequest, RpcResponse};
+        use prost::Message as ProstMessage;
+
+        let request = match RpcRequest::decode(payload) {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(%topic, "failed to decode RpcRequest: {}", e);
+                return;
+            }
+        };
+
+        let response: RpcResponse = match &request.method {
+            // ─── Session/task methods — delegate to SessionManager ───
+            Some(Method::CreateSession(_))
+            | Some(Method::FetchSession(_))
+            | Some(Method::FetchSessionMessages(_))
+            | Some(Method::JoinSession(_))
+            | Some(Method::AddParticipant(_))
+            | Some(Method::RemoveParticipant(_))
+            | Some(Method::CreateTask(_))
+            | Some(Method::ClaimTask(_))
+            | Some(Method::SubmitTask(_))
+            | Some(Method::UpdateTask(_)) => {
+                // Pre-compute primary before the mutable borrow of self.teamclaw.
+                let primary = self.primary_agent_id();
+                if let Some(tc) = self.teamclaw.as_mut() {
+                    tc.handle_rpc_method(request.clone(), primary).await
+                } else {
+                    not_yet_implemented(&request, "session_manager not initialized")
+                }
+            }
+            // ─── Non-session methods — handle locally ───
+            // Phase 1b Tasks 3-9 replace these stubs with real handlers.
+            Some(Method::FetchPeers(_)) => not_yet_implemented(&request, "fetch_peers"),
+            Some(Method::FetchWorkspaces(_)) => not_yet_implemented(&request, "fetch_workspaces"),
+            Some(Method::AnnouncePeer(_)) => not_yet_implemented(&request, "announce_peer"),
+            Some(Method::DisconnectPeer(_)) => not_yet_implemented(&request, "disconnect_peer"),
+            Some(Method::AddWorkspace(_)) => not_yet_implemented(&request, "add_workspace"),
+            Some(Method::RemoveWorkspace(_)) => not_yet_implemented(&request, "remove_workspace"),
+            Some(Method::RemoveMember(_)) => not_yet_implemented(&request, "remove_member"),
+            Some(Method::RuntimeStop(_)) => not_yet_implemented(&request, "runtime_stop"),
+            Some(Method::RuntimeStart(_)) => not_yet_implemented(&request, "runtime_start"),
+            None => RpcResponse {
+                request_id: request.request_id.clone(),
+                success: false,
+                error: "no method".to_string(),
+                requester_client_id: request.requester_client_id.clone(),
+                requester_actor_id: request.requester_actor_id.clone(),
+                requester_device_id: request.requester_device_id.clone(),
+                result: None,
+            },
+        };
+
+        // Publish response on the sender's rpc/res topic (mirrors RpcServer::respond).
+        let res_topic = self.mqtt.topics.rpc_res_for(&request.sender_device_id);
+        let bytes = response.encode_to_vec();
+        if let Err(e) = self
+            .mqtt
+            .client
+            .publish(res_topic, rumqttc::QoS::AtLeastOnce, false, bytes)
+            .await
+        {
+            warn!("failed to publish RpcResponse: {}", e);
+        }
+    }
+
     async fn handle_incoming(&mut self, msg: subscriber::IncomingMessage) {
         use prost::Message as ProstMessage;
         match msg {
@@ -550,13 +627,7 @@ impl DaemonServer {
                 self.handle_device_collab(envelope).await;
             }
             subscriber::IncomingMessage::TeamclawRpc { topic, payload } => {
-                // Pre-compute the host's primary agent_id so SessionManager
-                // can stamp it onto any newly created session without needing
-                // a back-reference into AgentManager.
-                let primary = self.agents.first_running_agent_id();
-                if let Some(tc) = &mut self.teamclaw {
-                    tc.handle_rpc_request(&topic, &payload, primary).await;
-                }
+                self.handle_rpc_request(&topic, &payload).await;
             }
             subscriber::IncomingMessage::TeamclawSessionLive { session_id, payload } => {
                 if let Ok(envelope) = crate::proto::teamclaw::LiveEventEnvelope::decode(payload.as_slice()) {
@@ -1294,6 +1365,21 @@ fn format_task_prompt(session_id: &str, event: &crate::proto::teamclaw::TaskEven
         Some(Event::Claimed(claim)) => format!("[Collab session: {}] Task {} claimed by {}", session_id, claim.task_id, claim.actor_id),
         Some(Event::Submitted(sub)) => format!("[Collab session: {}] Submission for {}: {}", session_id, sub.task_id, sub.content),
         None => String::new(),
+    }
+}
+
+fn not_yet_implemented(
+    request: &crate::proto::teamclaw::RpcRequest,
+    method_name: &str,
+) -> crate::proto::teamclaw::RpcResponse {
+    crate::proto::teamclaw::RpcResponse {
+        request_id: request.request_id.clone(),
+        success: false,
+        error: format!("{} not yet implemented", method_name),
+        requester_client_id: request.requester_client_id.clone(),
+        requester_actor_id: request.requester_actor_id.clone(),
+        requester_device_id: request.requester_device_id.clone(),
+        result: None,
     }
 }
 

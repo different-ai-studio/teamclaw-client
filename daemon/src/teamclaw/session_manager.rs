@@ -82,190 +82,67 @@ impl SessionManager {
         Ok(())
     }
 
-    /// Handle an incoming RPC request on topic with the given payload.
+    /// Handle a pre-parsed RPC request. Only dispatches session/task-scoped methods.
+    ///
+    /// Caller is responsible for decoding the wire payload and publishing the response.
+    /// Non-session methods are dispatched by `DaemonServer::handle_rpc_request` directly.
     ///
     /// `host_primary_agent_id` is intentionally ignored for session creation.
     /// A session should only gain `primary_agent_id` once an agent actually
     /// joins it, rather than inheriting whichever local agent happened to be
     /// running when the session was created.
-    pub async fn handle_rpc_request(
+    pub async fn handle_rpc_method(
         &mut self,
-        topic: &str,
-        payload: &[u8],
-        host_primary_agent_id: Option<String>,
-    ) {
-        let (request_id, req) = match RpcServer::parse_request(topic, payload) {
-            Some(pair) => pair,
-            None => {
-                warn!("SessionManager: failed to parse RPC request from topic: {}", topic);
-                return;
-            }
-        };
-
-        let response = match &req.method {
+        request: RpcRequest,
+        primary_agent_id: Option<String>,
+    ) -> RpcResponse {
+        let request_id = request.request_id.clone();
+        match request.method.clone() {
             Some(teamclaw::rpc_request::Method::CreateSession(r)) => {
-                let r = r.clone();
-                self.handle_create_session(&req, r, host_primary_agent_id.clone()).await
+                self.handle_create_session(&request, r, primary_agent_id).await
             }
             Some(teamclaw::rpc_request::Method::FetchSession(r)) => {
-                let r = r.clone();
-                self.handle_fetch_session(&req, r).await
+                self.handle_fetch_session(&request, r).await
             }
             Some(teamclaw::rpc_request::Method::FetchSessionMessages(r)) => {
-                let r = r.clone();
-                self.handle_fetch_session_messages(&req, r).await
+                self.handle_fetch_session_messages(&request, r).await
             }
             Some(teamclaw::rpc_request::Method::JoinSession(r)) => {
-                let r = r.clone();
-                self.handle_join_session(&req, r).await
+                self.handle_join_session(&request, r).await
             }
             Some(teamclaw::rpc_request::Method::AddParticipant(r)) => {
-                let r = r.clone();
-                self.handle_add_participant(&req, r).await
+                self.handle_add_participant(&request, r).await
             }
             Some(teamclaw::rpc_request::Method::RemoveParticipant(r)) => {
-                let r = r.clone();
-                self.handle_remove_participant(&req, r).await
+                self.handle_remove_participant(&request, r).await
             }
             Some(teamclaw::rpc_request::Method::CreateTask(r)) => {
-                let r = r.clone();
-                self.handle_create_task(&req, r).await
+                self.handle_create_task(&request, r).await
             }
             Some(teamclaw::rpc_request::Method::ClaimTask(r)) => {
-                let r = r.clone();
-                self.handle_claim_task(&req, r).await
+                self.handle_claim_task(&request, r).await
             }
             Some(teamclaw::rpc_request::Method::SubmitTask(r)) => {
-                let r = r.clone();
-                self.handle_submit_task(&req, r).await
+                self.handle_submit_task(&request, r).await
             }
             Some(teamclaw::rpc_request::Method::UpdateTask(r)) => {
-                let r = r.clone();
-                self.handle_update_task(&req, r).await
+                self.handle_update_task(&request, r).await
             }
-            Some(teamclaw::rpc_request::Method::RuntimeStart(_)) => {
-                // Not implemented yet — Phase 1 will add the handler.
+            other => {
+                // Non-session methods are dispatched by DaemonServer directly,
+                // not SessionManager. If we land here, the caller routed wrong.
+                warn!(?other, "SessionManager got non-session RPC method; routing bug");
                 RpcResponse {
-                    request_id: request_id.clone(),
+                    request_id,
                     success: false,
-                    error: "runtime_start not yet implemented".to_string(),
-                    requester_client_id: req.requester_client_id.clone(),
-                    requester_actor_id: req.requester_actor_id.clone(),
-                    requester_device_id: req.requester_device_id.clone(),
+                    error: "method not handled by SessionManager".to_string(),
+                    requester_client_id: request.requester_client_id,
+                    requester_actor_id: request.requester_actor_id,
+                    requester_device_id: request.requester_device_id,
                     result: None,
                 }
             }
-            Some(teamclaw::rpc_request::Method::RuntimeStop(_)) => {
-                // Not implemented yet — Phase 1 will add the handler.
-                RpcResponse {
-                    request_id: request_id.clone(),
-                    success: false,
-                    error: "runtime_stop not yet implemented".to_string(),
-                    requester_client_id: req.requester_client_id.clone(),
-                    requester_actor_id: req.requester_actor_id.clone(),
-                    requester_device_id: req.requester_device_id.clone(),
-                    result: None,
-                }
-            }
-            Some(teamclaw::rpc_request::Method::AnnouncePeer(_)) => {
-                // Not implemented yet — Phase 5 will retire the legacy collab path.
-                RpcResponse {
-                    request_id: request_id.clone(),
-                    success: false,
-                    error: "announce_peer not yet implemented".to_string(),
-                    requester_client_id: req.requester_client_id.clone(),
-                    requester_actor_id: req.requester_actor_id.clone(),
-                    requester_device_id: req.requester_device_id.clone(),
-                    result: None,
-                }
-            }
-            Some(teamclaw::rpc_request::Method::DisconnectPeer(_)) => {
-                // Not implemented yet — Phase 5 will retire the legacy collab path.
-                RpcResponse {
-                    request_id: request_id.clone(),
-                    success: false,
-                    error: "disconnect_peer not yet implemented".to_string(),
-                    requester_client_id: req.requester_client_id.clone(),
-                    requester_actor_id: req.requester_actor_id.clone(),
-                    requester_device_id: req.requester_device_id.clone(),
-                    result: None,
-                }
-            }
-            Some(teamclaw::rpc_request::Method::RemoveMember(_)) => {
-                // Not implemented yet — Phase 5 will retire the legacy collab path.
-                RpcResponse {
-                    request_id: request_id.clone(),
-                    success: false,
-                    error: "remove_member not yet implemented".to_string(),
-                    requester_client_id: req.requester_client_id.clone(),
-                    requester_actor_id: req.requester_actor_id.clone(),
-                    requester_device_id: req.requester_device_id.clone(),
-                    result: None,
-                }
-            }
-            Some(teamclaw::rpc_request::Method::AddWorkspace(_)) => {
-                // Not implemented yet — Phase 5 will retire the legacy collab path.
-                RpcResponse {
-                    request_id: request_id.clone(),
-                    success: false,
-                    error: "add_workspace not yet implemented".to_string(),
-                    requester_client_id: req.requester_client_id.clone(),
-                    requester_actor_id: req.requester_actor_id.clone(),
-                    requester_device_id: req.requester_device_id.clone(),
-                    result: None,
-                }
-            }
-            Some(teamclaw::rpc_request::Method::RemoveWorkspace(_)) => {
-                // Not implemented yet — Phase 5 will retire the legacy collab path.
-                RpcResponse {
-                    request_id: request_id.clone(),
-                    success: false,
-                    error: "remove_workspace not yet implemented".to_string(),
-                    requester_client_id: req.requester_client_id.clone(),
-                    requester_actor_id: req.requester_actor_id.clone(),
-                    requester_device_id: req.requester_device_id.clone(),
-                    result: None,
-                }
-            }
-            Some(teamclaw::rpc_request::Method::FetchPeers(_)) => {
-                // Not implemented yet — Phase 5 will retire the legacy collab path.
-                RpcResponse {
-                    request_id: request_id.clone(),
-                    success: false,
-                    error: "fetch_peers not yet implemented".to_string(),
-                    requester_client_id: req.requester_client_id.clone(),
-                    requester_actor_id: req.requester_actor_id.clone(),
-                    requester_device_id: req.requester_device_id.clone(),
-                    result: None,
-                }
-            }
-            Some(teamclaw::rpc_request::Method::FetchWorkspaces(_)) => {
-                // Not implemented yet — Phase 5 will retire the legacy collab path.
-                RpcResponse {
-                    request_id: request_id.clone(),
-                    success: false,
-                    error: "fetch_workspaces not yet implemented".to_string(),
-                    requester_client_id: req.requester_client_id.clone(),
-                    requester_actor_id: req.requester_actor_id.clone(),
-                    requester_device_id: req.requester_device_id.clone(),
-                    result: None,
-                }
-            }
-            None => {
-                warn!("SessionManager: received RPC request with no method");
-                RpcResponse {
-                    request_id: request_id.clone(),
-                    success: false,
-                    error: "no method specified".to_string(),
-                    requester_client_id: String::new(),
-                    requester_actor_id: String::new(),
-                    requester_device_id: String::new(),
-                    result: None,
-                }
-            }
-        };
-
-        self.rpc_server.respond(&req, response).await;
+        }
     }
 
     // --- RPC Handlers ---

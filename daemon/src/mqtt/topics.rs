@@ -36,6 +36,12 @@ impl Topics {
         format!("amux/{}/device/{}/collab", self.team_id, device_id)
     }
 
+    /// RPC response topic for an arbitrary device (used when replying to a
+    /// request whose sender_device_id differs from our own device_id).
+    pub fn rpc_res_for(&self, device_id: &str) -> String {
+        format!("amux/{}/device/{}/rpc/res", self.team_id, device_id)
+    }
+
     pub fn agent_state(&self, agent_id: &str) -> String {
         format!("{}/agent/{}/state", self.device_base(), agent_id)
     }
