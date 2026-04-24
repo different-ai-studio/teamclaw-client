@@ -81,7 +81,7 @@ impl AgentHandle {
             current_model,
             // Lifecycle fields — not yet populated by the live adapter;
             // will be wired in a later phase.
-            state: amux::RuntimeLifecycle::Unknown as i32,
+            state: amux::RuntimeLifecycle::Active as i32,
             stage: String::new(),
             error_code: String::new(),
             error_message: String::new(),

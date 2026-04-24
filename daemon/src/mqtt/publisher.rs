@@ -23,17 +23,28 @@ impl<'a> Publisher<'a> {
             .await
     }
 
+    /// Dual-publishes RuntimeInfo to BOTH the legacy agent/{id}/state and
+    /// the new runtime/{id}/state retained topics during the Phase 1-2
+    /// compat window. Phase 3 drops the legacy publish.
     pub async fn publish_agent_state(&self, agent_id: &str, info: &amux::RuntimeInfo) -> Result<(), rumqttc::ClientError> {
+        let payload = info.encode_to_vec();
         self.client.client
-            .publish(self.client.topics.agent_state(agent_id), QoS::AtLeastOnce, true, info.encode_to_vec())
+            .publish(self.client.topics.agent_state(agent_id), QoS::AtLeastOnce, true, payload.clone())
+            .await?;
+        self.client.client
+            .publish(self.client.topics.runtime_state(agent_id), QoS::AtLeastOnce, true, payload)
             .await
     }
 
-    /// Publish an empty retained message on an agent's state topic so the broker
-    /// clears the retain. Used when a session is permanently deleted.
+    /// Clears retained state on BOTH the legacy agent/{id}/state and the
+    /// new runtime/{id}/state paths. Otherwise a legacy subscriber or a
+    /// new subscriber would see ghost state after runtime termination.
     pub async fn clear_agent_state(&self, agent_id: &str) -> Result<(), rumqttc::ClientError> {
         self.client.client
             .publish(self.client.topics.agent_state(agent_id), QoS::AtLeastOnce, true, Vec::<u8>::new())
+            .await?;
+        self.client.client
+            .publish(self.client.topics.runtime_state(agent_id), QoS::AtLeastOnce, true, Vec::<u8>::new())
             .await
     }
 

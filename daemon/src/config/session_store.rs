@@ -94,8 +94,11 @@ impl SessionStore {
             // these fields from the running adapter.
             available_models: vec![],
             current_model: String::new(),
-            // Lifecycle fields — not populated for historical sessions.
-            state: amux::RuntimeLifecycle::Unknown as i32,
+            // Stored sessions represent runtimes the daemon will re-spawn.
+            // ACTIVE is a steady-state assumption; Phase 1b will wire proper
+            // state transitions (STARTING while spawn is in flight, FAILED
+            // if spawn fails).
+            state: amux::RuntimeLifecycle::Active as i32,
             stage: String::new(),
             error_code: String::new(),
             error_message: String::new(),
