@@ -145,4 +145,71 @@ public final class AppOnboardingCoordinator {
             errorMessage = error.localizedDescription
         }
     }
+
+    // MARK: - Auth sign-in
+
+    public func signIn(email: String, password: String) async {
+        await performAuth { try await self.store.signIn(email: email, password: password) }
+    }
+
+    public func signUp(email: String, password: String) async {
+        await performAuth { try await self.store.signUp(email: email, password: password) }
+    }
+
+    public func sendMagicLink(email: String) async {
+        guard !isBusy else { return }
+        isBusy = true
+        errorMessage = nil
+        defer { isBusy = false }
+        do {
+            try await store.sendMagicLink(email: email)
+            pendingMagicLinkEmail = email
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    public func signInWithApple() async {
+#if os(iOS)
+        await performAuth {
+            let (idToken, nonce) = try await AppleSignInHandler.shared.request()
+            try await self.store.signInWithAppleCredential(idToken: idToken, nonce: nonce)
+        }
+#endif
+    }
+
+    public func signInWithGoogle() async {
+        await performAuth { try await self.store.signInWithGoogle() }
+    }
+
+    public func handleAuthCallback(url: URL) async {
+        guard !isBusy else { return }
+        isBusy = true
+        errorMessage = nil
+        do {
+            try await store.handleAuthCallback(url: url)
+            pendingMagicLinkEmail = nil
+            isBusy = false
+            await bootstrap()
+        } catch {
+            isBusy = false
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Private helpers
+
+    private func performAuth(_ action: @escaping () async throws -> Void) async {
+        guard !isBusy else { return }
+        isBusy = true
+        errorMessage = nil
+        do {
+            try await action()
+            isBusy = false
+            await bootstrap()
+        } catch {
+            isBusy = false
+            errorMessage = error.localizedDescription
+        }
+    }
 }
