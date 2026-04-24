@@ -122,7 +122,7 @@ public struct SessionsTab: View {
                 .modifier(ZoomTransitionModifier(sourceID: "newSession", namespace: sheetTransition))
             }
             .task {
-                viewModel.start(mqtt: mqtt, deviceId: pairing.deviceId, modelContext: modelContext)
+                viewModel.start(mqtt: mqtt, deviceId: pairing.deviceId, modelContext: modelContext, teamclawService: teamclawService)
             }
             .onChange(of: teamclawService?.sessions.count) {
                 viewModel.reloadSessions(modelContext: modelContext)

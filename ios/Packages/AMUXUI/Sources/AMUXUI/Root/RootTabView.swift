@@ -84,7 +84,7 @@ public struct RootTabView: View {
             ConnectionBannerOverlay(mqtt: mqtt, onReconnect: onReconnect)
         }
         .task {
-            viewModel.start(mqtt: mqtt, deviceId: pairing.deviceId, modelContext: modelContext)
+            viewModel.start(mqtt: mqtt, deviceId: pairing.deviceId, modelContext: modelContext, teamclawService: teamclawService)
         }
         .task(id: activeTeam?.id) {
             await configureStores()

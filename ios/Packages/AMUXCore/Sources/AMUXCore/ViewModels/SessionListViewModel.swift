@@ -40,7 +40,7 @@ public final class SessionListViewModel {
 
     public init() {}
 
-    public func start(mqtt: MQTTService, teamID: String = "", deviceId: String, modelContext: ModelContext) {
+    public func start(mqtt: MQTTService, teamID: String = "", deviceId: String, modelContext: ModelContext, teamclawService: TeamclawService? = nil) {
         // Create a dedicated context from the same container for async work
         let container = modelContext.container
         let ctx = ModelContext(container)
@@ -66,7 +66,6 @@ public final class SessionListViewModel {
         let runtimeStatePrefix = MQTTTopics.runtimeStatePrefix(teamID: teamID, deviceID: deviceId)
         let runtimeStateSuffix = "/state"
         let runtimeStateWildcard = MQTTTopics.runtimeStateWildcard(teamID: teamID, deviceID: deviceId)
-        let workspacesTopic = MQTTTopics.deviceWorkspaces(teamID: teamID, deviceID: deviceId)
         task = Task {
             // Outer loop: each iteration represents a fresh MQTT connection
             // lifecycle. When the inner stream ends (disconnect clears
@@ -95,22 +94,25 @@ public final class SessionListViewModel {
 
                 let stream = mqtt.messages()
                 try? await mqtt.subscribe(runtimeStateWildcard)
-                try? await mqtt.subscribe(workspacesTopic)
                 isLoading = false
-                NSLog("[SessionListVM] subscribed to %@ + %@", runtimeStateWildcard, workspacesTopic)
+                NSLog("[SessionListVM] subscribed to %@", runtimeStateWildcard)
+
+                // Phase 2b: workspaces come from FetchWorkspaces RPC instead
+                // of retained topic subscription. One-shot fetch on connect.
+                // Phase 2c will call syncWorkspaces from workspace-mutation
+                // success handlers; until then, users don't see changes made
+                // from other devices until they reconnect. Acceptable for the
+                // compat window since daemon still publishes retained
+                // deviceWorkspaces for pre-Phase-2b clients.
+                if let teamclawService {
+                    Task { [weak self] in
+                        guard let self else { return }
+                        let workspaces = await teamclawService.fetchWorkspaces()
+                        syncWorkspaces(workspaces, modelContext: ctx)
+                    }
+                }
 
                 for await msg in stream {
-                    if msg.topic == workspacesTopic {
-                        NSLog("[SessionListVM] received workspaces msg, %d bytes", msg.payload.count)
-                        if let list = try? ProtoMQTTCoder.decode(Amux_WorkspaceList.self, from: msg.payload) {
-                            NSLog("[SessionListVM] decoded WorkspaceList: %d workspaces", list.workspaces.count)
-                            syncWorkspaces(list, modelContext: ctx)
-                        } else {
-                            NSLog("[SessionListVM] FAILED to decode WorkspaceList")
-                        }
-                        continue
-                    }
-
                     guard msg.topic.hasPrefix(runtimeStatePrefix),
                           msg.topic.hasSuffix(runtimeStateSuffix) else { continue }
                     // Empty retained payload = the daemon cleared this agent's
@@ -196,8 +198,8 @@ public final class SessionListViewModel {
         agents = (try? modelContext.fetch(FetchDescriptor<Agent>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
     }
 
-    private func syncWorkspaces(_ list: Amux_WorkspaceList, modelContext: ModelContext) {
-        for proto in list.workspaces {
+    private func syncWorkspaces(_ infos: [Amux_WorkspaceInfo], modelContext: ModelContext) {
+        for proto in infos {
             let id = proto.workspaceID
             let descriptor = FetchDescriptor<Workspace>(predicate: #Predicate { $0.workspaceId == id })
             if let existing = try? modelContext.fetch(descriptor).first {
