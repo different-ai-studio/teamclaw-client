@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn test_to_proto_session_info() {
         let mut store = TeamclawSessionStore::default();
-        let mut s = make_session("s1", "collab", "dev-a");
+        let mut s = make_session("s1", "collab");
         s.participants = vec![make_participant("p1", "human")];
         s.summary = "test summary".to_string();
         store.upsert(s);
