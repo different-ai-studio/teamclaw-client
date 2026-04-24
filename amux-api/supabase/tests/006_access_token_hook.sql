@@ -1,6 +1,6 @@
 begin;
 
-select plan(6);
+select plan(7);
 
 -- Rule catalog for a member yields exactly 8 allow rules with the expected topic shapes.
 select is(
@@ -86,6 +86,21 @@ select is(
     where topic like '%runtime/+/commands' and action = 'pub'),
   0,
   'agent rule set does not include pub device/+/runtime/+/commands'
+);
+
+-- Hook called with null user_id (anon/service_role) must return event unchanged.
+select is(
+  public.amux_access_token_hook(
+    jsonb_build_object(
+      'user_id', null,
+      'claims',  jsonb_build_object('sub','anon','role','anon','aud','anon')
+    )
+  ),
+  jsonb_build_object(
+    'user_id', null,
+    'claims',  jsonb_build_object('sub','anon','role','anon','aud','anon')
+  ),
+  'hook with null user_id returns event unchanged'
 );
 
 select * from finish();

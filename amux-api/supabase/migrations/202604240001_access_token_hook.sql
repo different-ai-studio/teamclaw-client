@@ -58,3 +58,34 @@ as $$
     ) as r(action, topic)
    where p_type = 'agent';
 $$;
+
+-- --------------------------------------------------------------------------
+-- Custom Access Token Hook. Supabase GoTrue calls this on every sign-in and
+-- every refresh_token exchange. Contract:
+--   input:  jsonb { "user_id": uuid|null, "claims": jsonb, ... }
+--   output: jsonb { "claims": <merged claims> }  -- OR the untouched event
+--                                                   when there is nothing to do.
+-- This function MUST NOT raise on realistic input; a hook error causes every
+-- auth call to fail with HTTP 500. All edge cases return sane defaults.
+-- --------------------------------------------------------------------------
+create or replace function public.amux_access_token_hook(event jsonb)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, auth
+as $$
+declare
+  v_user_id uuid;
+begin
+  v_user_id := nullif(event->>'user_id','')::uuid;
+
+  -- Anon / service_role callers skip the hook entirely.
+  if v_user_id is null then
+    return event;
+  end if;
+
+  -- Subsequent tasks replace this stub with the full build-and-merge logic.
+  return event;
+end;
+$$;
