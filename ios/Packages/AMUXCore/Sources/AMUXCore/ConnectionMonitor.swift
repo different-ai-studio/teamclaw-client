@@ -22,12 +22,13 @@ public final class ConnectionMonitor {
             for await msg in stream {
                 guard msg.topic == stateTopic else { continue }
                 let online: Bool
-                var name: String? = nil
+                let name: String?
                 if msg.payload.isEmpty {
                     online = false  // retained cleared → offline
+                    name = nil
                 } else if let s = try? ProtoMQTTCoder.decode(Amux_DeviceState.self, from: msg.payload) {
                     online = s.online
-                    if !s.deviceName.isEmpty { name = s.deviceName }
+                    name = s.deviceName.isEmpty ? nil : s.deviceName
                 } else {
                     continue  // unparseable; skip
                 }
