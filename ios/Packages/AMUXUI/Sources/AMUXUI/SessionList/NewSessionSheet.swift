@@ -534,7 +534,8 @@ public struct NewSessionSheet: View {
                 workspaceId: selectedWorkspaceRecord?.id ?? "",
                 worktree: selectedWorkspaceRecord?.path ?? "",
                 sessionId: "",
-                initialPrompt: text
+                initialPrompt: text,
+                targetDeviceID: routeDevice
             )
 
             await MainActor.run {
@@ -835,7 +836,8 @@ public struct NewSessionSheet: View {
             workspaceId: selectedWorkspaceRecord?.id ?? "",
             worktree: selectedWorkspaceRecord?.path ?? "",
             sessionId: sessionID,
-            initialPrompt: initialPrompt
+            initialPrompt: initialPrompt,
+            targetDeviceID: routeDevice
         )
 
         switch outcome {

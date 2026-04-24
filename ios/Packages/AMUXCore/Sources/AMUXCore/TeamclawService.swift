@@ -870,9 +870,19 @@ public final class TeamclawService {
         workspaceId: String,
         worktree: String,
         sessionId: String,
-        initialPrompt: String
+        initialPrompt: String,
+        targetDeviceID: String? = nil
     ) async -> RuntimeStartOutcome {
         guard let mqtt else { return .rejected("mqtt not configured") }
+
+        // Routing: UI may pick a daemon by primary-agent mapping that differs
+        // from the paired-at-startup deviceId (see NewSessionSheet.effectiveDeviceID).
+        // Honor caller's override; fall back to self.deviceId when absent/empty.
+        let target: String = {
+            if let t = targetDeviceID, !t.isEmpty { return t }
+            return deviceId
+        }()
+        guard !target.isEmpty else { return .rejected("no target device id") }
 
         var start = Teamclaw_RuntimeStartRequest()
         start.agentType = agentType
@@ -887,22 +897,39 @@ public final class TeamclawService {
         rpcReq.method = .runtimeStart(start)
 
         let requestId = rpcReq.requestID
-        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let reqTopic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: target)
+        let resTopic = MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: target)
+
+        // If target daemon differs from the one we subscribed to at start(),
+        // we must temporarily subscribe to its rpc/res so this request's
+        // response isn't missed. Subscribe BEFORE starting the stream so the
+        // broker has the sub registered before the publish races back.
+        let needsTargetSubscribe = (target != deviceId)
+        if needsTargetSubscribe {
+            try? await mqtt.subscribe(resTopic)
+        }
         let stream = mqtt.messages()
 
         guard let data = try? rpcReq.serializedData() else {
+            if needsTargetSubscribe { try? await mqtt.unsubscribe(resTopic) }
             return .rejected("encode failed")
         }
         do {
-            try await mqtt.publish(topic: topic, payload: data, retain: false)
+            try await mqtt.publish(topic: reqTopic, payload: data, retain: false)
         } catch {
+            if needsTargetSubscribe { try? await mqtt.unsubscribe(resTopic) }
             return .rejected("publish failed: \(error.localizedDescription)")
         }
 
         let deadline = Date().addingTimeInterval(15)
+        defer {
+            if needsTargetSubscribe {
+                Task { try? await mqtt.unsubscribe(resTopic) }
+            }
+        }
         for await msg in stream {
             if Date() > deadline { break }
-            if msg.topic == MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId),
+            if msg.topic == resTopic,
                let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
                response.requestID == requestId {
                 if case .runtimeStartResult(let result)? = response.result {
