@@ -161,6 +161,13 @@ message RpcRequest {
     FetchSessionMessagesRequest fetch_session_messages = 20;
     RuntimeStartRequest runtime_start = 30;
     RuntimeStopRequest runtime_stop = 31;
+    AnnouncePeerRequest announce_peer = 40;
+    DisconnectPeerRequest disconnect_peer = 41;
+    RemoveMemberRequest remove_member = 42;
+    AddWorkspaceRequest add_workspace = 43;
+    RemoveWorkspaceRequest remove_workspace = 44;
+    FetchPeersRequest fetch_peers = 45;
+    FetchWorkspacesRequest fetch_workspaces = 46;
   }
 }
 
@@ -181,6 +188,13 @@ message RpcResponse {
     SessionMessagePage session_message_page = 14;
     RuntimeStartResult runtime_start_result = 20;
     RuntimeStopResult runtime_stop_result = 21;
+    AnnouncePeerResult announce_peer_result = 30;
+    DisconnectPeerResult disconnect_peer_result = 31;
+    RemoveMemberResult remove_member_result = 32;
+    AddWorkspaceResult add_workspace_result = 33;
+    RemoveWorkspaceResult remove_workspace_result = 34;
+    FetchPeersResult fetch_peers_result = 35;
+    FetchWorkspacesResult fetch_workspaces_result = 36;
   }
 }
 
@@ -301,4 +315,70 @@ message RuntimeStopRequest {
 message RuntimeStopResult {
   bool accepted = 1;
   string rejected_reason = 2;           // set iff !accepted
+}
+
+// ═══════════════════════════════════════════
+//  Absorbed collab operations
+//  (parallel to amux.DeviceCollabCommand variants; the legacy path is
+//   retired in Phase 5)
+// ═══════════════════════════════════════════
+
+message AnnouncePeerRequest {
+  amux.PeerInfo peer = 1;
+  string auth_token = 2;
+}
+
+message AnnouncePeerResult {
+  bool accepted = 1;
+  string error = 2;
+  amux.MemberRole assigned_role = 3;
+}
+
+message DisconnectPeerRequest {
+  string peer_id = 1;
+}
+
+message DisconnectPeerResult {
+  bool accepted = 1;
+  string error = 2;
+}
+
+message RemoveMemberRequest {
+  string member_id = 1;
+}
+
+message RemoveMemberResult {
+  bool accepted = 1;
+  string error = 2;
+}
+
+message AddWorkspaceRequest {
+  string path = 1;
+}
+
+message AddWorkspaceResult {
+  bool accepted = 1;
+  string error = 2;
+  amux.WorkspaceInfo workspace = 3;
+}
+
+message RemoveWorkspaceRequest {
+  string workspace_id = 1;
+}
+
+message RemoveWorkspaceResult {
+  bool accepted = 1;
+  string error = 2;
+}
+
+message FetchPeersRequest {}
+
+message FetchPeersResult {
+  repeated amux.PeerInfo peers = 1;
+}
+
+message FetchWorkspacesRequest {}
+
+message FetchWorkspacesResult {
+  repeated amux.WorkspaceInfo workspaces = 1;
 }

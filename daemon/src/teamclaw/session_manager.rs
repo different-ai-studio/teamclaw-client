@@ -166,6 +166,90 @@ impl SessionManager {
                     result: None,
                 }
             }
+            Some(teamclaw::rpc_request::Method::AnnouncePeer(_)) => {
+                // Not implemented yet — Phase 5 will retire the legacy collab path.
+                RpcResponse {
+                    request_id: request_id.clone(),
+                    success: false,
+                    error: "announce_peer not yet implemented".to_string(),
+                    requester_client_id: req.requester_client_id.clone(),
+                    requester_actor_id: req.requester_actor_id.clone(),
+                    requester_device_id: req.requester_device_id.clone(),
+                    result: None,
+                }
+            }
+            Some(teamclaw::rpc_request::Method::DisconnectPeer(_)) => {
+                // Not implemented yet — Phase 5 will retire the legacy collab path.
+                RpcResponse {
+                    request_id: request_id.clone(),
+                    success: false,
+                    error: "disconnect_peer not yet implemented".to_string(),
+                    requester_client_id: req.requester_client_id.clone(),
+                    requester_actor_id: req.requester_actor_id.clone(),
+                    requester_device_id: req.requester_device_id.clone(),
+                    result: None,
+                }
+            }
+            Some(teamclaw::rpc_request::Method::RemoveMember(_)) => {
+                // Not implemented yet — Phase 5 will retire the legacy collab path.
+                RpcResponse {
+                    request_id: request_id.clone(),
+                    success: false,
+                    error: "remove_member not yet implemented".to_string(),
+                    requester_client_id: req.requester_client_id.clone(),
+                    requester_actor_id: req.requester_actor_id.clone(),
+                    requester_device_id: req.requester_device_id.clone(),
+                    result: None,
+                }
+            }
+            Some(teamclaw::rpc_request::Method::AddWorkspace(_)) => {
+                // Not implemented yet — Phase 5 will retire the legacy collab path.
+                RpcResponse {
+                    request_id: request_id.clone(),
+                    success: false,
+                    error: "add_workspace not yet implemented".to_string(),
+                    requester_client_id: req.requester_client_id.clone(),
+                    requester_actor_id: req.requester_actor_id.clone(),
+                    requester_device_id: req.requester_device_id.clone(),
+                    result: None,
+                }
+            }
+            Some(teamclaw::rpc_request::Method::RemoveWorkspace(_)) => {
+                // Not implemented yet — Phase 5 will retire the legacy collab path.
+                RpcResponse {
+                    request_id: request_id.clone(),
+                    success: false,
+                    error: "remove_workspace not yet implemented".to_string(),
+                    requester_client_id: req.requester_client_id.clone(),
+                    requester_actor_id: req.requester_actor_id.clone(),
+                    requester_device_id: req.requester_device_id.clone(),
+                    result: None,
+                }
+            }
+            Some(teamclaw::rpc_request::Method::FetchPeers(_)) => {
+                // Not implemented yet — Phase 5 will retire the legacy collab path.
+                RpcResponse {
+                    request_id: request_id.clone(),
+                    success: false,
+                    error: "fetch_peers not yet implemented".to_string(),
+                    requester_client_id: req.requester_client_id.clone(),
+                    requester_actor_id: req.requester_actor_id.clone(),
+                    requester_device_id: req.requester_device_id.clone(),
+                    result: None,
+                }
+            }
+            Some(teamclaw::rpc_request::Method::FetchWorkspaces(_)) => {
+                // Not implemented yet — Phase 5 will retire the legacy collab path.
+                RpcResponse {
+                    request_id: request_id.clone(),
+                    success: false,
+                    error: "fetch_workspaces not yet implemented".to_string(),
+                    requester_client_id: req.requester_client_id.clone(),
+                    requester_actor_id: req.requester_actor_id.clone(),
+                    requester_device_id: req.requester_device_id.clone(),
+                    result: None,
+                }
+            }
             None => {
                 warn!("SessionManager: received RPC request with no method");
                 RpcResponse {

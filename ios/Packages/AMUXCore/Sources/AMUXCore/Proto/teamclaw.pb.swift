@@ -594,6 +594,62 @@ public struct Teamclaw_RpcRequest: Sendable {
     set {method = .runtimeStop(newValue)}
   }
 
+  public var announcePeer: Teamclaw_AnnouncePeerRequest {
+    get {
+      if case .announcePeer(let v)? = method {return v}
+      return Teamclaw_AnnouncePeerRequest()
+    }
+    set {method = .announcePeer(newValue)}
+  }
+
+  public var disconnectPeer: Teamclaw_DisconnectPeerRequest {
+    get {
+      if case .disconnectPeer(let v)? = method {return v}
+      return Teamclaw_DisconnectPeerRequest()
+    }
+    set {method = .disconnectPeer(newValue)}
+  }
+
+  public var removeMember: Teamclaw_RemoveMemberRequest {
+    get {
+      if case .removeMember(let v)? = method {return v}
+      return Teamclaw_RemoveMemberRequest()
+    }
+    set {method = .removeMember(newValue)}
+  }
+
+  public var addWorkspace: Teamclaw_AddWorkspaceRequest {
+    get {
+      if case .addWorkspace(let v)? = method {return v}
+      return Teamclaw_AddWorkspaceRequest()
+    }
+    set {method = .addWorkspace(newValue)}
+  }
+
+  public var removeWorkspace: Teamclaw_RemoveWorkspaceRequest {
+    get {
+      if case .removeWorkspace(let v)? = method {return v}
+      return Teamclaw_RemoveWorkspaceRequest()
+    }
+    set {method = .removeWorkspace(newValue)}
+  }
+
+  public var fetchPeers: Teamclaw_FetchPeersRequest {
+    get {
+      if case .fetchPeers(let v)? = method {return v}
+      return Teamclaw_FetchPeersRequest()
+    }
+    set {method = .fetchPeers(newValue)}
+  }
+
+  public var fetchWorkspaces: Teamclaw_FetchWorkspacesRequest {
+    get {
+      if case .fetchWorkspaces(let v)? = method {return v}
+      return Teamclaw_FetchWorkspacesRequest()
+    }
+    set {method = .fetchWorkspaces(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Method: Equatable, Sendable {
@@ -609,6 +665,13 @@ public struct Teamclaw_RpcRequest: Sendable {
     case fetchSessionMessages(Teamclaw_FetchSessionMessagesRequest)
     case runtimeStart(Teamclaw_RuntimeStartRequest)
     case runtimeStop(Teamclaw_RuntimeStopRequest)
+    case announcePeer(Teamclaw_AnnouncePeerRequest)
+    case disconnectPeer(Teamclaw_DisconnectPeerRequest)
+    case removeMember(Teamclaw_RemoveMemberRequest)
+    case addWorkspace(Teamclaw_AddWorkspaceRequest)
+    case removeWorkspace(Teamclaw_RemoveWorkspaceRequest)
+    case fetchPeers(Teamclaw_FetchPeersRequest)
+    case fetchWorkspaces(Teamclaw_FetchWorkspacesRequest)
 
   }
 
@@ -713,6 +776,62 @@ public struct Teamclaw_RpcResponse: @unchecked Sendable {
     set {_uniqueStorage()._result = .runtimeStopResult(newValue)}
   }
 
+  public var announcePeerResult: Teamclaw_AnnouncePeerResult {
+    get {
+      if case .announcePeerResult(let v)? = _storage._result {return v}
+      return Teamclaw_AnnouncePeerResult()
+    }
+    set {_uniqueStorage()._result = .announcePeerResult(newValue)}
+  }
+
+  public var disconnectPeerResult: Teamclaw_DisconnectPeerResult {
+    get {
+      if case .disconnectPeerResult(let v)? = _storage._result {return v}
+      return Teamclaw_DisconnectPeerResult()
+    }
+    set {_uniqueStorage()._result = .disconnectPeerResult(newValue)}
+  }
+
+  public var removeMemberResult: Teamclaw_RemoveMemberResult {
+    get {
+      if case .removeMemberResult(let v)? = _storage._result {return v}
+      return Teamclaw_RemoveMemberResult()
+    }
+    set {_uniqueStorage()._result = .removeMemberResult(newValue)}
+  }
+
+  public var addWorkspaceResult: Teamclaw_AddWorkspaceResult {
+    get {
+      if case .addWorkspaceResult(let v)? = _storage._result {return v}
+      return Teamclaw_AddWorkspaceResult()
+    }
+    set {_uniqueStorage()._result = .addWorkspaceResult(newValue)}
+  }
+
+  public var removeWorkspaceResult: Teamclaw_RemoveWorkspaceResult {
+    get {
+      if case .removeWorkspaceResult(let v)? = _storage._result {return v}
+      return Teamclaw_RemoveWorkspaceResult()
+    }
+    set {_uniqueStorage()._result = .removeWorkspaceResult(newValue)}
+  }
+
+  public var fetchPeersResult: Teamclaw_FetchPeersResult {
+    get {
+      if case .fetchPeersResult(let v)? = _storage._result {return v}
+      return Teamclaw_FetchPeersResult()
+    }
+    set {_uniqueStorage()._result = .fetchPeersResult(newValue)}
+  }
+
+  public var fetchWorkspacesResult: Teamclaw_FetchWorkspacesResult {
+    get {
+      if case .fetchWorkspacesResult(let v)? = _storage._result {return v}
+      return Teamclaw_FetchWorkspacesResult()
+    }
+    set {_uniqueStorage()._result = .fetchWorkspacesResult(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Result: Equatable, Sendable {
@@ -723,6 +842,13 @@ public struct Teamclaw_RpcResponse: @unchecked Sendable {
     case sessionMessagePage(Teamclaw_SessionMessagePage)
     case runtimeStartResult(Teamclaw_RuntimeStartResult)
     case runtimeStopResult(Teamclaw_RuntimeStopResult)
+    case announcePeerResult(Teamclaw_AnnouncePeerResult)
+    case disconnectPeerResult(Teamclaw_DisconnectPeerResult)
+    case removeMemberResult(Teamclaw_RemoveMemberResult)
+    case addWorkspaceResult(Teamclaw_AddWorkspaceResult)
+    case removeWorkspaceResult(Teamclaw_RemoveWorkspaceResult)
+    case fetchPeersResult(Teamclaw_FetchPeersResult)
+    case fetchWorkspacesResult(Teamclaw_FetchWorkspacesResult)
 
   }
 
@@ -1033,6 +1159,204 @@ public struct Teamclaw_RuntimeStopResult: Sendable {
 
   /// set iff !accepted
   public var rejectedReason: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_AnnouncePeerRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var peer: Amux_PeerInfo {
+    get {_peer ?? Amux_PeerInfo()}
+    set {_peer = newValue}
+  }
+  /// Returns true if `peer` has been explicitly set.
+  public var hasPeer: Bool {self._peer != nil}
+  /// Clears the value of `peer`. Subsequent reads from it will return its default value.
+  public mutating func clearPeer() {self._peer = nil}
+
+  public var authToken: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _peer: Amux_PeerInfo? = nil
+}
+
+public struct Teamclaw_AnnouncePeerResult: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var accepted: Bool = false
+
+  public var error: String = String()
+
+  public var assignedRole: Amux_MemberRole = .owner
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_DisconnectPeerRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var peerID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_DisconnectPeerResult: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var accepted: Bool = false
+
+  public var error: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_RemoveMemberRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var memberID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_RemoveMemberResult: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var accepted: Bool = false
+
+  public var error: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_AddWorkspaceRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var path: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_AddWorkspaceResult: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var accepted: Bool = false
+
+  public var error: String = String()
+
+  public var workspace: Amux_WorkspaceInfo {
+    get {_workspace ?? Amux_WorkspaceInfo()}
+    set {_workspace = newValue}
+  }
+  /// Returns true if `workspace` has been explicitly set.
+  public var hasWorkspace: Bool {self._workspace != nil}
+  /// Clears the value of `workspace`. Subsequent reads from it will return its default value.
+  public mutating func clearWorkspace() {self._workspace = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _workspace: Amux_WorkspaceInfo? = nil
+}
+
+public struct Teamclaw_RemoveWorkspaceRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var workspaceID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_RemoveWorkspaceResult: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var accepted: Bool = false
+
+  public var error: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_FetchPeersRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_FetchPeersResult: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var peers: [Amux_PeerInfo] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_FetchWorkspacesRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Teamclaw_FetchWorkspacesResult: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var workspaces: [Amux_WorkspaceInfo] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1731,7 +2055,7 @@ extension Teamclaw_NotifyEnvelope: SwiftProtobuf.Message, SwiftProtobuf._Message
 
 extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".RpcRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{3}sender_device_id\0\u{3}requester_client_id\0\u{3}requester_actor_id\0\u{3}requester_device_id\0\u{4}\u{5}create_session\0\u{3}join_session\0\u{3}fetch_session\0\u{3}add_participant\0\u{3}remove_participant\0\u{3}create_task\0\u{3}claim_task\0\u{3}submit_task\0\u{3}update_task\0\u{4}\u{2}fetch_session_messages\0\u{4}\u{a}runtime_start\0\u{3}runtime_stop\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{3}sender_device_id\0\u{3}requester_client_id\0\u{3}requester_actor_id\0\u{3}requester_device_id\0\u{4}\u{5}create_session\0\u{3}join_session\0\u{3}fetch_session\0\u{3}add_participant\0\u{3}remove_participant\0\u{3}create_task\0\u{3}claim_task\0\u{3}submit_task\0\u{3}update_task\0\u{4}\u{2}fetch_session_messages\0\u{4}\u{a}runtime_start\0\u{3}runtime_stop\0\u{4}\u{9}announce_peer\0\u{3}disconnect_peer\0\u{3}remove_member\0\u{3}add_workspace\0\u{3}remove_workspace\0\u{3}fetch_peers\0\u{3}fetch_workspaces\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1900,6 +2224,97 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
           self.method = .runtimeStop(v)
         }
       }()
+      case 40: try {
+        var v: Teamclaw_AnnouncePeerRequest?
+        var hadOneofValue = false
+        if let current = self.method {
+          hadOneofValue = true
+          if case .announcePeer(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.method = .announcePeer(v)
+        }
+      }()
+      case 41: try {
+        var v: Teamclaw_DisconnectPeerRequest?
+        var hadOneofValue = false
+        if let current = self.method {
+          hadOneofValue = true
+          if case .disconnectPeer(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.method = .disconnectPeer(v)
+        }
+      }()
+      case 42: try {
+        var v: Teamclaw_RemoveMemberRequest?
+        var hadOneofValue = false
+        if let current = self.method {
+          hadOneofValue = true
+          if case .removeMember(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.method = .removeMember(v)
+        }
+      }()
+      case 43: try {
+        var v: Teamclaw_AddWorkspaceRequest?
+        var hadOneofValue = false
+        if let current = self.method {
+          hadOneofValue = true
+          if case .addWorkspace(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.method = .addWorkspace(v)
+        }
+      }()
+      case 44: try {
+        var v: Teamclaw_RemoveWorkspaceRequest?
+        var hadOneofValue = false
+        if let current = self.method {
+          hadOneofValue = true
+          if case .removeWorkspace(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.method = .removeWorkspace(v)
+        }
+      }()
+      case 45: try {
+        var v: Teamclaw_FetchPeersRequest?
+        var hadOneofValue = false
+        if let current = self.method {
+          hadOneofValue = true
+          if case .fetchPeers(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.method = .fetchPeers(v)
+        }
+      }()
+      case 46: try {
+        var v: Teamclaw_FetchWorkspacesRequest?
+        var hadOneofValue = false
+        if let current = self.method {
+          hadOneofValue = true
+          if case .fetchWorkspaces(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.method = .fetchWorkspaces(v)
+        }
+      }()
       default: break
       }
     }
@@ -1974,6 +2389,34 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
       guard case .runtimeStop(let v)? = self.method else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 31)
     }()
+    case .announcePeer?: try {
+      guard case .announcePeer(let v)? = self.method else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 40)
+    }()
+    case .disconnectPeer?: try {
+      guard case .disconnectPeer(let v)? = self.method else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 41)
+    }()
+    case .removeMember?: try {
+      guard case .removeMember(let v)? = self.method else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 42)
+    }()
+    case .addWorkspace?: try {
+      guard case .addWorkspace(let v)? = self.method else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 43)
+    }()
+    case .removeWorkspace?: try {
+      guard case .removeWorkspace(let v)? = self.method else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 44)
+    }()
+    case .fetchPeers?: try {
+      guard case .fetchPeers(let v)? = self.method else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 45)
+    }()
+    case .fetchWorkspaces?: try {
+      guard case .fetchWorkspaces(let v)? = self.method else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 46)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1993,7 +2436,7 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
 extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".RpcResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}success\0\u{1}error\0\u{3}requester_client_id\0\u{3}requester_actor_id\0\u{3}requester_device_id\0\u{4}\u{4}session_info\0\u{1}task\0\u{1}claim\0\u{1}submission\0\u{3}session_message_page\0\u{4}\u{6}runtime_start_result\0\u{3}runtime_stop_result\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}success\0\u{1}error\0\u{3}requester_client_id\0\u{3}requester_actor_id\0\u{3}requester_device_id\0\u{4}\u{4}session_info\0\u{1}task\0\u{1}claim\0\u{1}submission\0\u{3}session_message_page\0\u{4}\u{6}runtime_start_result\0\u{3}runtime_stop_result\0\u{4}\u{9}announce_peer_result\0\u{3}disconnect_peer_result\0\u{3}remove_member_result\0\u{3}add_workspace_result\0\u{3}remove_workspace_result\0\u{3}fetch_peers_result\0\u{3}fetch_workspaces_result\0")
 
   fileprivate class _StorageClass {
     var _requestID: String = String()
@@ -2135,6 +2578,97 @@ extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
             _storage._result = .runtimeStopResult(v)
           }
         }()
+        case 30: try {
+          var v: Teamclaw_AnnouncePeerResult?
+          var hadOneofValue = false
+          if let current = _storage._result {
+            hadOneofValue = true
+            if case .announcePeerResult(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._result = .announcePeerResult(v)
+          }
+        }()
+        case 31: try {
+          var v: Teamclaw_DisconnectPeerResult?
+          var hadOneofValue = false
+          if let current = _storage._result {
+            hadOneofValue = true
+            if case .disconnectPeerResult(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._result = .disconnectPeerResult(v)
+          }
+        }()
+        case 32: try {
+          var v: Teamclaw_RemoveMemberResult?
+          var hadOneofValue = false
+          if let current = _storage._result {
+            hadOneofValue = true
+            if case .removeMemberResult(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._result = .removeMemberResult(v)
+          }
+        }()
+        case 33: try {
+          var v: Teamclaw_AddWorkspaceResult?
+          var hadOneofValue = false
+          if let current = _storage._result {
+            hadOneofValue = true
+            if case .addWorkspaceResult(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._result = .addWorkspaceResult(v)
+          }
+        }()
+        case 34: try {
+          var v: Teamclaw_RemoveWorkspaceResult?
+          var hadOneofValue = false
+          if let current = _storage._result {
+            hadOneofValue = true
+            if case .removeWorkspaceResult(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._result = .removeWorkspaceResult(v)
+          }
+        }()
+        case 35: try {
+          var v: Teamclaw_FetchPeersResult?
+          var hadOneofValue = false
+          if let current = _storage._result {
+            hadOneofValue = true
+            if case .fetchPeersResult(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._result = .fetchPeersResult(v)
+          }
+        }()
+        case 36: try {
+          var v: Teamclaw_FetchWorkspacesResult?
+          var hadOneofValue = false
+          if let current = _storage._result {
+            hadOneofValue = true
+            if case .fetchWorkspacesResult(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._result = .fetchWorkspacesResult(v)
+          }
+        }()
         default: break
         }
       }
@@ -2193,6 +2727,34 @@ extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case .runtimeStopResult?: try {
         guard case .runtimeStopResult(let v)? = _storage._result else { preconditionFailure() }
         try visitor.visitSingularMessageField(value: v, fieldNumber: 21)
+      }()
+      case .announcePeerResult?: try {
+        guard case .announcePeerResult(let v)? = _storage._result else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 30)
+      }()
+      case .disconnectPeerResult?: try {
+        guard case .disconnectPeerResult(let v)? = _storage._result else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 31)
+      }()
+      case .removeMemberResult?: try {
+        guard case .removeMemberResult(let v)? = _storage._result else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 32)
+      }()
+      case .addWorkspaceResult?: try {
+        guard case .addWorkspaceResult(let v)? = _storage._result else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 33)
+      }()
+      case .removeWorkspaceResult?: try {
+        guard case .removeWorkspaceResult(let v)? = _storage._result else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 34)
+      }()
+      case .fetchPeersResult?: try {
+        guard case .fetchPeersResult(let v)? = _storage._result else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 35)
+      }()
+      case .fetchWorkspacesResult?: try {
+        guard case .fetchWorkspacesResult(let v)? = _storage._result else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 36)
       }()
       case nil: break
       }
@@ -2868,6 +3430,452 @@ extension Teamclaw_RuntimeStopResult: SwiftProtobuf.Message, SwiftProtobuf._Mess
   public static func ==(lhs: Teamclaw_RuntimeStopResult, rhs: Teamclaw_RuntimeStopResult) -> Bool {
     if lhs.accepted != rhs.accepted {return false}
     if lhs.rejectedReason != rhs.rejectedReason {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_AnnouncePeerRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AnnouncePeerRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}peer\0\u{3}auth_token\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._peer) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.authToken) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._peer {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if !self.authToken.isEmpty {
+      try visitor.visitSingularStringField(value: self.authToken, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_AnnouncePeerRequest, rhs: Teamclaw_AnnouncePeerRequest) -> Bool {
+    if lhs._peer != rhs._peer {return false}
+    if lhs.authToken != rhs.authToken {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_AnnouncePeerResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AnnouncePeerResult"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}accepted\0\u{1}error\0\u{3}assigned_role\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.accepted) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.assignedRole) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.accepted != false {
+      try visitor.visitSingularBoolField(value: self.accepted, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    if self.assignedRole != .owner {
+      try visitor.visitSingularEnumField(value: self.assignedRole, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_AnnouncePeerResult, rhs: Teamclaw_AnnouncePeerResult) -> Bool {
+    if lhs.accepted != rhs.accepted {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.assignedRole != rhs.assignedRole {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_DisconnectPeerRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DisconnectPeerRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}peer_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.peerID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.peerID.isEmpty {
+      try visitor.visitSingularStringField(value: self.peerID, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_DisconnectPeerRequest, rhs: Teamclaw_DisconnectPeerRequest) -> Bool {
+    if lhs.peerID != rhs.peerID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_DisconnectPeerResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DisconnectPeerResult"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}accepted\0\u{1}error\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.accepted) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.accepted != false {
+      try visitor.visitSingularBoolField(value: self.accepted, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_DisconnectPeerResult, rhs: Teamclaw_DisconnectPeerResult) -> Bool {
+    if lhs.accepted != rhs.accepted {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_RemoveMemberRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RemoveMemberRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}member_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.memberID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.memberID.isEmpty {
+      try visitor.visitSingularStringField(value: self.memberID, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_RemoveMemberRequest, rhs: Teamclaw_RemoveMemberRequest) -> Bool {
+    if lhs.memberID != rhs.memberID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_RemoveMemberResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RemoveMemberResult"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}accepted\0\u{1}error\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.accepted) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.accepted != false {
+      try visitor.visitSingularBoolField(value: self.accepted, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_RemoveMemberResult, rhs: Teamclaw_RemoveMemberResult) -> Bool {
+    if lhs.accepted != rhs.accepted {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_AddWorkspaceRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AddWorkspaceRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}path\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.path) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.path.isEmpty {
+      try visitor.visitSingularStringField(value: self.path, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_AddWorkspaceRequest, rhs: Teamclaw_AddWorkspaceRequest) -> Bool {
+    if lhs.path != rhs.path {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_AddWorkspaceResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AddWorkspaceResult"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}accepted\0\u{1}error\0\u{1}workspace\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.accepted) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._workspace) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.accepted != false {
+      try visitor.visitSingularBoolField(value: self.accepted, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    try { if let v = self._workspace {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_AddWorkspaceResult, rhs: Teamclaw_AddWorkspaceResult) -> Bool {
+    if lhs.accepted != rhs.accepted {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs._workspace != rhs._workspace {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_RemoveWorkspaceRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RemoveWorkspaceRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}workspace_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.workspaceID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.workspaceID.isEmpty {
+      try visitor.visitSingularStringField(value: self.workspaceID, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_RemoveWorkspaceRequest, rhs: Teamclaw_RemoveWorkspaceRequest) -> Bool {
+    if lhs.workspaceID != rhs.workspaceID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_RemoveWorkspaceResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RemoveWorkspaceResult"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}accepted\0\u{1}error\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.accepted) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.accepted != false {
+      try visitor.visitSingularBoolField(value: self.accepted, fieldNumber: 1)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_RemoveWorkspaceResult, rhs: Teamclaw_RemoveWorkspaceResult) -> Bool {
+    if lhs.accepted != rhs.accepted {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_FetchPeersRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".FetchPeersRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_FetchPeersRequest, rhs: Teamclaw_FetchPeersRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_FetchPeersResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".FetchPeersResult"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}peers\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.peers) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.peers.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.peers, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_FetchPeersResult, rhs: Teamclaw_FetchPeersResult) -> Bool {
+    if lhs.peers != rhs.peers {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_FetchWorkspacesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".FetchWorkspacesRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_FetchWorkspacesRequest, rhs: Teamclaw_FetchWorkspacesRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_FetchWorkspacesResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".FetchWorkspacesResult"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}workspaces\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.workspaces) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.workspaces.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.workspaces, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_FetchWorkspacesResult, rhs: Teamclaw_FetchWorkspacesResult) -> Bool {
+    if lhs.workspaces != rhs.workspaces {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
