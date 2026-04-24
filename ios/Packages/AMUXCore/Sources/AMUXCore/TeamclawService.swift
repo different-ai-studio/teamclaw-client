@@ -929,13 +929,17 @@ public final class TeamclawService {
                 Task { try? await mqtt.unsubscribe(resTopic) }
             }
         }
-        // Accept the response on ANY `rpc/res` topic. Daemon publishes to
-        // `device/{request.sender_device_id}/rpc/res` which may differ from
-        // our `target` in multi-daemon setups, so we filter on the (unique)
-        // requestID instead of locking the match to a single topic string.
+        // Accept the response on EITHER the target's rpc/res (if it differs
+        // from self.deviceId, we subscribed above) OR self.deviceId's rpc/res
+        // (subscribed once at start() — daemon routes via sender_device_id
+        // which equals self.deviceId on our requests). We do NOT broaden to
+        // arbitrary `/rpc/res` topics — that would match responses destined
+        // for other iOS devices paired with different daemons on the same
+        // broker. requestID match is the inner filter.
+        let ownResTopic = MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId)
         for await msg in stream {
             if Date() > deadline { break }
-            guard msg.topic.hasSuffix("/rpc/res") else { continue }
+            guard msg.topic == resTopic || msg.topic == ownResTopic else { continue }
             guard let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload) else {
                 print("[runtimeStartRpc] failed to decode response on \(msg.topic)")
                 continue
