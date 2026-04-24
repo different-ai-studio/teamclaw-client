@@ -138,6 +138,26 @@ impl SupabaseClient {
         Ok(body.access_token)
     }
 
+    /// Expiry of the currently cached access token without triggering a refresh.
+    /// Returns `None` if no token has been fetched yet.
+    pub fn cached_token_expiry(&self) -> Option<Instant> {
+        #[cfg(debug_assertions)]
+        if let Ok(secs_str) = std::env::var("AMUX_FORCE_TOKEN_EXPIRY_SECS") {
+            if let Ok(n) = secs_str.parse::<u64>() {
+                return Some(Instant::now() + Duration::from_secs(n));
+            }
+        }
+        self.state.lock().unwrap().expires_at
+    }
+
+    /// Returns true if the cached token is at or past its expiry.
+    pub fn is_token_expired(&self) -> bool {
+        self.state.lock().unwrap()
+            .expires_at
+            .map(|t| Instant::now() >= t)
+            .unwrap_or(false)
+    }
+
     /// Trade an email/password for tokens. Used immediately after
     /// `claim_daemon_invite` returns the daemon's one-time credentials.
     pub async fn login_with_password(
@@ -642,5 +662,52 @@ mod tests {
 
         let workspace = client.upsert_workspace(&row).await.unwrap();
         assert_eq!(workspace.id, "11111111-1111-1111-1111-111111111111");
+    }
+
+    #[test]
+    fn cached_token_expiry_is_none_before_any_fetch() {
+        let cfg = SupabaseConfig {
+            url: "http://localhost".into(),
+            anon_key: "key".into(),
+            refresh_token: "tok".into(),
+            team_id: "team".into(),
+            actor_id: "actor".into(),
+        };
+        let client = SupabaseClient::new_without_persistence(cfg).unwrap();
+        assert!(client.cached_token_expiry().is_none());
+    }
+
+    #[test]
+    fn is_token_expired_false_when_expiry_in_future() {
+        let cfg = SupabaseConfig {
+            url: "http://localhost".into(),
+            anon_key: "key".into(),
+            refresh_token: "tok".into(),
+            team_id: "team".into(),
+            actor_id: "actor".into(),
+        };
+        let client = SupabaseClient::new_without_persistence(cfg).unwrap();
+        {
+            let mut st = client.state.lock().unwrap();
+            st.expires_at = Some(Instant::now() + Duration::from_secs(3600));
+        }
+        assert!(!client.is_token_expired());
+    }
+
+    #[test]
+    fn is_token_expired_true_when_expiry_in_past() {
+        let cfg = SupabaseConfig {
+            url: "http://localhost".into(),
+            anon_key: "key".into(),
+            refresh_token: "tok".into(),
+            team_id: "team".into(),
+            actor_id: "actor".into(),
+        };
+        let client = SupabaseClient::new_without_persistence(cfg).unwrap();
+        {
+            let mut st = client.state.lock().unwrap();
+            st.expires_at = Some(Instant::now() - Duration::from_secs(1));
+        }
+        assert!(client.is_token_expired());
     }
 }
