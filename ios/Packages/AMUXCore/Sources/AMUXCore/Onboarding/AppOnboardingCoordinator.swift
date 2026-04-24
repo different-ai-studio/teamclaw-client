@@ -49,8 +49,13 @@ public struct AppContext: Equatable, Sendable {
     }
 }
 
+public enum AuthRequired: Error {
+    case notAuthenticated
+}
+
 public enum AppOnboardingRoute: Equatable, Sendable {
     case loading
+    case needsAuth
     case createTeam
     case ready
     case failed
@@ -69,6 +74,7 @@ public final class AppOnboardingCoordinator {
     public var currentContext: AppContext?
     public var pendingCreatedTeam: CreatedTeam?
     public var errorMessage: String?
+    public var pendingMagicLinkEmail: String?
     public var isBusy = false
 
     private let store: AppOnboardingStore
@@ -98,6 +104,9 @@ public final class AppOnboardingCoordinator {
 
             currentContext = AppContext(team: team, memberActorID: memberActorID)
             route = .ready
+        } catch is AuthRequired {
+            currentContext = nil
+            route = .needsAuth
         } catch {
             currentContext = nil
             route = .failed
