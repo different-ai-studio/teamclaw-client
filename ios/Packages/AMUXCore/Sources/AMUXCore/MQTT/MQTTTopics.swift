@@ -13,42 +13,6 @@ public enum MQTTTopics {
         "amux/\(normalizedTeamID(teamID))"
     }
 
-    public static func deviceStatus(teamID: String, deviceID: String) -> String {
-        "\(deviceBase(teamID: teamID, deviceID: deviceID))/status"
-    }
-
-    public static func devicePeers(teamID: String, deviceID: String) -> String {
-        "\(deviceBase(teamID: teamID, deviceID: deviceID))/peers"
-    }
-
-    public static func deviceWorkspaces(teamID: String, deviceID: String) -> String {
-        "\(deviceBase(teamID: teamID, deviceID: deviceID))/workspaces"
-    }
-
-    public static func deviceCollab(teamID: String, deviceID: String) -> String {
-        "\(deviceBase(teamID: teamID, deviceID: deviceID))/collab"
-    }
-
-    public static func agentState(teamID: String, deviceID: String, agentID: String) -> String {
-        "\(deviceBase(teamID: teamID, deviceID: deviceID))/agent/\(agentID)/state"
-    }
-
-    public static func agentStateWildcard(teamID: String, deviceID: String) -> String {
-        "\(deviceBase(teamID: teamID, deviceID: deviceID))/agent/+/state"
-    }
-
-    public static func agentStatePrefix(teamID: String, deviceID: String) -> String {
-        "\(deviceBase(teamID: teamID, deviceID: deviceID))/agent/"
-    }
-
-    public static func agentEvents(teamID: String, deviceID: String, agentID: String) -> String {
-        "\(deviceBase(teamID: teamID, deviceID: deviceID))/agent/\(agentID)/events"
-    }
-
-    public static func agentCommands(teamID: String, deviceID: String, agentID: String) -> String {
-        "\(deviceBase(teamID: teamID, deviceID: deviceID))/agent/\(agentID)/commands"
-    }
-
     /// Fixed device-scoped request channel for the MQTT rearchitecture.
     public static func deviceRpcRequest(teamID: String, deviceID: String) -> String {
         "\(deviceBase(teamID: teamID, deviceID: deviceID))/rpc/req"
