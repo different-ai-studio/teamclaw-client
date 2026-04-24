@@ -1,6 +1,6 @@
 begin;
 
-select plan(12);
+select plan(21);
 
 -- Rule catalog for a member yields exactly 8 allow rules with the expected topic shapes.
 select is(
@@ -157,6 +157,180 @@ begin
     v_actor::text,
     'single-team member: membership actor_id matches'
   );
+end;
+$$;
+
+-- User with zero actors: memberships empty, acl has only deny-all, other
+-- claims untouched.
+do $$
+declare
+  v_user   uuid := gen_random_uuid();
+  v_out    jsonb;
+  v_claims jsonb;
+begin
+  insert into auth.users (id) values (v_user);
+
+  v_out := public.amux_access_token_hook(
+    jsonb_build_object(
+      'user_id', v_user,
+      'claims',  jsonb_build_object(
+        'sub',  v_user::text,
+        'role', 'authenticated',
+        'exp',  9999999999
+      )
+    )
+  );
+  v_claims := v_out->'claims';
+
+  perform is(
+    jsonb_array_length(v_claims->'app_metadata'->'memberships'),
+    0,
+    'zero-actor: memberships empty'
+  );
+  perform is(
+    jsonb_array_length(v_claims->'acl'),
+    1,
+    'zero-actor: acl has only the deny-all'
+  );
+  perform is(
+    v_claims->'acl'->0,
+    jsonb_build_object('permission','deny','action','all','topic','#'),
+    'zero-actor: lone rule is deny-all'
+  );
+  perform is(
+    (v_claims->>'exp')::bigint,
+    9999999999::bigint,
+    'zero-actor: upstream exp claim preserved'
+  );
+end;
+$$;
+
+-- Multi-team member: 2 memberships, 2*8+1 = 17 acl rules.
+do $$
+declare
+  v_user   uuid := gen_random_uuid();
+  v_team_a uuid := gen_random_uuid();
+  v_team_b uuid := gen_random_uuid();
+  v_act_a  uuid := gen_random_uuid();
+  v_act_b  uuid := gen_random_uuid();
+  v_out    jsonb;
+  v_claims jsonb;
+begin
+  insert into auth.users (id) values (v_user);
+  insert into public.teams (id, slug, name) values
+    (v_team_a, 'mt-a-' || left(v_team_a::text,8), 'MT A'),
+    (v_team_b, 'mt-b-' || left(v_team_b::text,8), 'MT B');
+  insert into public.actors (id, team_id, actor_type, display_name, user_id) values
+    (v_act_a, v_team_a, 'member', 'A', v_user),
+    (v_act_b, v_team_b, 'member', 'B', v_user);
+  insert into public.members (id, status) values
+    (v_act_a, 'active'),
+    (v_act_b, 'active');
+  insert into public.team_members (team_id, member_id, role) values
+    (v_team_a, v_act_a, 'owner'),
+    (v_team_b, v_act_b, 'owner');
+
+  v_out := public.amux_access_token_hook(
+    jsonb_build_object(
+      'user_id', v_user,
+      'claims',  jsonb_build_object('sub', v_user::text, 'role', 'authenticated')
+    )
+  );
+  v_claims := v_out->'claims';
+
+  perform is(
+    jsonb_array_length(v_claims->'app_metadata'->'memberships'),
+    2,
+    'multi-team member: 2 memberships'
+  );
+  perform is(
+    jsonb_array_length(v_claims->'acl'),
+    17,
+    'multi-team member: 16 allow + 1 deny = 17 rules'
+  );
+  perform is(
+    v_claims->'acl'->-1,
+    jsonb_build_object('permission','deny','action','all','topic','#'),
+    'multi-team member: last rule is deny-all'
+  );
+end;
+$$;
+
+-- Mixed actor types on one user: member in team A, agent in team B.
+-- Expected: memberships has 2 entries, acl has 8 + 12 + 1 = 21 rules.
+do $$
+declare
+  v_user   uuid := gen_random_uuid();
+  v_team_a uuid := gen_random_uuid();
+  v_team_b uuid := gen_random_uuid();
+  v_act_m  uuid := gen_random_uuid();
+  v_act_a  uuid := gen_random_uuid();
+  v_out    jsonb;
+  v_claims jsonb;
+begin
+  insert into auth.users (id) values (v_user);
+  insert into public.teams (id, slug, name) values
+    (v_team_a, 'mix-a-' || left(v_team_a::text,8), 'Mix A'),
+    (v_team_b, 'mix-b-' || left(v_team_b::text,8), 'Mix B');
+  insert into public.actors (id, team_id, actor_type, display_name, user_id) values
+    (v_act_m, v_team_a, 'member', 'Member in A', v_user),
+    (v_act_a, v_team_b, 'agent',  'Agent in B',  v_user);
+  insert into public.members (id, status) values (v_act_m, 'active');
+  insert into public.agents  (id, agent_kind, status) values (v_act_a, 'claude', 'active');
+  insert into public.team_members (team_id, member_id, role) values (v_team_a, v_act_m, 'owner');
+
+  v_out := public.amux_access_token_hook(
+    jsonb_build_object(
+      'user_id', v_user,
+      'claims',  jsonb_build_object('sub', v_user::text, 'role', 'authenticated')
+    )
+  );
+  v_claims := v_out->'claims';
+
+  perform is(
+    jsonb_array_length(v_claims->'app_metadata'->'memberships'),
+    2,
+    'mixed: 2 memberships'
+  );
+  perform is(
+    jsonb_array_length(v_claims->'acl'),
+    21,
+    'mixed: 8 (member) + 12 (agent) + 1 (deny) = 21 rules'
+  );
+end;
+$$;
+
+-- Preservation of the caller's original claims (sub, aud, role, iss, exp, iat).
+do $$
+declare
+  v_user   uuid := gen_random_uuid();
+  v_out    jsonb;
+  v_claims jsonb;
+begin
+  insert into auth.users (id) values (v_user);
+
+  v_out := public.amux_access_token_hook(
+    jsonb_build_object(
+      'user_id', v_user,
+      'claims',  jsonb_build_object(
+        'sub',  v_user::text,
+        'aud',  'authenticated',
+        'role', 'authenticated',
+        'iss',  'https://srhaytajyfrniuvnkfpd.supabase.co/auth/v1',
+        'exp',  1745003600,
+        'iat',  1745000000,
+        'jti',  'jti-xyz',
+        'app_metadata', jsonb_build_object('provider','email')
+      )
+    )
+  );
+  v_claims := v_out->'claims';
+
+  perform is(v_claims->>'sub',  v_user::text,                                         'preserve sub');
+  perform is(v_claims->>'aud',  'authenticated',                                      'preserve aud');
+  perform is(v_claims->>'role', 'authenticated',                                      'preserve role');
+  perform is(v_claims->>'iss',  'https://srhaytajyfrniuvnkfpd.supabase.co/auth/v1',   'preserve iss');
+  perform is(v_claims->'app_metadata'->>'provider', 'email',                          'preserve existing app_metadata keys');
 end;
 $$;
 

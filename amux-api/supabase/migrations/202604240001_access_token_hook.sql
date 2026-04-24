@@ -131,5 +131,8 @@ begin
        );
 
   return jsonb_build_object('claims', v_claims);
+exception
+  when others then
+    return event;
 end;
 $$;
