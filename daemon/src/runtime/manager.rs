@@ -294,7 +294,7 @@ impl AgentManager {
                 .agents
                 .iter()
                 .map(|(id, h)| {
-                    let available = crate::agent::models::available_models_for(h.agent_type);
+                    let available = crate::runtime::models::available_models_for(h.agent_type);
                     let current = self
                         .current_model_per_agent
                         .get(id)
@@ -310,7 +310,7 @@ impl AgentManager {
     /// from the manager's tracking state. Returns None if the agent is unknown.
     pub fn to_proto_info(&self, agent_id: &str) -> Option<amux::RuntimeInfo> {
         let handle = self.agents.get(agent_id)?;
-        let available = crate::agent::models::available_models_for(handle.agent_type);
+        let available = crate::runtime::models::available_models_for(handle.agent_type);
         let current = self
             .current_model_per_agent
             .get(agent_id)

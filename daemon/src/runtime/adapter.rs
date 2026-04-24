@@ -389,7 +389,7 @@ fn extract_text(content: &acp::ContentBlock) -> String {
 /// Events from the agent flow through `event_tx`.
 ///
 /// `agent_type` is used to look up the default model from
-/// `crate::agent::models::available_models_for` and apply it via
+/// `crate::runtime::models::available_models_for` and apply it via
 /// `session/set_model` immediately after Initialize.
 ///
 /// `initial_model_tx` receives `Some(model_id)` if the model was applied
@@ -559,7 +559,7 @@ async fn run_acp_session(
     // Apply the default model from the hardcoded list before any prompt runs.
     // This ensures the very first turn is on the chosen model.
     let initial_model: Option<String> = {
-        let models = crate::agent::models::available_models_for(agent_type);
+        let models = crate::runtime::models::available_models_for(agent_type);
         if let Some(first) = models.first() {
             let req = acp::SetSessionModelRequest::new(
                 session_id.clone(),

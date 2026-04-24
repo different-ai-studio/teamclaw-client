@@ -1,4 +1,4 @@
-mod agent;
+mod runtime;
 mod cli;
 mod collab;
 mod config;
@@ -86,7 +86,7 @@ fn main() -> anyhow::Result<()> {
                     tokio::sync::oneshot::channel::<Option<String>>();
                 let (acp_session_id_tx, _acp_session_id_rx) =
                     tokio::sync::oneshot::channel::<String>();
-                let _cmd_tx = agent::adapter::spawn_acp_agent(
+                let _cmd_tx = runtime::adapter::spawn_acp_agent(
                     binary,
                     worktree.clone(),
                     prompt.clone(),

@@ -5,7 +5,7 @@ use crate::config::{DaemonConfig, MemberStore, SessionStore, StoredSession, Work
 use crate::mqtt::{MqttClient, publisher::Publisher, subscriber};
 use crate::supabase::{SupabaseClient, SupabaseConfig};
 use std::path::PathBuf;
-use crate::agent::AgentManager;
+use crate::runtime::AgentManager;
 use crate::collab::{AuthManager, AuthResult, PeerTracker, PeerState, PermissionManager};
 use crate::history::EventHistory;
 use crate::proto::amux;
