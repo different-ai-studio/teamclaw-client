@@ -34,10 +34,13 @@ pub mod teamclaw {
     include!(concat!(env!("OUT_DIR"), "/teamclaw.rs"));
 }
 
-impl_encode!(teamclaw::SessionMessageEnvelope);
-impl_encode!(teamclaw::TaskEvent);
-impl_encode!(teamclaw::RpcRequest);
-impl_encode!(teamclaw::RpcResponse);
+impl_encode!(
+    teamclaw::SessionMessageEnvelope,
+    teamclaw::TaskEvent,
+    teamclaw::RpcRequest,
+    teamclaw::RpcResponse,
+    teamclaw::Notify
+);
 
 impl amux::CommandEnvelope {
     pub fn decode_from(buf: &[u8]) -> crate::error::Result<Self> {

@@ -1,5 +1,5 @@
 use rumqttc::QoS;
-use crate::proto::amux;
+use crate::proto::{amux, teamclaw};
 use super::MqttClient;
 
 pub struct Publisher<'a> {
@@ -84,6 +84,29 @@ impl<'a> Publisher<'a> {
             .await?;
         self.client.client
             .publish(self.client.topics.device_state(), QoS::AtLeastOnce, true, payload)
+            .await
+    }
+
+    /// Publishes a Notify hint to the daemon's own device/{id}/notify topic.
+    /// Ephemeral (no retain) — receivers react by re-fetching authoritative
+    /// state from Supabase or daemon RPC.
+    pub async fn publish_notify(
+        &self,
+        event_type: &str,
+        refresh_hint: &str,
+    ) -> Result<(), rumqttc::ClientError> {
+        let notify = teamclaw::Notify {
+            event_type: event_type.to_string(),
+            refresh_hint: refresh_hint.to_string(),
+            sent_at: chrono::Utc::now().timestamp(),
+        };
+        self.client.client
+            .publish(
+                self.client.topics.device_notify(),
+                QoS::AtLeastOnce,
+                false,
+                notify.encode_to_vec(),
+            )
             .await
     }
 }
