@@ -866,6 +866,78 @@ public final class TeamclawService {
         return (false, "timeout")
     }
 
+    /// Spawns a runtime via daemon RPC. The daemon returns synchronously after
+    /// the Claude Code subprocess spawns (not after full ACP-ready) — full
+    /// lifecycle progress arrives via the retained `runtime/{id}/state` topic
+    /// that callers should already be subscribed to via SessionListViewModel.
+    ///
+    /// Per spec invariant, the new-session UI must not block on full daemon
+    /// startup; this RPC is the synchronous accept gate, lifecycle telemetry is
+    /// observed asynchronously.
+    ///
+    /// Returns `.accepted(runtimeID, sessionID)` or `.rejected(reason)`.
+    /// Times out at 15s with `.rejected("timeout")`.
+    public func runtimeStartRpc(
+        agentType: Amux_AgentType,
+        workspaceId: String,
+        worktree: String,
+        sessionId: String,
+        initialPrompt: String
+    ) async -> RuntimeStartOutcome {
+        guard let mqtt else { return .rejected("mqtt not configured") }
+
+        var start = Teamclaw_RuntimeStartRequest()
+        start.agentType = agentType
+        start.workspaceID = workspaceId
+        start.worktree = worktree
+        start.sessionID = sessionId
+        start.initialPrompt = initialPrompt
+
+        var rpcReq = Teamclaw_RpcRequest()
+        rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
+        rpcReq.senderDeviceID = deviceId
+        rpcReq.method = .runtimeStart(start)
+
+        let requestId = rpcReq.requestID
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let stream = mqtt.messages()
+
+        guard let data = try? rpcReq.serializedData() else {
+            return .rejected("encode failed")
+        }
+        do {
+            try await mqtt.publish(topic: topic, payload: data, retain: false)
+        } catch {
+            return .rejected("publish failed: \(error.localizedDescription)")
+        }
+
+        let deadline = Date().addingTimeInterval(15)
+        for await msg in stream {
+            if Date() > deadline { break }
+            if msg.topic == MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId),
+               let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
+               response.requestID == requestId {
+                if case .runtimeStartResult(let result)? = response.result {
+                    if result.accepted {
+                        return .accepted(runtimeID: result.runtimeID, sessionID: result.sessionID)
+                    } else {
+                        let reason = result.rejectedReason.isEmpty
+                            ? (response.error.isEmpty ? "rejected" : response.error)
+                            : result.rejectedReason
+                        return .rejected(reason)
+                    }
+                }
+                return .rejected(response.error.isEmpty ? "no result" : response.error)
+            }
+        }
+        return .rejected("timeout")
+    }
+
+    public enum RuntimeStartOutcome: Sendable {
+        case accepted(runtimeID: String, sessionID: String)
+        case rejected(String)
+    }
+
     private func configureRuntime(
         mqtt: MQTTService,
         teamId: String,
