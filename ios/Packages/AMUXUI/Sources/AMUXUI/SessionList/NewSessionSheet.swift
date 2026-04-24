@@ -6,17 +6,6 @@ import os
 
 private let newSessionLogger = Logger(subsystem: "com.amux.app", category: "NewSession")
 
-private func collabEventSummary(_ event: Amux_DeviceCollabEvent.OneOf_Event) -> String {
-    switch event {
-    case .agentStartResult(let result):
-        return "agentStartResult commandID=\(result.commandID) success=\(result.success) runtimeID=\(result.runtimeID)"
-    case .commandRejected(let rejected):
-        return "commandRejected commandID=\(rejected.commandID) reason=\(rejected.reason)"
-    default:
-        return String(describing: event)
-    }
-}
-
 // MARK: - NewSessionSheet
 
 public struct NewSessionSheet: View {
@@ -510,17 +499,18 @@ public struct NewSessionSheet: View {
 
         isSending = true
 
+        let titleSeed = String(userText.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
+
         Task {
-            let stream = mqtt.messages()
-            let routeDevice = effectiveDeviceID
-            let collabTopic = MQTTTopics.deviceCollab(teamID: effectiveTeamID, deviceID: requesterDeviceID)
-            let commandTopic = MQTTTopics.agentCommands(teamID: effectiveTeamID, deviceID: routeDevice, agentID: "new")
-            let cmd = makeStartAgentCommand(initialPrompt: text, sessionID: "")
-            await MainActor.run {
-                debugStatusMessage = "waiting command=\(cmd.commandID)"
-                debugTransportMessage = "team=\(effectiveTeamID) route=\(routeDevice) reply=\(requesterDeviceID) cmd=\(commandTopic) collab=\(collabTopic)"
+            guard let teamclawService else {
+                await MainActor.run {
+                    isSending = false
+                    errorMessage = "TeamclawService unavailable."
+                }
+                return
             }
 
+            let routeDevice = effectiveDeviceID
             guard !routeDevice.isEmpty, routeDevice != requesterDeviceID else {
                 await MainActor.run {
                     isSending = false
@@ -529,66 +519,35 @@ public struct NewSessionSheet: View {
                 return
             }
 
-            do {
-                try await mqtt.subscribe(collabTopic)
-                let data = try ProtoMQTTCoder.encode(cmd)
-                try await mqtt.publish(
-                    topic: commandTopic,
-                    payload: data
-                )
-            } catch {
-                await MainActor.run {
-                    isSending = false
-                    errorMessage = "Failed to send: \(error.localizedDescription)"
-                }
-                return
+            await MainActor.run {
+                debugStatusMessage = "starting runtime…"
+                debugTransportMessage = "team=\(effectiveTeamID) route=\(routeDevice) reply=\(requesterDeviceID) (RPC)"
             }
 
-            defer {
-                Task {
-                    try? await mqtt.unsubscribe(collabTopic)
-                }
-            }
+            let outcome = await teamclawService.runtimeStartRpc(
+                agentType: selectedAgentType,
+                workspaceId: selectedWorkspaceRecord?.id ?? "",
+                worktree: selectedWorkspaceRecord?.path ?? "",
+                sessionId: "",
+                initialPrompt: text
+            )
 
-            do {
-                let event = try await waitForCommandResult(
-                    stream: stream,
-                    collabTopic: collabTopic,
-                    commandID: cmd.commandID
-                )
-                switch event {
-                case .agentStartResult(let result):
-                    await MainActor.run {
-                        isSending = false
-                        if result.success {
-                            persistPlaceholderAgent(
-                                agentID: result.runtimeID,
-                                title: String(userText.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines),
-                                prompt: text
-                            )
-                            newSessionLogger.info(
-                                "new-session success destination=\(result.runtimeID, privacy: .public) resultSessionID=\(result.sessionID, privacy: .public) resultRuntimeID=\(result.runtimeID, privacy: .public)"
-                            )
-                            onSessionCreated?(result.runtimeID)
-                            dismiss()
-                        } else {
-                            errorMessage = result.error.isEmpty
-                                ? "Agent failed to start. Check daemon logs."
-                                : result.error
-                        }
-                    }
-                case .commandRejected(let rejected):
-                    await MainActor.run {
-                        isSending = false
-                        errorMessage = rejected.reason
-                    }
-                default:
-                    break
-                }
-            } catch {
-                await MainActor.run {
-                    isSending = false
-                    errorMessage = error.localizedDescription
+            await MainActor.run {
+                isSending = false
+                switch outcome {
+                case .accepted(let runtimeID, _):
+                    persistPlaceholderAgent(
+                        agentID: runtimeID,
+                        title: titleSeed,
+                        prompt: text
+                    )
+                    newSessionLogger.info(
+                        "new-session accepted runtimeID=\(runtimeID, privacy: .public) (lifecycle on runtime/state)"
+                    )
+                    onSessionCreated?(runtimeID)
+                    dismiss()
+                case .rejected(let reason):
+                    errorMessage = reason.isEmpty ? "Agent failed to start. Check daemon logs." : reason
                 }
             }
         }
@@ -746,36 +705,6 @@ public struct NewSessionSheet: View {
         dismiss()
     }
 
-    private func makeStartAgentCommand(initialPrompt: String, sessionID: String) -> Amux_CommandEnvelope {
-        var cmd = Amux_CommandEnvelope()
-        cmd.runtimeID = ""
-        cmd.deviceID = effectiveDeviceID
-        cmd.replyToDeviceID = requesterDeviceID
-        cmd.peerID = peerId
-        cmd.senderActorID = currentActorID ?? ""
-        cmd.commandID = UUID().uuidString
-        cmd.timestamp = Int64(Date().timeIntervalSince1970)
-
-        var start = Amux_AcpStartAgent()
-        start.agentType = selectedAgentType
-        start.workspaceID = selectedWorkspaceRecord?.id ?? ""
-        // Pair the Supabase workspace id with its path so the daemon can
-        // resolve the checkout location without needing a local mirror of
-        // the workspaces table.
-        start.worktree = selectedWorkspaceRecord?.path ?? ""
-        start.initialPrompt = initialPrompt
-        start.sessionID = sessionID
-
-        newSessionLogger.info(
-            "startAgent envelope routeDevice=\(self.effectiveDeviceID, privacy: .public) replyDevice=\(self.requesterDeviceID, privacy: .public) primaryAgent=\(self.primaryAgentID ?? "", privacy: .public) sessionID=\(sessionID, privacy: .public) workspaceID=\(start.workspaceID, privacy: .public) worktree=\(start.worktree, privacy: .public)"
-        )
-
-        var acpCmd = Amux_AcpCommand()
-        acpCmd.command = .startAgent(start)
-        cmd.acpCommand = acpCmd
-        return cmd
-    }
-
     private func persistSession(_ info: Teamclaw_SessionInfo) -> Session {
         let sessionID = info.sessionID
         let fetch = FetchDescriptor<Session>(
@@ -882,100 +811,33 @@ public struct NewSessionSheet: View {
     }
 
     private func startAgentAndWaitForState(initialPrompt: String, sessionID: String) async throws -> String {
-        let stream = mqtt.messages()
-        let routeDevice = effectiveDeviceID
-        let collabTopic = MQTTTopics.deviceCollab(teamID: effectiveTeamID, deviceID: requesterDeviceID)
-        let commandTopic = MQTTTopics.agentCommands(teamID: effectiveTeamID, deviceID: routeDevice, agentID: "new")
-        let cmd = makeStartAgentCommand(initialPrompt: initialPrompt, sessionID: sessionID)
-        let commandID = cmd.commandID
-        await MainActor.run {
-            debugStatusMessage = "waiting command=\(commandID)"
-            debugTransportMessage = "team=\(effectiveTeamID) route=\(routeDevice) reply=\(requesterDeviceID) cmd=\(commandTopic) collab=\(collabTopic)"
+        guard let teamclawService else {
+            throw SessionCreationError.rpc("TeamclawService unavailable.")
         }
 
+        let routeDevice = effectiveDeviceID
         guard !routeDevice.isEmpty, routeDevice != requesterDeviceID else {
             throw SessionCreationError.rpc("Daemon device ID is not configured.")
         }
 
-        do {
-            try await mqtt.subscribe(collabTopic)
-            let data = try ProtoMQTTCoder.encode(cmd)
-            try await mqtt.publish(
-                topic: commandTopic,
-                payload: data
-            )
-        } catch {
-            throw SessionCreationError.rpc("Failed to start agent: \(error.localizedDescription)")
+        await MainActor.run {
+            debugStatusMessage = "starting runtime for session \(sessionID)…"
+            debugTransportMessage = "team=\(effectiveTeamID) route=\(routeDevice) reply=\(requesterDeviceID) (RPC)"
         }
 
-        defer {
-            Task {
-                try? await mqtt.unsubscribe(collabTopic)
-            }
-        }
-
-        let event = try await waitForCommandResult(
-            stream: stream,
-            collabTopic: collabTopic,
-            commandID: commandID
+        let outcome = await teamclawService.runtimeStartRpc(
+            agentType: selectedAgentType,
+            workspaceId: selectedWorkspaceRecord?.id ?? "",
+            worktree: selectedWorkspaceRecord?.path ?? "",
+            sessionId: sessionID,
+            initialPrompt: initialPrompt
         )
-        switch event {
-        case .agentStartResult(let result):
-            if result.success {
-                return result.runtimeID
-            }
-            let reason = result.error.isEmpty
-                ? "Agent failed to start. Check daemon logs."
-                : result.error
-            throw SessionCreationError.rpc(reason)
-        case .commandRejected(let rejected):
-            throw SessionCreationError.rpc(rejected.reason)
-        default:
-            throw SessionCreationError.rpc("Unexpected command result")
-        }
-    }
 
-    private func waitForCommandResult(
-        stream: AsyncStream<MQTTIncoming>,
-        collabTopic: String,
-        commandID: String
-    ) async throws -> Amux_DeviceCollabEvent.OneOf_Event {
-        try await withThrowingTaskGroup(of: Amux_DeviceCollabEvent.OneOf_Event.self) { group in
-            group.addTask {
-                for await msg in stream {
-                    guard msg.topic == collabTopic,
-                          let dce = try? ProtoMQTTCoder.decode(Amux_DeviceCollabEvent.self, from: msg.payload),
-                          let event = dce.event else {
-                        continue
-                    }
-                    newSessionLogger.info(
-                        "received collab event topic=\(collabTopic, privacy: .public) expectedCommandID=\(commandID, privacy: .public) event=\(collabEventSummary(event), privacy: .public)"
-                    )
-                    await MainActor.run {
-                        debugStatusMessage = collabEventSummary(event)
-                    }
-                    switch event {
-                    case .agentStartResult(let result) where result.commandID == commandID:
-                        return event
-                    case .commandRejected(let rejected) where rejected.commandID == commandID:
-                        return event
-                    default:
-                        continue
-                    }
-                }
-                throw SessionCreationError.rpc("Session creation timed out. Check daemon logs.")
-            }
-            group.addTask {
-                try await Task.sleep(for: .seconds(15))
-                await MainActor.run {
-                    debugStatusMessage = "timeout command=\(commandID)"
-                }
-                throw SessionCreationError.rpc("Session creation timed out. Check daemon logs.")
-            }
-
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
+        switch outcome {
+        case .accepted(let runtimeID, _):
+            return runtimeID
+        case .rejected(let reason):
+            throw SessionCreationError.rpc(reason.isEmpty ? "Agent failed to start. Check daemon logs." : reason)
         }
     }
 
