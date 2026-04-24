@@ -166,10 +166,10 @@ pub async fn run_watch(config: DaemonConfig) -> anyhow::Result<()> {
                         Err(e) => println!("❓ {} → {} bytes (decode: {})", topic, payload.len(), e),
                     }
                 } else if topic.ends_with("/state") {
-                    match amux::AgentInfo::decode(payload.as_ref()) {
+                    match amux::RuntimeInfo::decode(payload.as_ref()) {
                         Ok(info) => {
-                            println!("📊 {} → AgentInfo {{ id={}, status={:?}, worktree=\"{}\" }}{}",
-                                topic, info.agent_id,
+                            println!("📊 {} → RuntimeInfo {{ id={}, status={:?}, worktree=\"{}\" }}{}",
+                                topic, info.runtime_id,
                                 amux::AgentStatus::try_from(info.status).unwrap_or(amux::AgentStatus::Unknown),
                                 info.worktree, retained);
                         }
@@ -484,8 +484,8 @@ fn print_publish(publish: &rumqttc::Publish) {
             }
         }
     } else if topic.ends_with("/state") {
-        if let Ok(info) = amux::AgentInfo::decode(payload.as_ref()) {
-            println!("📊 AgentState id={} status={:?}{}", info.agent_id,
+        if let Ok(info) = amux::RuntimeInfo::decode(payload.as_ref()) {
+            println!("📊 RuntimeState id={} status={:?}{}", info.runtime_id,
                 amux::AgentStatus::try_from(info.status).unwrap_or(amux::AgentStatus::Unknown), retained);
         }
     } else if topic.ends_with("/collab") {

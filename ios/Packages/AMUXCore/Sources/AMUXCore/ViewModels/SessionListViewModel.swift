@@ -121,7 +121,7 @@ public final class SessionListViewModel {
                         refreshSessions(modelContext: ctx)
                         continue
                     }
-                    guard let info = try? ProtoMQTTCoder.decode(Amux_AgentInfo.self, from: msg.payload) else { continue }
+                    guard let info = try? ProtoMQTTCoder.decode(Amux_RuntimeInfo.self, from: msg.payload) else { continue }
                     syncAgent(info, modelContext: ctx)
                     refreshSessions(modelContext: ctx)
                 }
@@ -133,8 +133,8 @@ public final class SessionListViewModel {
 
     public func stop() { task?.cancel(); task = nil }
 
-    private func syncAgent(_ proto: Amux_AgentInfo, modelContext: ModelContext) {
-        let id = proto.agentID
+    private func syncAgent(_ proto: Amux_RuntimeInfo, modelContext: ModelContext) {
+        let id = proto.runtimeID
         let descriptor = FetchDescriptor<Agent>(predicate: #Predicate { $0.agentId == id })
         if let existing = try? modelContext.fetch(descriptor).first {
             // Mark unread and update timestamp if there's new activity
@@ -164,7 +164,7 @@ public final class SessionListViewModel {
             existing.currentModel = proto.currentModel.isEmpty ? nil : proto.currentModel
         } else {
             let newAgent = Agent(
-                agentId: proto.agentID,
+                agentId: proto.runtimeID,
                 agentType: Int(proto.agentType.rawValue),
                 worktree: proto.worktree,
                 branch: proto.branch,

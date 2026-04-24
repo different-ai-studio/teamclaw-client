@@ -54,7 +54,7 @@ impl AgentHandle {
         self.sequence
     }
 
-    /// Build an `AgentInfo` for this agent.
+    /// Build a `RuntimeInfo` for this agent.
     ///
     /// `available_models` and `current_model` are passed in by the caller
     /// (typically `AgentManager`) so that the handle does not need to know
@@ -64,9 +64,9 @@ impl AgentHandle {
         &self,
         available_models: Vec<amux::ModelInfo>,
         current_model: String,
-    ) -> amux::AgentInfo {
-        amux::AgentInfo {
-            agent_id: self.agent_id.clone(),
+    ) -> amux::RuntimeInfo {
+        amux::RuntimeInfo {
+            runtime_id: self.agent_id.clone(),
             agent_type: self.agent_type as i32,
             worktree: self.worktree.clone(),
             branch: self.branch.clone(),
@@ -79,6 +79,13 @@ impl AgentHandle {
             tool_use_count: self.tool_use_count,
             available_models,
             current_model,
+            // Lifecycle fields — not yet populated by the live adapter;
+            // will be wired in a later phase.
+            state: amux::RuntimeLifecycle::Unknown as i32,
+            stage: String::new(),
+            error_code: String::new(),
+            error_message: String::new(),
+            failed_stage: String::new(),
         }
     }
 

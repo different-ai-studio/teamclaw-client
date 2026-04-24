@@ -1354,40 +1354,114 @@ public struct Amux_WorkspaceList: Sendable {
   public init() {}
 }
 
-public struct Amux_AgentInfo: Sendable {
+/// Payload of device/{id}/runtime/{id}/state (retained).
+/// See spec: docs/superpowers/specs/2026-04-24-mqtt-topic-redesign-design.md
+public struct Amux_RuntimeInfo: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var agentID: String = String()
+  public var runtimeID: String {
+    get {_storage._runtimeID}
+    set {_uniqueStorage()._runtimeID = newValue}
+  }
 
-  public var agentType: Amux_AgentType = .unknown
+  public var agentType: Amux_AgentType {
+    get {_storage._agentType}
+    set {_uniqueStorage()._agentType = newValue}
+  }
 
-  public var worktree: String = String()
+  public var worktree: String {
+    get {_storage._worktree}
+    set {_uniqueStorage()._worktree = newValue}
+  }
 
-  public var branch: String = String()
+  public var branch: String {
+    get {_storage._branch}
+    set {_uniqueStorage()._branch = newValue}
+  }
 
-  public var status: Amux_AgentStatus = .unknown
+  /// ACP-level status (kept); lifecycle is separate
+  public var status: Amux_AgentStatus {
+    get {_storage._status}
+    set {_uniqueStorage()._status = newValue}
+  }
 
-  public var startedAt: Int64 = 0
+  public var startedAt: Int64 {
+    get {_storage._startedAt}
+    set {_uniqueStorage()._startedAt = newValue}
+  }
 
-  public var currentPrompt: String = String()
+  public var currentPrompt: String {
+    get {_storage._currentPrompt}
+    set {_uniqueStorage()._currentPrompt = newValue}
+  }
 
-  public var workspaceID: String = String()
+  public var workspaceID: String {
+    get {_storage._workspaceID}
+    set {_uniqueStorage()._workspaceID = newValue}
+  }
 
-  public var sessionTitle: String = String()
+  public var sessionTitle: String {
+    get {_storage._sessionTitle}
+    set {_uniqueStorage()._sessionTitle = newValue}
+  }
 
-  public var lastOutputSummary: String = String()
+  public var lastOutputSummary: String {
+    get {_storage._lastOutputSummary}
+    set {_uniqueStorage()._lastOutputSummary = newValue}
+  }
 
-  public var toolUseCount: Int32 = 0
+  public var toolUseCount: Int32 {
+    get {_storage._toolUseCount}
+    set {_uniqueStorage()._toolUseCount = newValue}
+  }
 
-  public var availableModels: [Amux_ModelInfo] = []
+  public var availableModels: [Amux_ModelInfo] {
+    get {_storage._availableModels}
+    set {_uniqueStorage()._availableModels = newValue}
+  }
 
-  public var currentModel: String = String()
+  public var currentModel: String {
+    get {_storage._currentModel}
+    set {_uniqueStorage()._currentModel = newValue}
+  }
+
+  /// Lifecycle fields — see RuntimeLifecycle and Runtime lifecycle section in spec.
+  public var state: Amux_RuntimeLifecycle {
+    get {_storage._state}
+    set {_uniqueStorage()._state = newValue}
+  }
+
+  /// meaningful iff state == STARTING
+  public var stage: String {
+    get {_storage._stage}
+    set {_uniqueStorage()._stage = newValue}
+  }
+
+  /// meaningful iff state == FAILED
+  public var errorCode: String {
+    get {_storage._errorCode}
+    set {_uniqueStorage()._errorCode = newValue}
+  }
+
+  /// meaningful iff state == FAILED
+  public var errorMessage: String {
+    get {_storage._errorMessage}
+    set {_uniqueStorage()._errorMessage = newValue}
+  }
+
+  /// meaningful iff state == FAILED
+  public var failedStage: String {
+    get {_storage._failedStage}
+    set {_uniqueStorage()._failedStage = newValue}
+  }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 public struct Amux_ModelInfo: Sendable {
@@ -1409,7 +1483,7 @@ public struct Amux_AgentList: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var agents: [Amux_AgentInfo] = []
+  public var runtimes: [Amux_RuntimeInfo] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3955,91 +4029,186 @@ extension Amux_WorkspaceList: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
   }
 }
 
-extension Amux_AgentInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".AgentInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agent_id\0\u{3}agent_type\0\u{1}worktree\0\u{1}branch\0\u{1}status\0\u{3}started_at\0\u{3}current_prompt\0\u{3}workspace_id\0\u{3}session_title\0\u{3}last_output_summary\0\u{3}tool_use_count\0\u{3}available_models\0\u{3}current_model\0")
+extension Amux_RuntimeInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RuntimeInfo"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}runtime_id\0\u{3}agent_type\0\u{1}worktree\0\u{1}branch\0\u{1}status\0\u{3}started_at\0\u{3}current_prompt\0\u{3}workspace_id\0\u{3}session_title\0\u{3}last_output_summary\0\u{3}tool_use_count\0\u{3}available_models\0\u{3}current_model\0\u{1}state\0\u{1}stage\0\u{3}error_code\0\u{3}error_message\0\u{3}failed_stage\0")
+
+  fileprivate class _StorageClass {
+    var _runtimeID: String = String()
+    var _agentType: Amux_AgentType = .unknown
+    var _worktree: String = String()
+    var _branch: String = String()
+    var _status: Amux_AgentStatus = .unknown
+    var _startedAt: Int64 = 0
+    var _currentPrompt: String = String()
+    var _workspaceID: String = String()
+    var _sessionTitle: String = String()
+    var _lastOutputSummary: String = String()
+    var _toolUseCount: Int32 = 0
+    var _availableModels: [Amux_ModelInfo] = []
+    var _currentModel: String = String()
+    var _state: Amux_RuntimeLifecycle = .unknown
+    var _stage: String = String()
+    var _errorCode: String = String()
+    var _errorMessage: String = String()
+    var _failedStage: String = String()
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _runtimeID = source._runtimeID
+      _agentType = source._agentType
+      _worktree = source._worktree
+      _branch = source._branch
+      _status = source._status
+      _startedAt = source._startedAt
+      _currentPrompt = source._currentPrompt
+      _workspaceID = source._workspaceID
+      _sessionTitle = source._sessionTitle
+      _lastOutputSummary = source._lastOutputSummary
+      _toolUseCount = source._toolUseCount
+      _availableModels = source._availableModels
+      _currentModel = source._currentModel
+      _state = source._state
+      _stage = source._stage
+      _errorCode = source._errorCode
+      _errorMessage = source._errorMessage
+      _failedStage = source._failedStage
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.agentID) }()
-      case 2: try { try decoder.decodeSingularEnumField(value: &self.agentType) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self.worktree) }()
-      case 4: try { try decoder.decodeSingularStringField(value: &self.branch) }()
-      case 5: try { try decoder.decodeSingularEnumField(value: &self.status) }()
-      case 6: try { try decoder.decodeSingularInt64Field(value: &self.startedAt) }()
-      case 7: try { try decoder.decodeSingularStringField(value: &self.currentPrompt) }()
-      case 8: try { try decoder.decodeSingularStringField(value: &self.workspaceID) }()
-      case 9: try { try decoder.decodeSingularStringField(value: &self.sessionTitle) }()
-      case 10: try { try decoder.decodeSingularStringField(value: &self.lastOutputSummary) }()
-      case 11: try { try decoder.decodeSingularInt32Field(value: &self.toolUseCount) }()
-      case 12: try { try decoder.decodeRepeatedMessageField(value: &self.availableModels) }()
-      case 13: try { try decoder.decodeSingularStringField(value: &self.currentModel) }()
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._runtimeID) }()
+        case 2: try { try decoder.decodeSingularEnumField(value: &_storage._agentType) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._worktree) }()
+        case 4: try { try decoder.decodeSingularStringField(value: &_storage._branch) }()
+        case 5: try { try decoder.decodeSingularEnumField(value: &_storage._status) }()
+        case 6: try { try decoder.decodeSingularInt64Field(value: &_storage._startedAt) }()
+        case 7: try { try decoder.decodeSingularStringField(value: &_storage._currentPrompt) }()
+        case 8: try { try decoder.decodeSingularStringField(value: &_storage._workspaceID) }()
+        case 9: try { try decoder.decodeSingularStringField(value: &_storage._sessionTitle) }()
+        case 10: try { try decoder.decodeSingularStringField(value: &_storage._lastOutputSummary) }()
+        case 11: try { try decoder.decodeSingularInt32Field(value: &_storage._toolUseCount) }()
+        case 12: try { try decoder.decodeRepeatedMessageField(value: &_storage._availableModels) }()
+        case 13: try { try decoder.decodeSingularStringField(value: &_storage._currentModel) }()
+        case 14: try { try decoder.decodeSingularEnumField(value: &_storage._state) }()
+        case 15: try { try decoder.decodeSingularStringField(value: &_storage._stage) }()
+        case 16: try { try decoder.decodeSingularStringField(value: &_storage._errorCode) }()
+        case 17: try { try decoder.decodeSingularStringField(value: &_storage._errorMessage) }()
+        case 18: try { try decoder.decodeSingularStringField(value: &_storage._failedStage) }()
+        default: break
+        }
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.agentID.isEmpty {
-      try visitor.visitSingularStringField(value: self.agentID, fieldNumber: 1)
-    }
-    if self.agentType != .unknown {
-      try visitor.visitSingularEnumField(value: self.agentType, fieldNumber: 2)
-    }
-    if !self.worktree.isEmpty {
-      try visitor.visitSingularStringField(value: self.worktree, fieldNumber: 3)
-    }
-    if !self.branch.isEmpty {
-      try visitor.visitSingularStringField(value: self.branch, fieldNumber: 4)
-    }
-    if self.status != .unknown {
-      try visitor.visitSingularEnumField(value: self.status, fieldNumber: 5)
-    }
-    if self.startedAt != 0 {
-      try visitor.visitSingularInt64Field(value: self.startedAt, fieldNumber: 6)
-    }
-    if !self.currentPrompt.isEmpty {
-      try visitor.visitSingularStringField(value: self.currentPrompt, fieldNumber: 7)
-    }
-    if !self.workspaceID.isEmpty {
-      try visitor.visitSingularStringField(value: self.workspaceID, fieldNumber: 8)
-    }
-    if !self.sessionTitle.isEmpty {
-      try visitor.visitSingularStringField(value: self.sessionTitle, fieldNumber: 9)
-    }
-    if !self.lastOutputSummary.isEmpty {
-      try visitor.visitSingularStringField(value: self.lastOutputSummary, fieldNumber: 10)
-    }
-    if self.toolUseCount != 0 {
-      try visitor.visitSingularInt32Field(value: self.toolUseCount, fieldNumber: 11)
-    }
-    if !self.availableModels.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.availableModels, fieldNumber: 12)
-    }
-    if !self.currentModel.isEmpty {
-      try visitor.visitSingularStringField(value: self.currentModel, fieldNumber: 13)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      if !_storage._runtimeID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._runtimeID, fieldNumber: 1)
+      }
+      if _storage._agentType != .unknown {
+        try visitor.visitSingularEnumField(value: _storage._agentType, fieldNumber: 2)
+      }
+      if !_storage._worktree.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._worktree, fieldNumber: 3)
+      }
+      if !_storage._branch.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._branch, fieldNumber: 4)
+      }
+      if _storage._status != .unknown {
+        try visitor.visitSingularEnumField(value: _storage._status, fieldNumber: 5)
+      }
+      if _storage._startedAt != 0 {
+        try visitor.visitSingularInt64Field(value: _storage._startedAt, fieldNumber: 6)
+      }
+      if !_storage._currentPrompt.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._currentPrompt, fieldNumber: 7)
+      }
+      if !_storage._workspaceID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._workspaceID, fieldNumber: 8)
+      }
+      if !_storage._sessionTitle.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._sessionTitle, fieldNumber: 9)
+      }
+      if !_storage._lastOutputSummary.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._lastOutputSummary, fieldNumber: 10)
+      }
+      if _storage._toolUseCount != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._toolUseCount, fieldNumber: 11)
+      }
+      if !_storage._availableModels.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._availableModels, fieldNumber: 12)
+      }
+      if !_storage._currentModel.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._currentModel, fieldNumber: 13)
+      }
+      if _storage._state != .unknown {
+        try visitor.visitSingularEnumField(value: _storage._state, fieldNumber: 14)
+      }
+      if !_storage._stage.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._stage, fieldNumber: 15)
+      }
+      if !_storage._errorCode.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._errorCode, fieldNumber: 16)
+      }
+      if !_storage._errorMessage.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._errorMessage, fieldNumber: 17)
+      }
+      if !_storage._failedStage.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._failedStage, fieldNumber: 18)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Amux_AgentInfo, rhs: Amux_AgentInfo) -> Bool {
-    if lhs.agentID != rhs.agentID {return false}
-    if lhs.agentType != rhs.agentType {return false}
-    if lhs.worktree != rhs.worktree {return false}
-    if lhs.branch != rhs.branch {return false}
-    if lhs.status != rhs.status {return false}
-    if lhs.startedAt != rhs.startedAt {return false}
-    if lhs.currentPrompt != rhs.currentPrompt {return false}
-    if lhs.workspaceID != rhs.workspaceID {return false}
-    if lhs.sessionTitle != rhs.sessionTitle {return false}
-    if lhs.lastOutputSummary != rhs.lastOutputSummary {return false}
-    if lhs.toolUseCount != rhs.toolUseCount {return false}
-    if lhs.availableModels != rhs.availableModels {return false}
-    if lhs.currentModel != rhs.currentModel {return false}
+  public static func ==(lhs: Amux_RuntimeInfo, rhs: Amux_RuntimeInfo) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._runtimeID != rhs_storage._runtimeID {return false}
+        if _storage._agentType != rhs_storage._agentType {return false}
+        if _storage._worktree != rhs_storage._worktree {return false}
+        if _storage._branch != rhs_storage._branch {return false}
+        if _storage._status != rhs_storage._status {return false}
+        if _storage._startedAt != rhs_storage._startedAt {return false}
+        if _storage._currentPrompt != rhs_storage._currentPrompt {return false}
+        if _storage._workspaceID != rhs_storage._workspaceID {return false}
+        if _storage._sessionTitle != rhs_storage._sessionTitle {return false}
+        if _storage._lastOutputSummary != rhs_storage._lastOutputSummary {return false}
+        if _storage._toolUseCount != rhs_storage._toolUseCount {return false}
+        if _storage._availableModels != rhs_storage._availableModels {return false}
+        if _storage._currentModel != rhs_storage._currentModel {return false}
+        if _storage._state != rhs_storage._state {return false}
+        if _storage._stage != rhs_storage._stage {return false}
+        if _storage._errorCode != rhs_storage._errorCode {return false}
+        if _storage._errorMessage != rhs_storage._errorMessage {return false}
+        if _storage._failedStage != rhs_storage._failedStage {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -4082,7 +4251,7 @@ extension Amux_ModelInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
 
 extension Amux_AgentList: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AgentList"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}agents\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}runtimes\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -4090,21 +4259,21 @@ extension Amux_AgentList: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.agents) }()
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.runtimes) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.agents.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.agents, fieldNumber: 1)
+    if !self.runtimes.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.runtimes, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Amux_AgentList, rhs: Amux_AgentList) -> Bool {
-    if lhs.agents != rhs.agents {return false}
+    if lhs.runtimes != rhs.runtimes {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

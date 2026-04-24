@@ -67,17 +67,17 @@ impl SessionStore {
         self.sessions.iter_mut().find(|s| s.session_id == session_id)
     }
 
-    pub fn to_proto_agent_list(&self) -> Vec<amux::AgentInfo> {
+    pub fn to_proto_agent_list(&self) -> Vec<amux::RuntimeInfo> {
         self.sessions.iter().map(Self::session_to_info).collect()
     }
 
-    pub fn to_proto_agent_info(&self, session_id: &str) -> Option<amux::AgentInfo> {
+    pub fn to_proto_agent_info(&self, session_id: &str) -> Option<amux::RuntimeInfo> {
         self.find_by_id(session_id).map(Self::session_to_info)
     }
 
-    fn session_to_info(s: &StoredSession) -> amux::AgentInfo {
-        amux::AgentInfo {
-            agent_id: s.session_id.clone(),
+    fn session_to_info(s: &StoredSession) -> amux::RuntimeInfo {
+        amux::RuntimeInfo {
+            runtime_id: s.session_id.clone(),
             agent_type: s.agent_type,
             worktree: s.worktree.clone(),
             branch: String::new(),
@@ -94,6 +94,12 @@ impl SessionStore {
             // these fields from the running adapter.
             available_models: vec![],
             current_model: String::new(),
+            // Lifecycle fields — not populated for historical sessions.
+            state: amux::RuntimeLifecycle::Unknown as i32,
+            stage: String::new(),
+            error_code: String::new(),
+            error_message: String::new(),
+            failed_stage: String::new(),
         }
     }
 }

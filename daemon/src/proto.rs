@@ -23,7 +23,7 @@ impl_encode!(
     amux::Envelope,
     amux::DeviceStatus,
     amux::AgentList,
-    amux::AgentInfo,
+    amux::RuntimeInfo,
     amux::PeerList,
     amux::MemberList,
     amux::DeviceCollabEvent,

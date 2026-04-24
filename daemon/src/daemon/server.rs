@@ -283,24 +283,24 @@ impl DaemonServer {
     /// Per-agent updates should go through `publish_agent_state_by_id`.
     fn merged_agent_list(&self) -> amux::AgentList {
         let mut agent_list = self.agents.to_proto_agent_list();
-        let active_ids: std::collections::HashSet<String> = agent_list.agents.iter().map(|a| a.agent_id.clone()).collect();
+        let active_ids: std::collections::HashSet<String> = agent_list.runtimes.iter().map(|a| a.runtime_id.clone()).collect();
         for session_info in self.sessions.to_proto_agent_list() {
-            if !active_ids.contains(&session_info.agent_id) {
-                agent_list.agents.push(session_info);
+            if !active_ids.contains(&session_info.runtime_id) {
+                agent_list.runtimes.push(session_info);
             }
         }
         agent_list
     }
 
-    /// Look up a single agent's current AgentInfo — live adapter first, then
+    /// Look up a single agent's current RuntimeInfo — live adapter first, then
     /// the historical session store. Returns `None` if unknown.
-    fn agent_info_by_id(&self, agent_id: &str) -> Option<amux::AgentInfo> {
+    fn agent_info_by_id(&self, agent_id: &str) -> Option<amux::RuntimeInfo> {
         self.agents
             .to_proto_info(agent_id)
             .or_else(|| self.sessions.to_proto_agent_info(agent_id))
     }
 
-    /// Publish retained AgentInfo for a single agent on its per-agent state
+    /// Publish retained RuntimeInfo for a single agent on its per-agent state
     /// topic. Swallows errors (same convention as other publish helpers).
     async fn publish_agent_state_by_id(&self, agent_id: &str) {
         if let Some(info) = self.agent_info_by_id(agent_id) {
@@ -316,8 +316,8 @@ impl DaemonServer {
     /// single-list publish would blow past once the session count grew.
     async fn publish_all_agent_states(&self) {
         let publisher = Publisher::new(&self.mqtt);
-        for info in self.merged_agent_list().agents {
-            let _ = publisher.publish_agent_state(&info.agent_id, &info).await;
+        for info in self.merged_agent_list().runtimes {
+            let _ = publisher.publish_agent_state(&info.runtime_id, &info).await;
         }
     }
 

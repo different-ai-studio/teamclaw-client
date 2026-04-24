@@ -371,12 +371,14 @@ enum RuntimeLifecycle {
   RUNTIME_LIFECYCLE_STOPPED = 4;
 }
 
-message AgentInfo {
-  string agent_id = 1;
+// Payload of device/{id}/runtime/{id}/state (retained).
+// See spec: docs/superpowers/specs/2026-04-24-mqtt-topic-redesign-design.md
+message RuntimeInfo {
+  string runtime_id = 1;
   AgentType agent_type = 2;
   string worktree = 3;
   string branch = 4;
-  AgentStatus status = 5;
+  AgentStatus status = 5;             // ACP-level status (kept); lifecycle is separate
   int64 started_at = 6;
   string current_prompt = 7;
   string workspace_id = 8;
@@ -385,6 +387,13 @@ message AgentInfo {
   int32 tool_use_count = 11;
   repeated ModelInfo available_models = 12;
   string current_model = 13;
+
+  // Lifecycle fields — see RuntimeLifecycle and Runtime lifecycle section in spec.
+  RuntimeLifecycle state = 14;
+  string stage = 15;                  // meaningful iff state == STARTING
+  string error_code = 16;             // meaningful iff state == FAILED
+  string error_message = 17;          // meaningful iff state == FAILED
+  string failed_stage = 18;           // meaningful iff state == FAILED
 }
 
 message ModelInfo {
@@ -393,7 +402,7 @@ message ModelInfo {
 }
 
 message AgentList {
-  repeated AgentInfo agents = 1;
+  repeated RuntimeInfo runtimes = 1;
 }
 
 message TodoItem {

@@ -23,7 +23,7 @@ impl<'a> Publisher<'a> {
             .await
     }
 
-    pub async fn publish_agent_state(&self, agent_id: &str, info: &amux::AgentInfo) -> Result<(), rumqttc::ClientError> {
+    pub async fn publish_agent_state(&self, agent_id: &str, info: &amux::RuntimeInfo) -> Result<(), rumqttc::ClientError> {
         self.client.client
             .publish(self.client.topics.agent_state(agent_id), QoS::AtLeastOnce, true, info.encode_to_vec())
             .await
