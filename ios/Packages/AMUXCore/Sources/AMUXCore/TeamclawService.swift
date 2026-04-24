@@ -127,12 +127,37 @@ public final class TeamclawService {
         }
 
         if topic == MQTTTopics.deviceNotify(teamID: teamId, deviceID: deviceId) {
-            guard let envelope = try? Teamclaw_NotifyEnvelope(serializedBytes: incoming.payload) else {
-                print("[TeamclawService] failed to decode NotifyEnvelope from topic: \(topic)")
+            // Phase 2b: device/{id}/notify carries two wire shapes during the
+            // compat window — new Teamclaw_Notify (event_type + refresh_hint,
+            // field numbers 1-3) and legacy NotifyEnvelope (pre-Phase-2b
+            // daemons still emit it on membership.refresh). Try Notify first;
+            // fall back to NotifyEnvelope for old-format messages.
+            let parsed: (eventType: String, refreshHint: String)?
+            if let notify = try? Teamclaw_Notify(serializedBytes: incoming.payload) {
+                parsed = (notify.eventType, notify.refreshHint)
+            } else if let envelope = try? Teamclaw_NotifyEnvelope(serializedBytes: incoming.payload) {
+                parsed = (envelope.eventType, envelope.sessionID)
+            } else {
+                print("[TeamclawService] failed to decode device/notify payload as Notify or NotifyEnvelope")
                 return
             }
-            if envelope.eventType == "membership.refresh", !envelope.sessionID.isEmpty {
-                await refreshSessionState(for: envelope.sessionID, modelContext: modelContext)
+
+            guard let (eventType, refreshHint) = parsed else { return }
+
+            switch eventType {
+            case "membership.refresh", "members.changed":
+                if !refreshHint.isEmpty {
+                    await refreshSessionState(for: refreshHint, modelContext: modelContext)
+                }
+            case "peers.changed":
+                // Placeholder: Task 5 wires the returned array into state.
+                // Firing the RPC now lets us validate the daemon path end-to-end.
+                _ = await fetchPeers()
+            case "workspaces.changed":
+                // Placeholder: Task 6 wires the returned array into state.
+                _ = await fetchWorkspaces()
+            default:
+                break
             }
             return
         }
