@@ -227,7 +227,10 @@ impl DaemonServer {
             // ── 5. Subscribe and announce ──
             self.mqtt.subscribe_all().await.map_err(crate::error::AmuxError::Mqtt)?;
             if let Some(tc) = &mut self.teamclaw {
-                tc.subscribe_all().await.expect("teamclaw subscribe failed");
+                if let Err(e) = tc.subscribe_all().await {
+                    warn!("teamclaw subscribe failed: {e}, reconnecting");
+                    continue 'outer;
+                }
             }
             {
                 let publisher = Publisher::new(&self.mqtt);
@@ -248,10 +251,12 @@ impl DaemonServer {
 
             // ── 6. Token monitor — fires ~5 min before token expires ──
             let expiry = self.supabase.cached_token_expiry();
-            let duration_until_reconnect = expiry
-                .and_then(|t| t.checked_duration_since(Instant::now()))
-                .map(|d| d.saturating_sub(Duration::from_secs(5 * 60)))
-                .unwrap_or(Duration::from_secs(50 * 60));
+            let duration_until_reconnect = match expiry {
+                Some(t) => t.checked_duration_since(Instant::now())
+                    .map(|d| d.saturating_sub(Duration::from_secs(5 * 60)))
+                    .unwrap_or(Duration::ZERO),  // already past expiry → reconnect immediately
+                None => Duration::from_secs(50 * 60),  // no expiry cached yet → conservative fallback
+            };
 
             let (tx, rx) = oneshot::channel::<()>();
             tokio::spawn(async move {
@@ -308,7 +313,7 @@ impl DaemonServer {
                                 break 'inner;
                             }
                             Ok(Err(e)) => {
-                                warn!("MQTT error: {e}, reconnecting...");
+                                warn!("MQTT transient error: {e}, will retry (rumqttc auto-reconnects)");
                                 tokio::time::sleep(Duration::from_secs(5)).await;
                             }
                             Ok(Ok(_)) | Err(_) => {} // other events or 50 ms timeout
