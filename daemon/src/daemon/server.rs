@@ -1425,7 +1425,7 @@ impl DaemonServer {
     ///   - STARTING (stage "spawning_process") published retained right after
     ///     spawn_agent returns the new runtime_id, before StoredSession upsert.
     ///   - ACTIVE published retained via publish_agent_state_by_id after
-    ///     StoredSession upsert (that call reads the now-populated AgentHandle).
+    ///     StoredSession upsert (that call reads the now-populated RuntimeHandle).
     ///   - No FAILED publish here — spawn_agent error path returns before any
     ///     runtime_id is allocated, so there is no retained topic to write to.
     ///     Callers may surface the error via their wire envelope.
@@ -1548,7 +1548,7 @@ impl DaemonServer {
         self.sessions.upsert(stored);
         let _ = self.sessions.save(&self.sessions_path);
 
-        // ACTIVE — publish_agent_state_by_id reads the live AgentHandle and
+        // ACTIVE — publish_agent_state_by_id reads the live RuntimeHandle and
         // dual-publishes to agent/{id}/state + runtime/{id}/state. The handle
         // today encodes state=ACTIVE (Phase 1a Task 4).
         self.publish_agent_state_by_id(&new_id).await;

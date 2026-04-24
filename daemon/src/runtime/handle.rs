@@ -4,7 +4,7 @@ use tracing::warn;
 use crate::proto::amux;
 use super::adapter::AcpCommand;
 
-pub struct AgentHandle {
+pub struct RuntimeHandle {
     pub agent_id: String,
     pub acp_session_id: String,
     pub collab_session_id: String,
@@ -25,7 +25,7 @@ pub struct AgentHandle {
     pub cmd_tx: Option<mpsc::Sender<AcpCommand>>,
 }
 
-impl AgentHandle {
+impl RuntimeHandle {
     pub fn new(agent_id: String, agent_type: amux::AgentType, worktree: String, workspace_id: String) -> Self {
         let (event_tx, event_rx) = mpsc::channel(256);
         Self {

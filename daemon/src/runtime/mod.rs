@@ -3,5 +3,5 @@ mod handle;
 mod manager;
 pub mod models;
 
-pub use handle::AgentHandle;
+pub use handle::RuntimeHandle;
 pub use manager::RuntimeManager;

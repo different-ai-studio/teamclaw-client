@@ -6,10 +6,10 @@ use crate::proto::amux;
 use crate::supabase::{AgentRuntimeUpsert, SupabaseClient};
 use chrono::Utc;
 use super::adapter;
-use super::handle::AgentHandle;
+use super::handle::RuntimeHandle;
 
 pub struct RuntimeManager {
-    agents: HashMap<String, AgentHandle>,
+    agents: HashMap<String, RuntimeHandle>,
     claude_binary: String,
     /// Tracks the model id currently applied to each agent's ACP session.
     /// Populated on spawn (after the adapter sends the initial set_model)
@@ -54,7 +54,7 @@ impl RuntimeManager {
         supabase_session_id: Option<&str>,
     ) -> crate::error::Result<String> {
         let agent_id = Uuid::new_v4().to_string()[..8].to_string();
-        let mut handle = AgentHandle::new(agent_id.clone(), agent_type, worktree.into(), workspace_id.into());
+        let mut handle = RuntimeHandle::new(agent_id.clone(), agent_type, worktree.into(), workspace_id.into());
         handle.current_prompt = prompt.into();
         handle.collab_session_id = supabase_session_id.unwrap_or_default().to_string();
 
@@ -127,7 +127,7 @@ impl RuntimeManager {
         supabase_session_id: Option<&str>,
         prompt: &str,
     ) -> crate::error::Result<String> {
-        let mut handle = AgentHandle::new(
+        let mut handle = RuntimeHandle::new(
             agent_id.to_string(),
             agent_type,
             worktree.into(),
@@ -191,7 +191,7 @@ impl RuntimeManager {
         Ok(new_acp_sid)
     }
 
-    pub async fn stop_agent(&mut self, agent_id: &str) -> Option<AgentHandle> {
+    pub async fn stop_agent(&mut self, agent_id: &str) -> Option<RuntimeHandle> {
         if let Some(mut handle) = self.agents.remove(agent_id) {
             handle.status = amux::AgentStatus::Stopped;
             handle.shutdown().await;
@@ -269,11 +269,11 @@ impl RuntimeManager {
         handle.resolve_permission(request_id, granted).await
     }
 
-    pub fn get_handle(&self, agent_id: &str) -> Option<&AgentHandle> {
+    pub fn get_handle(&self, agent_id: &str) -> Option<&RuntimeHandle> {
         self.agents.get(agent_id)
     }
 
-    pub fn get_handle_mut(&mut self, agent_id: &str) -> Option<&mut AgentHandle> {
+    pub fn get_handle_mut(&mut self, agent_id: &str) -> Option<&mut RuntimeHandle> {
         self.agents.get_mut(agent_id)
     }
 
