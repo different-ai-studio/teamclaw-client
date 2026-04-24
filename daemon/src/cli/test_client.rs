@@ -52,15 +52,12 @@ impl TestClient {
     async fn subscribe_all(&self) -> Result<(), rumqttc::ClientError> {
         let device_id = &self.config.device.id;
 
-        // Subscribe to all device-level and agent-level topics
+        // Subscribe to current topics only. Legacy /status, /peers, /members,
+        // /collab, and agent/+/... wildcards were retired in Phase 3.
         self.client.subscribe(self.topics.device_state(), QoS::AtLeastOnce).await?;
-        // Legacy /peers subscription removed (Phase 3 Task 3); iOS uses
-        // FetchPeers RPC + peers.changed notify. Legacy /collab subscription
-        // removed in Phase 3; Task 6 will retire
-        // the now-dead publish helpers below. Wildcards stay for now.
+        self.client.subscribe(self.topics.runtime_state_wildcard(), QoS::AtLeastOnce).await?;
         let team_id = self.config.team_id.as_deref().unwrap_or("teamclaw");
-        self.client.subscribe(&format!("amux/{}/device/{}/agent/+/state", team_id, device_id), QoS::AtLeastOnce).await?;
-        self.client.subscribe(&format!("amux/{}/device/{}/agent/+/events", team_id, device_id), QoS::AtLeastOnce).await?;
+        self.client.subscribe(&format!("amux/{}/device/{}/runtime/+/events", team_id, device_id), QoS::AtLeastOnce).await?;
 
         info!("subscribed to all amux/{}/... topics", device_id);
         Ok(())
@@ -80,38 +77,11 @@ pub async fn run_watch(config: DaemonConfig) -> anyhow::Result<()> {
                 let payload = &publish.payload;
                 let retained = if publish.retain { " [retained]" } else { "" };
 
-                // Try to decode based on topic
-                if topic.ends_with("/status") {
-                    match amux::DeviceState::decode(payload.as_ref()) {
-                        Ok(s) => println!("📌 {} → DeviceState {{ online: {}, name: \"{}\" }}{}",
-                            topic, s.online, s.device_name, retained),
-                        Err(_) => println!("❓ {} → {} bytes (decode failed){}", topic, payload.len(), retained),
-                    }
-                } else if topic.ends_with("/peers") {
-                    match amux::PeerList::decode(payload.as_ref()) {
-                        Ok(list) => {
-                            println!("👥 {} → PeerList ({} peers){}", topic, list.peers.len(), retained);
-                            for p in &list.peers {
-                                println!("    {} ({}) role={:?}",
-                                    p.display_name, p.device_type,
-                                    amux::MemberRole::try_from(p.role).unwrap_or(amux::MemberRole::Member));
-                            }
-                        }
-                        Err(_) => println!("❓ {} → {} bytes{}", topic, payload.len(), retained),
-                    }
-                } else if topic.ends_with("/members") {
-                    match amux::MemberList::decode(payload.as_ref()) {
-                        Ok(list) => {
-                            println!("🏷  {} → MemberList ({} members){}", topic, list.members.len(), retained);
-                            for m in &list.members {
-                                println!("    {} ({}) role={:?}",
-                                    m.display_name, m.member_id,
-                                    amux::MemberRole::try_from(m.role).unwrap_or(amux::MemberRole::Member));
-                            }
-                        }
-                        Err(_) => println!("❓ {} → {} bytes{}", topic, payload.len(), retained),
-                    }
-                } else if topic.ends_with("/events") {
+                // Try to decode based on topic. Only current topics are live:
+                //   device/{id}/state          — DeviceState (retained LWT)
+                //   device/{id}/runtime/{rid}/state   — RuntimeInfo (retained)
+                //   device/{id}/runtime/{rid}/events  — Envelope stream
+                if topic.ends_with("/events") {
                     match amux::Envelope::decode(payload.as_ref()) {
                         Ok(env) => {
                             let agent_id = &env.runtime_id;
@@ -167,32 +137,17 @@ pub async fn run_watch(config: DaemonConfig) -> anyhow::Result<()> {
                         Err(e) => println!("❓ {} → {} bytes (decode: {})", topic, payload.len(), e),
                     }
                 } else if topic.ends_with("/state") {
-                    match amux::RuntimeInfo::decode(payload.as_ref()) {
-                        Ok(info) => {
-                            println!("📊 {} → RuntimeInfo {{ id={}, status={:?}, worktree=\"{}\" }}{}",
-                                topic, info.runtime_id,
-                                amux::AgentStatus::try_from(info.status).unwrap_or(amux::AgentStatus::Unknown),
-                                info.worktree, retained);
-                        }
-                        Err(_) => println!("❓ {} → {} bytes{}", topic, payload.len(), retained),
-                    }
-                } else if topic.ends_with("/collab") {
-                    // Could be DeviceCollabEvent or DeviceCommandEnvelope — try event first
-                    if let Ok(event) = amux::DeviceCollabEvent::decode(payload.as_ref()) {
-                        match &event.event {
-                            Some(amux::device_collab_event::Event::PeerJoined(pj)) => {
-                                println!("👋 PeerJoined: {:?}", pj.peer.as_ref().map(|p| &p.display_name));
-                            }
-                            Some(amux::device_collab_event::Event::PeerLeft(pl)) => {
-                                println!("👋 PeerLeft: {}", pl.peer_id);
-                            }
-                            Some(amux::device_collab_event::Event::InviteCreated(ic)) => {
-                                println!("🎫 InviteCreated: token={} deeplink={}", &ic.invite_token[..8], ic.deeplink);
-                            }
-                            _ => println!("📨 DeviceCollabEvent (other)"),
-                        }
+                    // Either device/{id}/state (DeviceState) or runtime/{rid}/state (RuntimeInfo).
+                    if let Ok(info) = amux::RuntimeInfo::decode(payload.as_ref()) {
+                        println!("📊 {} → RuntimeInfo {{ id={}, status={:?}, worktree=\"{}\" }}{}",
+                            topic, info.runtime_id,
+                            amux::AgentStatus::try_from(info.status).unwrap_or(amux::AgentStatus::Unknown),
+                            info.worktree, retained);
+                    } else if let Ok(s) = amux::DeviceState::decode(payload.as_ref()) {
+                        println!("📌 {} → DeviceState {{ online: {}, name: \"{}\" }}{}",
+                            topic, s.online, s.device_name, retained);
                     } else {
-                        println!("📨 {} → {} bytes{}", topic, payload.len(), retained);
+                        println!("❓ {} → {} bytes (decode failed){}", topic, payload.len(), retained);
                     }
                 } else {
                     println!("❓ {} → {} bytes{}", topic, payload.len(), retained);
@@ -263,59 +218,17 @@ pub async fn run_start_agent(config: DaemonConfig, worktree: &str, prompt: &str)
     Ok(())
 }
 
-pub async fn run_announce(config: DaemonConfig, token: &str) -> anyhow::Result<()> {
-    let mut tc = TestClient::new(config)?;
-
-    let connect_task = tokio::spawn({
-        let mut el = tc.eventloop;
-        async move {
-            for _ in 0..5 {
-                match tokio::time::timeout(std::time::Duration::from_secs(2), el.poll()).await {
-                    Ok(Ok(_)) => {}
-                    Ok(Err(e)) => warn!("mqtt: {}", e),
-                    Err(_) => break,
-                }
-            }
-        }
-    });
-
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    let envelope = amux::DeviceCommandEnvelope {
-        device_id: tc.config.device.id.clone(),
-        peer_id: tc.peer_id.clone(),
-        command_id: Uuid::new_v4().to_string(),
-        timestamp: chrono::Utc::now().timestamp(),
-        sender_actor_id: String::new(),
-        command: Some(amux::DeviceCollabCommand {
-            command: Some(amux::device_collab_command::Command::PeerAnnounce(amux::PeerAnnounce {
-                peer: Some(amux::PeerInfo {
-                    peer_id: tc.peer_id.clone(),
-                    member_id: String::new(),
-                    display_name: "Test iOS Client".into(),
-                    device_type: "ios".into(),
-                    role: 0,
-                    connected_at: chrono::Utc::now().timestamp(),
-                }),
-                auth_token: token.into(),
-            })),
-        }),
-    };
-
-    let payload = envelope.encode_to_vec();
-    let team_id = tc.config.team_id.as_deref().unwrap_or("teamclaw");
-    let collab_topic = format!("amux/{}/device/{}/collab", team_id, tc.config.device.id);
-    tc.client.publish(&collab_topic, QoS::AtLeastOnce, false, payload).await?;
-    println!("📤 Sent PeerAnnounce (peer_id={}, token={}...) — NOTE: daemon no longer subscribes to /collab", tc.peer_id, &token[..8.min(token.len())]);
-
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-    let _ = connect_task.await;
-
+pub async fn run_announce(_config: DaemonConfig, _token: &str) -> anyhow::Result<()> {
+    // The legacy /collab PeerAnnounce flow was retired in Phase 3 — the daemon
+    // no longer subscribes to `device/{id}/collab`. Use the RPC equivalent
+    // (`AuthenticatePeer` on `device/{id}/rpc/req`) from iOS instead.
+    println!("⚠️  `test-client announce` is deprecated: daemon no longer subscribes to device/{{id}}/collab.");
+    println!("    Use the RPC-based authentication flow from the iOS client.");
     Ok(())
 }
 
-/// Full E2E: single connection that announces, starts agent, and watches all events.
-pub async fn run_e2e(config: DaemonConfig, token: &str, worktree: &str, prompt: &str) -> anyhow::Result<()> {
+/// Full E2E: single connection that subscribes to retained state, starts an agent, and watches events.
+pub async fn run_e2e(config: DaemonConfig, _token: &str, worktree: &str, prompt: &str) -> anyhow::Result<()> {
     let mut tc = TestClient::new(config)?;
     tc.subscribe_all().await?;
 
@@ -323,6 +236,8 @@ pub async fn run_e2e(config: DaemonConfig, token: &str, worktree: &str, prompt: 
     let device_id = tc.config.device.id.clone();
 
     println!("🚀 E2E test (peer_id={}, device={})\n", peer_id, device_id);
+    println!("⚠️  Legacy PeerAnnounce step skipped: daemon no longer accepts /collab.");
+    println!("    This run assumes broker-level JWT auth is already established.\n");
 
     // Phase 1: connect + receive retained
     println!("--- Phase 1: Connect & receive retained state ---");
@@ -336,45 +251,8 @@ pub async fn run_e2e(config: DaemonConfig, token: &str, worktree: &str, prompt: 
         }
     }
 
-    // Phase 2: PeerAnnounce
-    println!("\n--- Phase 2: Authenticate ---");
-    let announce = amux::DeviceCommandEnvelope {
-        device_id: device_id.clone(),
-        peer_id: peer_id.clone(),
-        command_id: Uuid::new_v4().to_string(),
-        timestamp: chrono::Utc::now().timestamp(),
-        sender_actor_id: String::new(),
-        command: Some(amux::DeviceCollabCommand {
-            command: Some(amux::device_collab_command::Command::PeerAnnounce(amux::PeerAnnounce {
-                peer: Some(amux::PeerInfo {
-                    peer_id: peer_id.clone(),
-                    member_id: String::new(),
-                    display_name: "Test iOS Client".into(),
-                    device_type: "ios".into(),
-                    role: 0,
-                    connected_at: chrono::Utc::now().timestamp(),
-                }),
-                auth_token: token.into(),
-            })),
-        }),
-    };
-    let team_id = tc.config.team_id.as_deref().unwrap_or("teamclaw");
-    let collab_topic = format!("amux/{}/device/{}/collab", team_id, device_id);
-    tc.client.publish(&collab_topic, QoS::AtLeastOnce, false, announce.encode_to_vec()).await?;
-    println!("📤 PeerAnnounce sent (NOTE: daemon no longer subscribes to /collab)");
-
-    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(5);
-    loop {
-        match tokio::time::timeout_at(deadline, tc.eventloop.poll()).await {
-            Ok(Ok(Event::Incoming(Packet::Publish(p)))) => print_publish(&p),
-            Ok(Ok(_)) => {}
-            Ok(Err(e)) => { warn!("mqtt: {}", e); break; }
-            Err(_) => break,
-        }
-    }
-
-    // Phase 3: StartAgent
-    println!("\n--- Phase 3: Start Agent ---");
+    // Phase 2: StartAgent
+    println!("\n--- Phase 2: Start Agent ---");
     let start_cmd = amux::CommandEnvelope {
         runtime_id: String::new(),
         device_id: device_id.clone(),
@@ -397,8 +275,8 @@ pub async fn run_e2e(config: DaemonConfig, token: &str, worktree: &str, prompt: 
     tc.client.publish(&topic, QoS::AtLeastOnce, false, start_cmd.encode_to_vec()).await?;
     println!("📤 StartAgent sent (prompt=\"{}\")", prompt);
 
-    // Phase 4: Watch events
-    println!("\n--- Phase 4: Watching agent events ---");
+    // Phase 3: Watch events
+    println!("\n--- Phase 3: Watching agent events ---");
     let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(60);
     let mut event_count = 0u32;
     loop {
@@ -448,20 +326,7 @@ fn print_publish(publish: &rumqttc::Publish) {
     let payload = &publish.payload;
     let retained = if publish.retain { " [retained]" } else { "" };
 
-    if topic.ends_with("/status") {
-        if let Ok(s) = amux::DeviceState::decode(payload.as_ref()) {
-            println!("📌 DeviceState {{ online: {}, name: \"{}\" }}{}", s.online, s.device_name, retained);
-        }
-    } else if topic.ends_with("/peers") {
-        if let Ok(list) = amux::PeerList::decode(payload.as_ref()) {
-            println!("👥 PeerList ({} peers){}", list.peers.len(), retained);
-            for p in &list.peers { println!("    {} ({})", p.display_name, p.device_type); }
-        }
-    } else if topic.ends_with("/members") {
-        if let Ok(list) = amux::MemberList::decode(payload.as_ref()) {
-            println!("🏷  MemberList ({} members){}", list.members.len(), retained);
-        }
-    } else if topic.ends_with("/events") {
+    if topic.ends_with("/events") {
         if let Ok(env) = amux::Envelope::decode(payload.as_ref()) {
             let id = &env.runtime_id;
             let seq = env.sequence;
@@ -492,8 +357,8 @@ fn print_publish(publish: &rumqttc::Publish) {
         if let Ok(info) = amux::RuntimeInfo::decode(payload.as_ref()) {
             println!("📊 RuntimeState id={} status={:?}{}", info.runtime_id,
                 amux::AgentStatus::try_from(info.status).unwrap_or(amux::AgentStatus::Unknown), retained);
+        } else if let Ok(s) = amux::DeviceState::decode(payload.as_ref()) {
+            println!("📌 DeviceState {{ online: {}, name: \"{}\" }}{}", s.online, s.device_name, retained);
         }
-    } else if topic.ends_with("/collab") {
-        println!("📨 collab → {} bytes", payload.len());
     }
 }
