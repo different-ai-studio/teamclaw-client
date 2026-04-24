@@ -67,7 +67,8 @@ impl DaemonServer {
 
         let actor_id = supabase.config().actor_id.clone();
 
-        // Fetch first token — blocks here until Supabase is reachable.
+        // Fetch first token — fails fast if Supabase is unreachable at startup.
+        // Task 5's outer loop handles retries on every subsequent reconnect.
         let token = supabase.access_token().await
             .map_err(|e| crate::error::AmuxError::Config(
                 format!("initial token fetch failed: {e}")
@@ -726,10 +727,10 @@ impl DaemonServer {
         }
     }
 
-    /// Derive the caller's MemberRole, preferring a Supabase
-    /// `agent_member_access` lookup keyed on (our own agent actor id,
-    /// envelope's sender_actor_id) and falling back to the MQTT-era
-    /// peer/token role when the Supabase side isn't available.
+    /// Derive the caller's MemberRole via a Supabase `agent_member_access`
+    /// lookup keyed on (our own agent actor id, envelope's sender_actor_id).
+    /// Falls back to the MQTT-era peer/token role only on a transient
+    /// Supabase RPC error — Supabase itself is now a startup requirement.
     async fn resolve_role(&mut self, sender_actor_id: &str, peer_id: &str) -> amux::MemberRole {
         if !sender_actor_id.is_empty() {
             let sb = &self.supabase;
