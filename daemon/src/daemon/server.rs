@@ -592,7 +592,7 @@ impl DaemonServer {
             Some(Method::RemoveWorkspace(r)) => self.handle_remove_workspace(&request, r).await,
             Some(Method::RemoveMember(r)) => self.handle_remove_member(&request, r).await,
             Some(Method::RuntimeStop(s)) => self.handle_stop_runtime(&request, s).await,
-            Some(Method::RuntimeStart(_)) => not_yet_implemented(&request, "runtime_start"),
+            Some(Method::RuntimeStart(s)) => self.handle_start_runtime(&request, s).await,
             None => RpcResponse {
                 request_id: request.request_id.clone(),
                 success: false,
@@ -1725,6 +1725,62 @@ impl DaemonServer {
                 accepted: true,
                 rejected_reason: String::new(),
             })),
+        }
+    }
+
+    async fn handle_start_runtime(
+        &mut self,
+        request: &crate::proto::teamclaw::RpcRequest,
+        start: &crate::proto::teamclaw::RuntimeStartRequest,
+    ) -> crate::proto::teamclaw::RpcResponse {
+        use crate::proto::teamclaw::{rpc_response, RpcResponse, RuntimeStartResult};
+
+        let at = amux::AgentType::try_from(start.agent_type)
+            .unwrap_or(amux::AgentType::ClaudeCode);
+
+        // Note: start.model_id is accepted for wire compatibility but not yet
+        // threaded through apply_start_runtime — the legacy AcpStartAgent path
+        // doesn't carry it either. Future work (Phase 1c+).
+
+        let outcome = self
+            .apply_start_runtime(
+                at,
+                &start.workspace_id,
+                &start.worktree,
+                &start.session_id,
+                &start.initial_prompt,
+            )
+            .await;
+
+        match outcome {
+            Ok(res) => RpcResponse {
+                request_id: request.request_id.clone(),
+                success: true,
+                error: String::new(),
+                requester_client_id: request.requester_client_id.clone(),
+                requester_actor_id: request.requester_actor_id.clone(),
+                requester_device_id: request.requester_device_id.clone(),
+                result: Some(rpc_response::Result::RuntimeStartResult(RuntimeStartResult {
+                    accepted: true,
+                    runtime_id: res.runtime_id,
+                    session_id: res.session_id,
+                    rejected_reason: String::new(),
+                })),
+            },
+            Err(err) => RpcResponse {
+                request_id: request.request_id.clone(),
+                success: false,
+                error: err.error_message.clone(),
+                requester_client_id: request.requester_client_id.clone(),
+                requester_actor_id: request.requester_actor_id.clone(),
+                requester_device_id: request.requester_device_id.clone(),
+                result: Some(rpc_response::Result::RuntimeStartResult(RuntimeStartResult {
+                    accepted: false,
+                    runtime_id: String::new(),
+                    session_id: String::new(),
+                    rejected_reason: err.error_message,
+                })),
+            },
         }
     }
 }
