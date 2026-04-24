@@ -1,9 +1,7 @@
 use chrono::Utc;
 use prost::Message;
 use rumqttc::{AsyncClient, QoS};
-use uuid::Uuid;
 
-use crate::proto::teamclaw::NotifyEnvelope;
 use crate::mqtt::Topics;
 
 pub struct NotifyPublisher {
@@ -22,13 +20,14 @@ impl NotifyPublisher {
         session_id: &str,
         reason: &str,
     ) -> crate::error::Result<()> {
-        let payload = NotifyEnvelope {
-            event_id: Uuid::new_v4().to_string(),
+        // Preserved in signature for logging / future telemetry; Phase 2b wire
+        // shape drops the field because Notify is payload-minimal.
+        let _ = reason;
+
+        let payload = crate::proto::teamclaw::Notify {
             event_type: "membership.refresh".to_string(),
-            target_device_id: target_device_id.to_string(),
-            session_id: session_id.to_string(),
+            refresh_hint: session_id.to_string(),
             sent_at: Utc::now().timestamp(),
-            reason: reason.to_string(),
         }
         .encode_to_vec();
 

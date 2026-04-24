@@ -718,11 +718,30 @@ impl DaemonServer {
                 }
             }
             subscriber::IncomingMessage::TeamclawNotify { device_id: _, payload } => {
-                if let Ok(envelope) = crate::proto::teamclaw::NotifyEnvelope::decode(payload.as_slice()) {
-                    if envelope.event_type == "membership.refresh" && !envelope.session_id.is_empty() {
+                // Phase 2b: device/{id}/notify carries two wire shapes during the
+                // compat window — new Teamclaw_Notify (event_type + refresh_hint)
+                // and legacy NotifyEnvelope (pre-Phase-2b daemons still emit it).
+                // Field numbers are wire-incompatible: try Notify first (smaller
+                // schema, safer false-positive on short payloads), fall back to
+                // NotifyEnvelope for old-format messages.
+                let parsed: Option<(String, String)> = if let Ok(n) =
+                    crate::proto::teamclaw::Notify::decode(payload.as_slice())
+                {
+                    Some((n.event_type, n.refresh_hint))
+                } else if let Ok(env) =
+                    crate::proto::teamclaw::NotifyEnvelope::decode(payload.as_slice())
+                {
+                    Some((env.event_type, env.session_id))
+                } else {
+                    warn!("failed to decode device/notify payload as Notify or NotifyEnvelope");
+                    None
+                };
+
+                if let Some((event_type, refresh_hint)) = parsed {
+                    if event_type == "membership.refresh" && !refresh_hint.is_empty() {
                         if let Some(tc) = &mut self.teamclaw {
                             if let Err(err) = tc.refresh_membership_subscriptions().await {
-                                warn!(?err, session_id = %envelope.session_id, "failed to refresh membership subscriptions after notify");
+                                warn!(?err, session_id = %refresh_hint, "failed to refresh membership subscriptions after notify");
                             }
                         }
                     }
