@@ -217,7 +217,7 @@ message DeviceCollabEvent {
     InviteCreated invite_created = 6;
     PromptRejected command_rejected = 7;
     WorkspaceResult workspace_result = 8;
-    AgentStartResult agent_start_result = 9;
+    LegacyAgentStartResult agent_start_result = 9;
   }
 }
 
@@ -287,11 +287,15 @@ message WorkspaceResult {
   WorkspaceInfo workspace = 4;
 }
 
-message AgentStartResult {
+// Legacy start result delivered via DeviceCollabEvent on /collab topic.
+// Kept during Phase 0–4 for dual-path compatibility; deleted in Phase 5 along
+// with the rest of DeviceCollabEvent. The new accepted-only runtime-start
+// reply is teamclaw.RuntimeStartResult (Phase 1).
+message LegacyAgentStartResult {
   string command_id = 1;
   bool success = 2;
   string error = 3;
-  string agent_id = 4;
+  string runtime_id = 4;              // was agent_id
   string session_id = 5;
 }
 

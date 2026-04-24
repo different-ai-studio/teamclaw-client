@@ -9,7 +9,7 @@ private let newSessionLogger = Logger(subsystem: "com.amux.app", category: "NewS
 private func collabEventSummary(_ event: Amux_DeviceCollabEvent.OneOf_Event) -> String {
     switch event {
     case .agentStartResult(let result):
-        return "agentStartResult commandID=\(result.commandID) success=\(result.success) agentID=\(result.agentID)"
+        return "agentStartResult commandID=\(result.commandID) success=\(result.success) runtimeID=\(result.runtimeID)"
     case .commandRejected(let rejected):
         return "commandRejected commandID=\(rejected.commandID) reason=\(rejected.reason)"
     default:
@@ -562,14 +562,14 @@ public struct NewSessionSheet: View {
                         isSending = false
                         if result.success {
                             persistPlaceholderAgent(
-                                agentID: result.agentID,
+                                agentID: result.runtimeID,
                                 title: String(userText.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines),
                                 prompt: text
                             )
                             newSessionLogger.info(
-                                "new-session success destination=\(result.agentID, privacy: .public) resultSessionID=\(result.sessionID, privacy: .public) resultAgentID=\(result.agentID, privacy: .public)"
+                                "new-session success destination=\(result.runtimeID, privacy: .public) resultSessionID=\(result.sessionID, privacy: .public) resultRuntimeID=\(result.runtimeID, privacy: .public)"
                             )
-                            onSessionCreated?(result.agentID)
+                            onSessionCreated?(result.runtimeID)
                             dismiss()
                         } else {
                             errorMessage = result.error.isEmpty
@@ -922,7 +922,7 @@ public struct NewSessionSheet: View {
         switch event {
         case .agentStartResult(let result):
             if result.success {
-                return result.agentID
+                return result.runtimeID
             }
             let reason = result.error.isEmpty
                 ? "Agent failed to start. Check daemon logs."

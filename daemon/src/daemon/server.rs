@@ -1219,11 +1219,11 @@ fn agent_start_result_event(
         device_id: device_id.to_string(),
         timestamp: chrono::Utc::now().timestamp(),
         event: Some(amux::device_collab_event::Event::AgentStartResult(
-            amux::AgentStartResult {
+            amux::LegacyAgentStartResult {
                 command_id,
                 success,
                 error,
-                agent_id,
+                runtime_id: agent_id,
                 session_id,
             },
         )),
@@ -1312,7 +1312,7 @@ mod tests {
             Some(amux::device_collab_event::Event::AgentStartResult(result)) => {
                 assert_eq!(result.command_id, "cmd-456");
                 assert!(result.success);
-                assert_eq!(result.agent_id, "agent-1");
+                assert_eq!(result.runtime_id, "agent-1");
                 assert_eq!(result.session_id, "sess-1");
                 assert!(result.error.is_empty());
             }

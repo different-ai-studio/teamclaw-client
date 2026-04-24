@@ -942,10 +942,10 @@ public struct Amux_DeviceCollabEvent: Sendable {
     set {event = .workspaceResult(newValue)}
   }
 
-  public var agentStartResult: Amux_AgentStartResult {
+  public var agentStartResult: Amux_LegacyAgentStartResult {
     get {
       if case .agentStartResult(let v)? = event {return v}
-      return Amux_AgentStartResult()
+      return Amux_LegacyAgentStartResult()
     }
     set {event = .agentStartResult(newValue)}
   }
@@ -961,7 +961,7 @@ public struct Amux_DeviceCollabEvent: Sendable {
     case inviteCreated(Amux_InviteCreated)
     case commandRejected(Amux_PromptRejected)
     case workspaceResult(Amux_WorkspaceResult)
-    case agentStartResult(Amux_AgentStartResult)
+    case agentStartResult(Amux_LegacyAgentStartResult)
 
   }
 
@@ -1209,7 +1209,11 @@ public struct Amux_WorkspaceResult: Sendable {
   fileprivate var _workspace: Amux_WorkspaceInfo? = nil
 }
 
-public struct Amux_AgentStartResult: Sendable {
+/// Legacy start result delivered via DeviceCollabEvent on /collab topic.
+/// Kept during Phase 0–4 for dual-path compatibility; deleted in Phase 5 along
+/// with the rest of DeviceCollabEvent. The new accepted-only runtime-start
+/// reply is teamclaw.RuntimeStartResult (Phase 1).
+public struct Amux_LegacyAgentStartResult: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1220,7 +1224,8 @@ public struct Amux_AgentStartResult: Sendable {
 
   public var error: String = String()
 
-  public var agentID: String = String()
+  /// was agent_id
+  public var runtimeID: String = String()
 
   public var sessionID: String = String()
 
@@ -3094,7 +3099,7 @@ extension Amux_DeviceCollabEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageI
         }
       }()
       case 9: try {
-        var v: Amux_AgentStartResult?
+        var v: Amux_LegacyAgentStartResult?
         var hadOneofValue = false
         if let current = self.event {
           hadOneofValue = true
@@ -3698,9 +3703,9 @@ extension Amux_WorkspaceResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
   }
 }
 
-extension Amux_AgentStartResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".AgentStartResult"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}command_id\0\u{1}success\0\u{1}error\0\u{3}agent_id\0\u{3}session_id\0")
+extension Amux_LegacyAgentStartResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".LegacyAgentStartResult"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}command_id\0\u{1}success\0\u{1}error\0\u{3}runtime_id\0\u{3}session_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3711,7 +3716,7 @@ extension Amux_AgentStartResult: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       case 1: try { try decoder.decodeSingularStringField(value: &self.commandID) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.success) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.error) }()
-      case 4: try { try decoder.decodeSingularStringField(value: &self.agentID) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.runtimeID) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
       default: break
       }
@@ -3728,8 +3733,8 @@ extension Amux_AgentStartResult: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     if !self.error.isEmpty {
       try visitor.visitSingularStringField(value: self.error, fieldNumber: 3)
     }
-    if !self.agentID.isEmpty {
-      try visitor.visitSingularStringField(value: self.agentID, fieldNumber: 4)
+    if !self.runtimeID.isEmpty {
+      try visitor.visitSingularStringField(value: self.runtimeID, fieldNumber: 4)
     }
     if !self.sessionID.isEmpty {
       try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 5)
@@ -3737,11 +3742,11 @@ extension Amux_AgentStartResult: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Amux_AgentStartResult, rhs: Amux_AgentStartResult) -> Bool {
+  public static func ==(lhs: Amux_LegacyAgentStartResult, rhs: Amux_LegacyAgentStartResult) -> Bool {
     if lhs.commandID != rhs.commandID {return false}
     if lhs.success != rhs.success {return false}
     if lhs.error != rhs.error {return false}
-    if lhs.agentID != rhs.agentID {return false}
+    if lhs.runtimeID != rhs.runtimeID {return false}
     if lhs.sessionID != rhs.sessionID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
