@@ -578,6 +578,14 @@ public struct Teamclaw_RpcRequest: Sendable {
     set {method = .fetchSessionMessages(newValue)}
   }
 
+  public var runtimeStart: Teamclaw_RuntimeStartRequest {
+    get {
+      if case .runtimeStart(let v)? = method {return v}
+      return Teamclaw_RuntimeStartRequest()
+    }
+    set {method = .runtimeStart(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Method: Equatable, Sendable {
@@ -591,6 +599,7 @@ public struct Teamclaw_RpcRequest: Sendable {
     case submitTask(Teamclaw_SubmitTaskRequest)
     case updateTask(Teamclaw_UpdateTaskRequest)
     case fetchSessionMessages(Teamclaw_FetchSessionMessagesRequest)
+    case runtimeStart(Teamclaw_RuntimeStartRequest)
 
   }
 
@@ -679,6 +688,14 @@ public struct Teamclaw_RpcResponse: @unchecked Sendable {
     set {_uniqueStorage()._result = .sessionMessagePage(newValue)}
   }
 
+  public var runtimeStartResult: Teamclaw_RuntimeStartResult {
+    get {
+      if case .runtimeStartResult(let v)? = _storage._result {return v}
+      return Teamclaw_RuntimeStartResult()
+    }
+    set {_uniqueStorage()._result = .runtimeStartResult(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Result: Equatable, Sendable {
@@ -687,6 +704,7 @@ public struct Teamclaw_RpcResponse: @unchecked Sendable {
     case claim(Teamclaw_Claim)
     case submission(Teamclaw_Submission)
     case sessionMessagePage(Teamclaw_SessionMessagePage)
+    case runtimeStartResult(Teamclaw_RuntimeStartResult)
 
   }
 
@@ -918,6 +936,60 @@ public struct Teamclaw_UpdateTaskRequest: Sendable {
   public init() {}
 
   fileprivate var _archived: Bool? = nil
+}
+
+/// Request the daemon spawn a new Claude Code subprocess.
+/// Accepted-only reply — actual lifecycle flows on device/{id}/runtime/{id}/state.
+/// See spec "Runtime lifecycle" section for the state machine.
+public struct Teamclaw_RuntimeStartRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// required
+  public var agentType: Amux_AgentType = .unknown
+
+  /// optional — first user message at spawn
+  public var initialPrompt: String = String()
+
+  /// optional — empty = daemon default
+  public var modelID: String = String()
+
+  /// All three below are OPTIONAL; empty = bare-agent spawn.
+  public var workspaceID: String = String()
+
+  /// empty = daemon picks default working directory
+  public var worktree: String = String()
+
+  /// empty = no Supabase sessions.id linkage
+  public var sessionID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// Accepted-only reply to RuntimeStartRequest.
+/// DOES NOT include RuntimeInfo. Readiness flows on the retained state topic.
+public struct Teamclaw_RuntimeStartResult: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var accepted: Bool = false
+
+  /// allocated by daemon; present iff accepted
+  public var runtimeID: String = String()
+
+  /// echoed or newly-created; empty for bare-agent spawn
+  public var sessionID: String = String()
+
+  /// set iff !accepted (validation / auth / resource error)
+  public var rejectedReason: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
 }
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
@@ -1612,7 +1684,7 @@ extension Teamclaw_NotifyEnvelope: SwiftProtobuf.Message, SwiftProtobuf._Message
 
 extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".RpcRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{3}sender_device_id\0\u{3}requester_client_id\0\u{3}requester_actor_id\0\u{3}requester_device_id\0\u{4}\u{5}create_session\0\u{3}join_session\0\u{3}fetch_session\0\u{3}add_participant\0\u{3}remove_participant\0\u{3}create_task\0\u{3}claim_task\0\u{3}submit_task\0\u{3}update_task\0\u{4}\u{2}fetch_session_messages\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{3}sender_device_id\0\u{3}requester_client_id\0\u{3}requester_actor_id\0\u{3}requester_device_id\0\u{4}\u{5}create_session\0\u{3}join_session\0\u{3}fetch_session\0\u{3}add_participant\0\u{3}remove_participant\0\u{3}create_task\0\u{3}claim_task\0\u{3}submit_task\0\u{3}update_task\0\u{4}\u{2}fetch_session_messages\0\u{4}\u{a}runtime_start\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1755,6 +1827,19 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
           self.method = .fetchSessionMessages(v)
         }
       }()
+      case 30: try {
+        var v: Teamclaw_RuntimeStartRequest?
+        var hadOneofValue = false
+        if let current = self.method {
+          hadOneofValue = true
+          if case .runtimeStart(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.method = .runtimeStart(v)
+        }
+      }()
       default: break
       }
     }
@@ -1821,6 +1906,10 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
       guard case .fetchSessionMessages(let v)? = self.method else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 20)
     }()
+    case .runtimeStart?: try {
+      guard case .runtimeStart(let v)? = self.method else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 30)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1840,7 +1929,7 @@ extension Teamclaw_RpcRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
 extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".RpcResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}success\0\u{1}error\0\u{3}requester_client_id\0\u{3}requester_actor_id\0\u{3}requester_device_id\0\u{4}\u{4}session_info\0\u{1}task\0\u{1}claim\0\u{1}submission\0\u{3}session_message_page\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}success\0\u{1}error\0\u{3}requester_client_id\0\u{3}requester_actor_id\0\u{3}requester_device_id\0\u{4}\u{4}session_info\0\u{1}task\0\u{1}claim\0\u{1}submission\0\u{3}session_message_page\0\u{4}\u{6}runtime_start_result\0")
 
   fileprivate class _StorageClass {
     var _requestID: String = String()
@@ -1956,6 +2045,19 @@ extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
             _storage._result = .sessionMessagePage(v)
           }
         }()
+        case 20: try {
+          var v: Teamclaw_RuntimeStartResult?
+          var hadOneofValue = false
+          if let current = _storage._result {
+            hadOneofValue = true
+            if case .runtimeStartResult(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._result = .runtimeStartResult(v)
+          }
+        }()
         default: break
         }
       }
@@ -2006,6 +2108,10 @@ extension Teamclaw_RpcResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case .sessionMessagePage?: try {
         guard case .sessionMessagePage(let v)? = _storage._result else { preconditionFailure() }
         try visitor.visitSingularMessageField(value: v, fieldNumber: 14)
+      }()
+      case .runtimeStartResult?: try {
+        guard case .runtimeStartResult(let v)? = _storage._result else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 20)
       }()
       case nil: break
       }
@@ -2516,6 +2622,106 @@ extension Teamclaw_UpdateTaskRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
     if lhs.title != rhs.title {return false}
     if lhs.description_p != rhs.description_p {return false}
     if lhs._archived != rhs._archived {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_RuntimeStartRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RuntimeStartRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agent_type\0\u{3}initial_prompt\0\u{3}model_id\0\u{3}workspace_id\0\u{1}worktree\0\u{3}session_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.agentType) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.initialPrompt) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.modelID) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.workspaceID) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.worktree) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.agentType != .unknown {
+      try visitor.visitSingularEnumField(value: self.agentType, fieldNumber: 1)
+    }
+    if !self.initialPrompt.isEmpty {
+      try visitor.visitSingularStringField(value: self.initialPrompt, fieldNumber: 2)
+    }
+    if !self.modelID.isEmpty {
+      try visitor.visitSingularStringField(value: self.modelID, fieldNumber: 3)
+    }
+    if !self.workspaceID.isEmpty {
+      try visitor.visitSingularStringField(value: self.workspaceID, fieldNumber: 4)
+    }
+    if !self.worktree.isEmpty {
+      try visitor.visitSingularStringField(value: self.worktree, fieldNumber: 5)
+    }
+    if !self.sessionID.isEmpty {
+      try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 6)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_RuntimeStartRequest, rhs: Teamclaw_RuntimeStartRequest) -> Bool {
+    if lhs.agentType != rhs.agentType {return false}
+    if lhs.initialPrompt != rhs.initialPrompt {return false}
+    if lhs.modelID != rhs.modelID {return false}
+    if lhs.workspaceID != rhs.workspaceID {return false}
+    if lhs.worktree != rhs.worktree {return false}
+    if lhs.sessionID != rhs.sessionID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Teamclaw_RuntimeStartResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RuntimeStartResult"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}accepted\0\u{3}runtime_id\0\u{3}session_id\0\u{3}rejected_reason\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.accepted) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.runtimeID) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.rejectedReason) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.accepted != false {
+      try visitor.visitSingularBoolField(value: self.accepted, fieldNumber: 1)
+    }
+    if !self.runtimeID.isEmpty {
+      try visitor.visitSingularStringField(value: self.runtimeID, fieldNumber: 2)
+    }
+    if !self.sessionID.isEmpty {
+      try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 3)
+    }
+    if !self.rejectedReason.isEmpty {
+      try visitor.visitSingularStringField(value: self.rejectedReason, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Teamclaw_RuntimeStartResult, rhs: Teamclaw_RuntimeStartResult) -> Bool {
+    if lhs.accepted != rhs.accepted {return false}
+    if lhs.runtimeID != rhs.runtimeID {return false}
+    if lhs.sessionID != rhs.sessionID {return false}
+    if lhs.rejectedReason != rhs.rejectedReason {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -1,6 +1,8 @@
 syntax = "proto3";
 package teamclaw;
 
+import "amux.proto";
+
 // --- Enums ---
 
 enum SessionType {
@@ -157,6 +159,7 @@ message RpcRequest {
     SubmitTaskRequest submit_task = 17;
     UpdateTaskRequest update_task = 18;
     FetchSessionMessagesRequest fetch_session_messages = 20;
+    RuntimeStartRequest runtime_start = 30;
   }
 }
 
@@ -175,6 +178,7 @@ message RpcResponse {
     Claim claim = 12;
     Submission submission = 13;
     SessionMessagePage session_message_page = 14;
+    RuntimeStartResult runtime_start_result = 20;
   }
 }
 
@@ -257,4 +261,31 @@ message UpdateTaskRequest {
   string title = 4;
   string description = 5;
   optional bool archived = 6;
+}
+
+// ═══════════════════════════════════════════
+//  Runtime lifecycle RPCs
+// ═══════════════════════════════════════════
+
+// Request the daemon spawn a new Claude Code subprocess.
+// Accepted-only reply — actual lifecycle flows on device/{id}/runtime/{id}/state.
+// See spec "Runtime lifecycle" section for the state machine.
+message RuntimeStartRequest {
+  amux.AgentType agent_type = 1;        // required
+  string initial_prompt = 2;            // optional — first user message at spawn
+  string model_id = 3;                  // optional — empty = daemon default
+
+  // All three below are OPTIONAL; empty = bare-agent spawn.
+  string workspace_id = 4;              // empty = no workspace binding
+  string worktree = 5;                  // empty = daemon picks default working directory
+  string session_id = 6;                // empty = no Supabase sessions.id linkage
+}
+
+// Accepted-only reply to RuntimeStartRequest.
+// DOES NOT include RuntimeInfo. Readiness flows on the retained state topic.
+message RuntimeStartResult {
+  bool accepted = 1;
+  string runtime_id = 2;                // allocated by daemon; present iff accepted
+  string session_id = 3;                // echoed or newly-created; empty for bare-agent spawn
+  string rejected_reason = 4;           // set iff !accepted (validation / auth / resource error)
 }

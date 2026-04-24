@@ -142,6 +142,18 @@ impl SessionManager {
                 let r = r.clone();
                 self.handle_update_task(&req, r).await
             }
+            Some(teamclaw::rpc_request::Method::RuntimeStart(_)) => {
+                // Not implemented yet — Phase 1 will add the handler.
+                RpcResponse {
+                    request_id: request_id.clone(),
+                    success: false,
+                    error: "runtime_start not yet implemented".to_string(),
+                    requester_client_id: req.requester_client_id.clone(),
+                    requester_actor_id: req.requester_actor_id.clone(),
+                    requester_device_id: req.requester_device_id.clone(),
+                    result: None,
+                }
+            }
             None => {
                 warn!("SessionManager: received RPC request with no method");
                 RpcResponse {
