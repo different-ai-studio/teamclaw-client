@@ -7,10 +7,8 @@ import AMUXCore
 public struct WorkspaceManagementView: View {
     @Environment(\.modelContext) private var modelContext
 
-    let mqtt: MQTTService
-    let deviceId: String
-    let peerId: String
     let viewModel: SessionListViewModel
+    let teamclawService: TeamclawService
 
     @State private var newPath = ""
     @State private var errorMessage: String?
@@ -18,11 +16,9 @@ public struct WorkspaceManagementView: View {
 
     private var workspaces: [Workspace] { viewModel.workspaces }
 
-    public init(mqtt: MQTTService, deviceId: String, peerId: String, viewModel: SessionListViewModel) {
-        self.mqtt = mqtt
-        self.deviceId = deviceId
-        self.peerId = peerId
+    public init(viewModel: SessionListViewModel, teamclawService: TeamclawService) {
         self.viewModel = viewModel
+        self.teamclawService = teamclawService
     }
 
     public var body: some View {
@@ -93,66 +89,26 @@ public struct WorkspaceManagementView: View {
         errorMessage = nil
 
         Task {
-            var envelope = Amux_DeviceCommandEnvelope()
-            envelope.deviceID = deviceId
-            envelope.peerID = peerId
-            envelope.commandID = UUID().uuidString
-            envelope.timestamp = Int64(Date().timeIntervalSince1970)
-            var add = Amux_AddWorkspace()
-            add.path = path
-            var cmd = Amux_DeviceCollabCommand()
-            cmd.command = .addWorkspace(add)
-            envelope.command = cmd
-
-            do {
-                let data = try ProtoMQTTCoder.encode(envelope)
-                try await mqtt.publish(topic: MQTTTopics.deviceCollab(teamID: "", deviceID: deviceId), payload: data)
-            } catch {
+            let (ok, err) = await teamclawService.addWorkspaceRpc(path: path)
+            await MainActor.run {
                 isAdding = false
-                errorMessage = "Failed to send: \(error.localizedDescription)"
-                return
-            }
-
-            let stream = mqtt.messages()
-            let collabTopic = MQTTTopics.deviceCollab(teamID: "", deviceID: deviceId)
-            let deadline = Date().addingTimeInterval(10)
-            for await msg in stream {
-                if Date() > deadline { break }
-                if msg.topic == collabTopic,
-                   let dce = try? ProtoMQTTCoder.decode(Amux_DeviceCollabEvent.self, from: msg.payload),
-                   case .workspaceResult(let result) = dce.event,
-                   result.commandID == envelope.commandID {
-                    isAdding = false
-                    if result.success {
-                        newPath = ""
-                        errorMessage = nil
-                    } else {
-                        errorMessage = result.error
-                    }
-                    return
+                if ok {
+                    newPath = ""
+                    errorMessage = nil
+                } else {
+                    errorMessage = err.isEmpty ? "Add failed" : err
                 }
             }
-
-            isAdding = false
-            errorMessage = "Timed out waiting for response"
         }
     }
 
     private func removeWorkspace(_ workspaceId: String) {
         Task {
-            var envelope = Amux_DeviceCommandEnvelope()
-            envelope.deviceID = deviceId
-            envelope.peerID = peerId
-            envelope.commandID = UUID().uuidString
-            envelope.timestamp = Int64(Date().timeIntervalSince1970)
-            var remove = Amux_RemoveWorkspace()
-            remove.workspaceID = workspaceId
-            var cmd = Amux_DeviceCollabCommand()
-            cmd.command = .removeWorkspace(remove)
-            envelope.command = cmd
-
-            if let data = try? ProtoMQTTCoder.encode(envelope) {
-                try? await mqtt.publish(topic: MQTTTopics.deviceCollab(teamID: "", deviceID: deviceId), payload: data)
+            let (ok, err) = await teamclawService.removeWorkspaceRpc(workspaceId: workspaceId)
+            if !ok {
+                await MainActor.run {
+                    errorMessage = err.isEmpty ? "Remove failed" : err
+                }
             }
         }
     }

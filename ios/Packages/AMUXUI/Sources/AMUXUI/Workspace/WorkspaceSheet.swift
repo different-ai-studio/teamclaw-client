@@ -5,21 +5,17 @@ import AMUXCore
 public struct WorkspaceSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    let mqtt: MQTTService
-    let deviceId: String
-    let peerId: String
     let viewModel: SessionListViewModel
+    let teamclawService: TeamclawService
 
-    public init(mqtt: MQTTService, deviceId: String, peerId: String, viewModel: SessionListViewModel) {
-        self.mqtt = mqtt
-        self.deviceId = deviceId
-        self.peerId = peerId
+    public init(viewModel: SessionListViewModel, teamclawService: TeamclawService) {
         self.viewModel = viewModel
+        self.teamclawService = teamclawService
     }
 
     public var body: some View {
         NavigationStack {
-            WorkspaceManagementView(mqtt: mqtt, deviceId: deviceId, peerId: peerId, viewModel: viewModel)
+            WorkspaceManagementView(viewModel: viewModel, teamclawService: teamclawService)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button { dismiss() } label: {
