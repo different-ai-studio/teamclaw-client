@@ -115,6 +115,36 @@ private actor InMemoryOnboardingStore: AppOnboardingStore {
         createdTeamNames
     }
 
+    // MARK: - Auth stub methods (not used in tests)
+
+    func signIn(email: String, password: String) async throws {
+        // no-op
+    }
+
+    func signUp(email: String, password: String) async throws {
+        // no-op
+    }
+
+    func sendMagicLink(email: String) async throws {
+        // no-op
+    }
+
+    func signInWithAppleCredential(idToken: String, nonce: String) async throws {
+        // no-op
+    }
+
+    func signInWithGoogle() async throws {
+        // no-op
+    }
+
+    func handleAuthCallback(url: URL) async throws {
+        // no-op
+    }
+
+    func accessToken() async throws -> String {
+        ""
+    }
+
     enum InMemoryError: Error {
         case missingCreatedTeam
     }
