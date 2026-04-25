@@ -110,28 +110,31 @@ struct ContentView: View {
         guard onboarding.route == .ready, pairing.isPaired, !isConnecting else { return }
         isConnecting = true
         defer { isConnecting = false }
-        logger.info("Connecting to \(pairing.brokerHost):\(pairing.brokerPort) tls=\(pairing.useTLS) user=\(pairing.username)")
-        do {
-            logger.info("Calling mqtt.connect()...")
-            let clientId = "amux-ios-\(pairing.authToken.prefix(8))"
-            try await mqtt.connect(host: pairing.brokerHost, port: pairing.brokerPort,
-                username: pairing.username, password: pairing.password,
-                clientId: clientId, useTLS: pairing.useTLS)
-            logger.info("mqtt.connect() returned successfully")
 
-            // Legacy PeerAnnounce publish on device/{id}/collab was retired in
-            // Phase 3 — the daemon no longer subscribes to that topic. Broker-
-            // level JWT auth now handles peer authentication; peer presence is
-            // driven by `device/{id}/peers` retained state published by the
-            // daemon.
+        let token: String
+        do {
+            token = try await onboarding.accessToken()
+        } catch {
+            logger.error("Failed to get access token for MQTT: \(error)")
+            return
+        }
+
+        let userID = onboarding.currentContext?.memberActorID ?? "amux-ios"
+        let clientId = "amux-ios-\(userID.prefix(8))"
+        logger.info("Connecting to \(pairing.brokerHost):\(pairing.brokerPort) tls=\(pairing.useTLS)")
+        do {
+            try await mqtt.connect(
+                host: pairing.brokerHost, port: pairing.brokerPort,
+                username: userID, password: token,
+                clientId: clientId, useTLS: pairing.useTLS
+            )
             logger.info("MQTT connected")
 
-            // Start TeamclawService for work items and collab sessions
             teamclawService.start(
                 mqtt: mqtt,
                 teamId: onboarding.currentContext?.team.id ?? "",
                 deviceId: pairing.deviceId,
-                peerId: "ios-\(pairing.authToken.prefix(6))",
+                peerId: "ios-\(userID.prefix(8))",
                 modelContext: modelContext
             )
         } catch {

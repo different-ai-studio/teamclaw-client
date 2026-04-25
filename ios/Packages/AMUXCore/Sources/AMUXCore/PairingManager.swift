@@ -6,8 +6,6 @@ public final class PairingManager {
     public private(set) var isPaired: Bool = false
     public private(set) var brokerHost: String = ""
     public private(set) var brokerPort: Int = 8883
-    public private(set) var username: String = ""
-    public private(set) var password: String = ""
     public private(set) var deviceId: String = ""
     public private(set) var authToken: String = ""
     public private(set) var useTLS: Bool = true
@@ -31,12 +29,9 @@ public final class PairingManager {
         apply(credentials)
     }
 
-    public func updateMQTTServer(host: String, username: String, password: String) throws {
+    public func updateMQTTServer(host: String) throws {
         let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedUser = username.trimmingCharacters(in: .whitespacesAndNewlines)
         self.brokerHost = trimmedHost
-        self.username = trimmedUser
-        self.password = password
         self.isPaired = !trimmedHost.isEmpty
         try store.save(currentCredentials())
     }
@@ -50,8 +45,6 @@ public final class PairingManager {
         isPaired = false
         brokerHost = ""
         brokerPort = 8883
-        username = ""
-        password = ""
         deviceId = ""
         authToken = ""
         useTLS = true
@@ -63,8 +56,6 @@ public final class PairingManager {
             brokerHost: "ai.ucar.cc",
             brokerPort: 8883,
             useTLS: true,
-            username: "teamclaw",
-            password: "teamclaw2026",
             deviceId: deviceId,
             authToken: authToken
         )
@@ -76,8 +67,6 @@ public final class PairingManager {
         brokerHost = c.brokerHost
         brokerPort = c.brokerPort
         useTLS = c.useTLS
-        username = c.username
-        password = c.password
         deviceId = c.deviceId
         authToken = c.authToken
         isPaired = !c.brokerHost.isEmpty
@@ -88,8 +77,6 @@ public final class PairingManager {
             brokerHost: brokerHost,
             brokerPort: brokerPort,
             useTLS: useTLS,
-            username: username,
-            password: password,
             deviceId: deviceId,
             authToken: authToken
         )
@@ -129,8 +116,6 @@ public final class PairingManager {
             brokerHost: host,
             brokerPort: port,
             useTLS: tls,
-            username: params["username"] ?? "",
-            password: params["password"] ?? "",
             deviceId: device,
             authToken: token
         )
