@@ -849,18 +849,38 @@ Go to **Access Control → Authentication → Create**.
 
 Configure:
 - **Mechanism**: JWT
-- **Algorithm**: RSA (asymmetric)
+- **Algorithm**: JWKS (asymmetric, key set fetched from URL). EMQX picks the
+  signing alg from the JWT's `kid`/JWKS — Supabase currently uses **ES256**,
+  not RSA. Do not pin RS256.
 - **JWKS Endpoint**: `https://srhaytajyfrniuvnkfpd.supabase.co/auth/v1/.well-known/jwks.json`
-- **JWT From**: `password`
+- **JWKS connector → SSL/TLS: ENABLED**, `verify: verify_none`. Required —
+  EMQX's per-authenticator HTTP client defaults to `ssl.enable: false`,
+  which silently returns an empty JWKS for `https://` URLs and makes every
+  JWT fail with `invalid_jwt_signature`. (Verifiable via REST:
+  `GET /api/v5/authentication/jwt` should show `ssl.enable: true`.)
+- **JWT From**: `password` (the MQTT password field; username carries the
+  actor_id and is not parsed as a JWT)
 - **Disconnect After Expire**: disabled (off)
+- **ACL Claim Name**: `acl` (consumed from the access-token hook)
+- **Verify Claims**: leave empty (Supabase's `aud: authenticated` is fine;
+  pinning `iss` adds no security since the JWKS is already issuer-scoped)
 
 Save.
 
-- [ ] **Step 5.3: Delete the Password authenticator**
+- [ ] **Step 5.3: Reorder the authenticator chain — JWT first**
+
+In the Authentication list, drag the JWT authenticator above the
+Password-Based one (REST equivalent:
+`PUT /api/v5/authentication/jwt/position/front`). With the static
+authenticator running first, every JWT-as-password results in `ignore`
+from password-based and the chain ends in `not_authorized` regardless of
+JWT validity. JWT-first is required during the dual-authenticator window.
+
+- [ ] **Step 5.4: Delete the Password authenticator**
 
 In the Authentication list, find the existing Password-Based authenticator (user `teamclaw`). Delete it.
 
-- [ ] **Step 5.4: Smoke-test with current daemon**
+- [ ] **Step 5.5: Smoke-test with current daemon**
 
 Run the daemon on the developer machine:
 
@@ -874,9 +894,25 @@ INFO MQTT CONNACK received
 INFO MQTT connected, listening for commands
 ```
 
-If the daemon logs `MQTT connection refused (token expired), reconnecting` in a loop, the JWT configuration is incorrect — check that the JWKS endpoint is reachable from EMQX.
+**Troubleshooting** — if the daemon loops on
+`MQTT connection refused during connect, refreshing token reason=NotAuthorized`,
+inspect the authenticator's metrics first:
 
-- [ ] **Step 5.5: Smoke-test with iOS**
+```
+GET /api/v5/authentication/jwt/status
+```
+
+If `nomatch` is incrementing while `success` and `failed` stay at 0, EMQX
+is rejecting the token without ever validating it. Open a trace
+(`POST /api/v5/trace`, type `clientid`, the daemon's clientid is
+`amuxd-<first 8 chars of device.id>`) and read the `[AUTHN]` line. A line
+shaped like `msg: invalid_jwt_signature, jwks: ` (empty after `jwks:`)
+means the JWKS fetch failed — almost always because step 5.2's SSL toggle
+was missed. A non-empty `jwks:` value with `invalid_jwt_signature` means
+the JWT header's `kid` doesn't match any key in the JWKS (likely a stale
+JWKS cache; bump `refresh_interval` or reload the authenticator).
+
+- [ ] **Step 5.6: Smoke-test with iOS**
 
 Launch the iOS app on a device or simulator connected to the same broker. Navigate to Sessions tab.
 

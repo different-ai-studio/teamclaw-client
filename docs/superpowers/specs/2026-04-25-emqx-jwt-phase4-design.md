@@ -21,14 +21,53 @@ Configure via EMQX Dashboard (web UI). No code required.
 ### Steps
 
 1. **Authentication → Create → JWT**
-   - Algorithm: RS256 (asymmetric, via JWKS)
+   - Algorithm: JWKS (asymmetric — the actual key alg is read from the JWT
+     header / JWKS `alg`. Supabase currently signs with **ES256**, not RS256.
+     With `use_jwks: true` EMQX matches `kid` against the published key set,
+     so do not pin a specific algorithm in the authenticator config.)
    - JWKS endpoint: `https://srhaytajyfrniuvnkfpd.supabase.co/auth/v1/.well-known/jwks.json`
-   - From: `password` (JWT in MQTT password field)
+   - **JWKS HTTP client SSL/TLS: enabled** — the endpoint is `https://`, but
+     EMQX's per-authenticator HTTPS client defaults to `ssl.enable: false`.
+     If left disabled the JWKS fetch silently returns no keys and **every**
+     JWT fails as `invalid_jwt_signature` (see troubleshooting below). Use
+     `verify: verify_none` unless the broker is loaded with a CA bundle.
+   - From: `password` (JWT lives in the MQTT password field; the username
+     field carries the actor_id and is **not** parsed as a JWT)
    - `disconnect_after_expire`: disabled (false)
+   - `verify_claims`: leave empty `{}` (Supabase tokens have `aud:
+     authenticated`, which is fine; pinning `iss` is optional and adds no
+     security here since the JWKS fetch is already pinned to that issuer)
+   - `acl_claim_name`: `acl` (the access-token hook injects an `acl` array
+     scoped to the actor_id; EMQX consumes this directly)
 
-2. **Delete the existing Password authenticator** (`teamclaw` / `teamclaw2026`)
+2. **Reorder the authenticator chain** so JWT runs first. If the static
+   Password authenticator runs first and returns `ignore` for every
+   JWT-as-password, the chain may still settle on `not_authorized`
+   depending on EMQX's chain-result logic. Putting JWT first makes
+   debugging unambiguous and is required if both are temporarily co-deployed.
 
-3. Verify: connect a test MQTT client with a valid Supabase access token as password; confirm connection accepted.
+3. **Delete the existing Password authenticator** (`teamclaw` / `teamclaw2026`).
+   Existing connected clients are not kicked because
+   `disconnect_after_expire: false` only governs JWT expiry, but reorder +
+   delete are also tolerated by live sessions.
+
+4. Verify: connect a test MQTT client with a valid Supabase access token
+   as password; confirm `connack=0` (or v5 reason code 0).
+
+### Troubleshooting
+
+If the daemon (or any JWT client) gets `connack=5` (v3) / `135` (v5) and
+the JWT auth metrics show `nomatch` climbing while `success` stays at 0,
+EMQX cannot validate the JWT. Enable a trace
+(`POST /api/v5/trace`, type `clientid`, target the test client's id) and
+look for the `[AUTHN]` line. The two failure shapes seen in practice:
+
+- `msg: invalid_jwt_signature, jwks: <empty>` — JWKS fetch failed. Root
+  cause is almost always `ssl.enable: false` on a `https://` endpoint.
+- `msg: invalid_jwt_signature, jwks: [...]` (non-empty) — JWKS fetched but
+  the `kid` in the JWT header is not in the JWKS, or the algorithm is
+  unsupported. Re-fetch the JWKS in a browser to confirm the `kid` matches
+  the JWT header's `kid`.
 
 ## iOS Changes
 
