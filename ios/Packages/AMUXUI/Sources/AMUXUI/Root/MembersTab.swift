@@ -9,6 +9,10 @@ public struct MembersTab: View {
     let activeTeam: TeamSummary?
     let store: ActorStore
     let connectedAgentsStore: ConnectedAgentsStore?
+    /// One-shot trigger from the parent (e.g. the zero-agent reminder) to
+    /// open the invite sheet without a toolbar tap. Toggled back to false
+    /// after firing so subsequent triggers re-fire cleanly.
+    @Binding var externalInviteTrigger: Bool
     var onReconnect: (() -> Void)?
     var onSignOut: (() -> Void)?
 
@@ -22,6 +26,7 @@ public struct MembersTab: View {
                 activeTeam: TeamSummary?,
                 store: ActorStore,
                 connectedAgentsStore: ConnectedAgentsStore? = nil,
+                showInvite: Binding<Bool> = .constant(false),
                 onReconnect: (() -> Void)? = nil,
                 onSignOut: (() -> Void)? = nil) {
         self.pairing = pairing
@@ -31,6 +36,7 @@ public struct MembersTab: View {
         self.activeTeam = activeTeam
         self.store = store
         self.connectedAgentsStore = connectedAgentsStore
+        self._externalInviteTrigger = showInvite
         self.onReconnect = onReconnect
         self.onSignOut = onSignOut
     }
@@ -42,7 +48,9 @@ public struct MembersTab: View {
                 pairing: pairing,
                 mqtt: mqtt,
                 sessionViewModel: sessionViewModel,
-                teamclawService: teamclawService
+                teamclawService: teamclawService,
+                connectedAgentsStore: connectedAgentsStore,
+                onAddYourAgent: { showInvite = true }
             )
                 .navigationTitle("Actors")
                 .navigationBarTitleDisplayMode(.large)
@@ -54,11 +62,15 @@ public struct MembersTab: View {
                     }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button { showInvite = true } label: {
-                            Image(systemName: "person.badge.plus").font(.title3)
+                            Image(systemName: "person.badge.plus")
+                                .font(.title3)
+                                .accessibilityHidden(true)
                         }
                         .buttonStyle(.plain)
                         .disabled(activeTeam == nil)
                         .opacity(activeTeam == nil ? 0.4 : 1)
+                        .accessibilityLabel("Invite Member")
+                        .accessibilityIdentifier("members.inviteButton")
                     }
                 }
                 .sheet(isPresented: $showSettings) {
@@ -70,6 +82,11 @@ public struct MembersTab: View {
                 }
                 .sheet(isPresented: $showInvite) {
                     MemberInviteSheet(store: store)
+                }
+                .onChange(of: externalInviteTrigger) { _, newValue in
+                    guard newValue else { return }
+                    showInvite = true
+                    externalInviteTrigger = false
                 }
         }
     }

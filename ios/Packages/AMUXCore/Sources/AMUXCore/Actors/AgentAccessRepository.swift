@@ -17,6 +17,11 @@ public protocol AgentAccessRepository: Sendable {
 
     /// Resolve the current daemon device for a specific agent.
     func deviceID(for agentID: String) async throws -> String?
+
+    /// Total number of agent actors in this team (regardless of which member
+    /// has access). Used to decide whether to show the "add the team's first
+    /// agent" reminder.
+    func teamAgentCount(teamID: String) async throws -> Int
 }
 
 public actor SupabaseAgentAccessRepository: AgentAccessRepository {
@@ -149,6 +154,17 @@ public actor SupabaseAgentAccessRepository: AgentAccessRepository {
         return rows.first?.deviceID
     }
 
+    public func teamAgentCount(teamID: String) async throws -> Int {
+        let rows: [AgentIDOnlyRow] = try await client
+            .from("actors")
+            .select("id")
+            .eq("team_id", value: teamID)
+            .eq("actor_type", value: "agent")
+            .execute()
+            .value
+        return rows.count
+    }
+
     private func currentMemberRow(teamID: String?) async throws -> CurrentMemberRow? {
         let session = try await client.auth.session
         let userID = session.user.id.uuidString.lowercased()
@@ -235,6 +251,10 @@ private struct AgentKindRow: Decodable, Sendable {
         case agentKind = "agent_kind"
         case deviceID = "device_id"
     }
+}
+
+private struct AgentIDOnlyRow: Decodable, Sendable {
+    let id: String
 }
 
 private struct HumanActorRow: Decodable, Sendable {

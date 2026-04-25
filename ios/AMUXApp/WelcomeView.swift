@@ -3,7 +3,7 @@ import AMUXCore
 
 struct WelcomeView: View {
     @Bindable var coordinator: AppOnboardingCoordinator
-    @State private var showLogin = false
+    @State private var showChoose = false
 
     var body: some View {
         NavigationStack {
@@ -26,20 +26,20 @@ struct WelcomeView: View {
                 Spacer()
 
                 Button {
-                    showLogin = true
+                    showChoose = true
                 } label: {
                     Text("Get Started")
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                 }
-                .buttonStyle(.borderedProminent)
+                .glassProminentButtonStyle()
                 .padding(.horizontal, 24)
                 .padding(.bottom, 48)
                 .accessibilityIdentifier("welcome.getStartedButton")
             }
-            .navigationDestination(isPresented: $showLogin) {
-                LoginView(coordinator: coordinator)
+            .navigationDestination(isPresented: $showChoose) {
+                ChooseAuthView(coordinator: coordinator)
             }
         }
     }

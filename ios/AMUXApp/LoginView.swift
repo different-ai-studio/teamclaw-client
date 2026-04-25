@@ -66,7 +66,7 @@ struct LoginView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                 }
-                .buttonStyle(.borderedProminent)
+                .glassProminentButtonStyle()
                 .disabled(coordinator.isBusy || email.isEmpty || password.isEmpty)
                 .accessibilityIdentifier("login.submitButton")
 
@@ -96,7 +96,7 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                     }
-                    .buttonStyle(.bordered)
+                    .glassButtonStyle()
                     .disabled(coordinator.isBusy)
 
                     Button {
@@ -107,7 +107,7 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                     }
-                    .buttonStyle(.bordered)
+                    .glassButtonStyle()
                     .disabled(coordinator.isBusy)
                 }
 
@@ -150,7 +150,7 @@ struct LoginView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
                             }
-                            .buttonStyle(.borderedProminent)
+                            .glassProminentButtonStyle()
                             .disabled(coordinator.isBusy || magicLinkEmail.isEmpty)
                         }
                     }

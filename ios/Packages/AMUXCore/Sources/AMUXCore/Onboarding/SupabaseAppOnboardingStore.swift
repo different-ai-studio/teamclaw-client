@@ -99,14 +99,16 @@ public actor SupabaseAppOnboardingStore: AppOnboardingStore {
     }
 
     public func ensureSession() async throws {
-        let session = client.auth.currentSession
-        let isAnonymous = session?.user.isAnonymous ?? true
-        if isAnonymous {
-            if session != nil {
-                try? await client.auth.signOut()
-            }
+        // Both authenticated and anonymous sessions are valid. Only the
+        // absence of a session counts as "needs auth" — the WelcomeView /
+        // ChooseAuthView flow surfaces sign-in vs anonymous.
+        guard client.auth.currentSession != nil else {
             throw AuthRequired.notAuthenticated
         }
+    }
+
+    public func isAnonymous() async -> Bool {
+        client.auth.currentSession?.user.isAnonymous ?? false
     }
 
     public func loadBootstrap() async throws -> AppBootstrap {
@@ -209,6 +211,22 @@ public actor SupabaseAppOnboardingStore: AppOnboardingStore {
             provider: .google,
             redirectTo: URL(string: "amux://auth-callback"),
             scopes: "email profile"
+        )
+    }
+
+    public func signInAnonymously() async throws {
+        _ = try await client.auth.signInAnonymously()
+    }
+
+    public func upgradeWithPassword(email: String, password: String) async throws {
+        _ = try await client.auth.update(
+            user: UserAttributes(email: email, password: password)
+        )
+    }
+
+    public func upgradeWithAppleCredential(idToken: String, nonce: String) async throws {
+        _ = try await client.auth.linkIdentityWithIdToken(
+            credentials: .init(provider: .apple, idToken: idToken, nonce: nonce)
         )
     }
 

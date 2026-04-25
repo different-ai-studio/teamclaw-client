@@ -150,6 +150,20 @@ private actor InMemoryOnboardingStore: AppOnboardingStore {
         // no-op
     }
 
+    func signInAnonymously() async throws {
+        // no-op
+    }
+
+    func isAnonymous() async -> Bool { false }
+
+    func upgradeWithPassword(email: String, password: String) async throws {
+        // no-op
+    }
+
+    func upgradeWithAppleCredential(idToken: String, nonce: String) async throws {
+        // no-op
+    }
+
     enum InMemoryError: Error {
         case missingCreatedTeam
     }

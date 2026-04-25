@@ -80,6 +80,10 @@ private actor InMemoryAgentAccessRepository: AgentAccessRepository {
         nil
     }
 
+    func teamAgentCount(teamID: String) async throws -> Int {
+        0
+    }
+
     func grantAuthorizedHuman(agentID: String, memberID: String, permissionLevel: String) async throws {
         lastGrantedMemberID = memberID
         authorizedHumans.append(

@@ -5,6 +5,11 @@ import AMUXSharedUI
 
 public struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    /// Injected by AMUXApp's `ContentView` via `.environment(onboarding)`.
+    /// Read at this scope to gate the anonymous-upgrade banner. Marked
+    /// optional so the (unused) macOS shell or any host that forgets to
+    /// inject still compiles cleanly.
+    @Environment(AppOnboardingCoordinator.self) private var onboarding: AppOnboardingCoordinator?
     let pairing: PairingManager
     let connectedAgentsStore: ConnectedAgentsStore?
     let activeTeam: TeamSummary?
@@ -23,6 +28,7 @@ public struct SettingsView: View {
     @State private var teamLoadError: String?
 
     @State private var showSignOutConfirm = false
+    @State private var showUpgradeSheet = false
 
     public init(pairing: PairingManager,
                 connectedAgentsStore: ConnectedAgentsStore?,
@@ -57,6 +63,35 @@ public struct SettingsView: View {
     public var body: some View {
         NavigationStack {
             List {
+                if let onboarding, onboarding.isAnonymous {
+                    Section {
+                        Button {
+                            showUpgradeSheet = true
+                        } label: {
+                            HStack(alignment: .top, spacing: 12) {
+                                Image(systemName: "person.badge.shield.checkmark")
+                                    .font(.title2)
+                                    .foregroundStyle(.tint)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Upgrade your account")
+                                        .font(.body.weight(.medium))
+                                        .foregroundStyle(.primary)
+                                    Text("You're signed in anonymously. Attach an email or Apple ID to keep this workspace.")
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.leading)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .accessibilityIdentifier("settings.upgradeAccountButton")
+                    }
+                }
+
                 Section("Team") {
                     if let details = teamDetails {
                         LabeledContent("Name", value: details.name)
@@ -190,6 +225,11 @@ public struct SettingsView: View {
                     action?()
                 }
                 Button("Cancel", role: .cancel) {}
+            }
+            .sheet(isPresented: $showUpgradeSheet) {
+                if let onboarding {
+                    UpgradeAccountSheet(coordinator: onboarding)
+                }
             }
             .navigationTitle("Settings").navigationBarTitleDisplayMode(.large)
             .task {

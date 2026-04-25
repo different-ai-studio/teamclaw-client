@@ -54,6 +54,7 @@ struct ContentView: View {
                         signOut()
                     }
                 )
+                .environment(onboarding)
                 .task {
                     if let team = onboarding.currentContext?.team {
                         OnboardingLocalCacheBootstrapper.ensureWorkspaceExists(team: team, modelContext: modelContext)
@@ -182,4 +183,8 @@ private actor FailingOnboardingStore: AppOnboardingStore {
     func handleAuthCallback(url: URL) async throws { throw error }
     func accessToken() async throws -> String { throw error }
     func signOut() async throws { throw error }
+    func signInAnonymously() async throws { throw error }
+    func isAnonymous() async -> Bool { false }
+    func upgradeWithPassword(email: String, password: String) async throws { throw error }
+    func upgradeWithAppleCredential(idToken: String, nonce: String) async throws { throw error }
 }

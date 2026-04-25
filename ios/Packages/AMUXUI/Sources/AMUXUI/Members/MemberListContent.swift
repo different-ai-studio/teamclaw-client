@@ -14,19 +14,37 @@ public struct MemberListContent: View {
     let mqtt: MQTTService
     let sessionViewModel: SessionListViewModel
     let teamclawService: TeamclawService?
+    /// Source of truth for the "current user has no accessible agent" notice.
+    /// `nil` keeps the notice hidden (e.g. before the team is configured).
+    let connectedAgentsStore: ConnectedAgentsStore?
+    /// Invoked when the user taps the inline notice's CTA. Parent surfaces
+    /// the existing MemberInviteSheet (Agent kind preset).
+    let onAddYourAgent: (() -> Void)?
 
     public init(
         store: ActorStore,
         pairing: PairingManager,
         mqtt: MQTTService,
         sessionViewModel: SessionListViewModel,
-        teamclawService: TeamclawService?
+        teamclawService: TeamclawService?,
+        connectedAgentsStore: ConnectedAgentsStore? = nil,
+        onAddYourAgent: (() -> Void)? = nil
     ) {
         self.store = store
         self.pairing = pairing
         self.mqtt = mqtt
         self.sessionViewModel = sessionViewModel
         self.teamclawService = teamclawService
+        self.connectedAgentsStore = connectedAgentsStore
+        self.onAddYourAgent = onAddYourAgent
+    }
+
+    /// True when the current user has zero accessible agents in this team.
+    /// Distinct from "team has zero agents" — handled separately by the
+    /// RootTabView reminder sheet.
+    private var showOwnAgentNotice: Bool {
+        guard let store = connectedAgentsStore else { return false }
+        return !store.isLoading && store.agents.isEmpty
     }
 
     private var filtered: [CachedActor] {
@@ -50,6 +68,13 @@ public struct MemberListContent: View {
                 ContentUnavailableView.search(text: searchText)
             } else {
                 List {
+                    if showOwnAgentNotice {
+                        Section {
+                            ownAgentNotice
+                                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                                .listRowBackground(Color.clear)
+                        }
+                    }
                     ForEach(filtered, id: \.actorId) { a in
                         NavigationLink {
                             ActorDetailView(
@@ -70,6 +95,38 @@ public struct MemberListContent: View {
         .searchable(text: $searchText, prompt: "Search actors")
         .task { await store.reload(); await store.heartbeat() }
         .refreshable { await store.reload() }
+    }
+
+    private var ownAgentNotice: some View {
+        Button {
+            onAddYourAgent?()
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "lightbulb")
+                    .font(.title3)
+                    .foregroundStyle(.tint)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add your own agent")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.primary)
+                    Text("You don't have access to any agent in this team yet. Invite one to start your own sessions.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color.accentColor.opacity(0.10))
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("members.addYourAgentNotice")
     }
 }
 

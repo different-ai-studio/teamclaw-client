@@ -18,6 +18,18 @@ public struct RootTabView: View {
     @State private var connectedAgentsStore: ConnectedAgentsStore?
     @State private var sessionIDsRepo: SupabaseSessionIDsRepository?
     @State private var sessionsRepo: SupabaseSessionsRepository?
+    @State private var agentAccessRepo: SupabaseAgentAccessRepository?
+
+    /// Drives the "add the team's first agent" reminder. Set once per app
+    /// launch when we observe a team with zero agents; soft-dismissible so it
+    /// doesn't reappear after the user closes it.
+    @State private var showFirstAgentReminder: Bool = false
+    /// Set when the user taps "Add agent" in the reminder sheet. Triggers the
+    /// existing MemberInviteSheet on the Actors tab after the reminder closes.
+    @State private var showInviteAfterReminder: Bool = false
+    /// Tracks teams we've already shown the reminder for in this app launch
+    /// so re-entering the team doesn't keep nagging.
+    @State private var remindedTeams: Set<String> = []
 
     public init(mqtt: MQTTService,
                 pairing: PairingManager,
@@ -69,6 +81,7 @@ public struct RootTabView: View {
                                activeTeam: activeTeam,
                                store: actorStore,
                                connectedAgentsStore: connectedAgentsStore,
+                               showInvite: $showInviteAfterReminder,
                                onReconnect: onReconnect,
                                onSignOut: onSignOut)
                 } else {
@@ -100,6 +113,16 @@ public struct RootTabView: View {
             guard let token = note.userInfo?["token"] as? String,
                   let store = actorStore else { return }
             Task { _ = await store.claimInvite(token: token) }
+        }
+        .sheet(isPresented: $showFirstAgentReminder) {
+            ZeroAgentReminderSheet {
+                // Switch to the Actors tab and present its existing
+                // invite sheet on the next runloop tick. Doing the switch
+                // here keeps the reminder copy short while sending the
+                // user to the canonical invite UI.
+                selection = .members
+                showInviteAfterReminder = true
+            }
         }
     }
 
@@ -133,6 +156,9 @@ public struct RootTabView: View {
                 await store.reload()
             }
         }
+        if agentAccessRepo == nil {
+            agentAccessRepo = try? SupabaseAgentAccessRepository()
+        }
         if sessionIDsRepo == nil {
             sessionIDsRepo = try? SupabaseSessionIDsRepository()
         }
@@ -140,6 +166,24 @@ public struct RootTabView: View {
             sessionsRepo = try? SupabaseSessionsRepository()
         }
         await refreshSessionsFromBackend()
+        await maybeShowFirstAgentReminder(team: activeTeam)
+    }
+
+    /// Polls Supabase once per launch per team for the agent count and shows
+    /// the reminder when the team is empty. Soft-dismissible — does not
+    /// reappear after the user closes it within the same app launch.
+    @MainActor
+    private func maybeShowFirstAgentReminder(team: TeamSummary) async {
+        guard !remindedTeams.contains(team.id), let repo = agentAccessRepo else { return }
+        do {
+            let count = try await repo.teamAgentCount(teamID: team.id)
+            remindedTeams.insert(team.id)
+            if count == 0 {
+                showFirstAgentReminder = true
+            }
+        } catch {
+            // Soft prompt; failure to count is not user-visible.
+        }
     }
 
     @MainActor
