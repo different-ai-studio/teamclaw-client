@@ -15,6 +15,7 @@
 		3203553BEAE4D5D79B881582 /* SentrySwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5821CF422126708735E13341 /* SentrySwiftUI */; };
 		48A4F0655EACAE64B0B0232B /* AMUXUI in Frameworks */ = {isa = PBXBuildFile; productRef = 984FDD5CB983CACB65198166 /* AMUXUI */; };
 		989AF52819F1BFC91A3315B1 /* AMUXSharedUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5400E9174EF5F9869349C3EF /* AMUXSharedUI */; };
+		A77EC78143196C418FE87C82 /* AMUXAuthUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16412C0DABEF538623C6257 /* AMUXAuthUITests.swift */; };
 		E162A3FC8793994442C23372 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA5C333674232A156EF5A6D1 /* WelcomeView.swift */; };
 		EB09506708CCBE1B923FBFAE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 25D67C6EB2C2948CCFE684D1 /* Assets.xcassets */; };
 		EC3990515ABE38A90617C32E /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 514F7615E8C226A5F3660A5F /* LoginView.swift */; };
@@ -32,6 +33,7 @@
 		AA5C333674232A156EF5A6D1 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		B26E4EC39A79E60BACC23B33 /* AMUXUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AMUXUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C07BD2A492D93FDCCB10637D /* AMUXUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AMUXUITests.swift; sourceTree = "<group>"; };
+		E16412C0DABEF538623C6257 /* AMUXAuthUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AMUXAuthUITests.swift; sourceTree = "<group>"; };
 		F467BD534BE686B6EACBD702 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		FDEFC0BF7C8A215582AF7257 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -54,6 +56,7 @@
 		334DCAF382DCB0E595087C5F /* AMUXUITests */ = {
 			isa = PBXGroup;
 			children = (
+				E16412C0DABEF538623C6257 /* AMUXAuthUITests.swift */,
 				C07BD2A492D93FDCCB10637D /* AMUXUITests.swift */,
 			);
 			path = AMUXUITests;
@@ -217,6 +220,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A77EC78143196C418FE87C82 /* AMUXAuthUITests.swift in Sources */,
 				10E560BDB3C439BFC2808E85 /* AMUXUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -325,6 +329,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				DEVELOPMENT_TEAM = 43G5A6G9QV;
+				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -343,6 +348,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				DEVELOPMENT_TEAM = 43G5A6G9QV;
+				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
