@@ -79,8 +79,7 @@ public struct EventBubbleView: View {
                     .textSelection(.enabled)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(Color.blue)
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .liquidGlass(in: RoundedRectangle(cornerRadius: 18), tint: .blue, interactive: false)
                     .frame(maxWidth: sizeClass == .regular ? 500 : 260, alignment: .trailing)
                     .contextMenu {
                         MessageContextMenu(text: event.text ?? "")
@@ -103,8 +102,7 @@ public struct EventBubbleView: View {
                         .padding(.vertical, 10)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.systemGray6))
-                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .liquidGlass(in: RoundedRectangle(cornerRadius: 18), interactive: false)
                 .contextMenu {
                     MessageContextMenu(text: event.text ?? "")
                 }
@@ -209,7 +207,7 @@ struct ThinkingBlockView: View {
                     .textSelection(.enabled)
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                    .liquidGlass(in: RoundedRectangle(cornerRadius: 10), interactive: false)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -234,7 +232,7 @@ struct ErrorBlockView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
-        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .liquidGlass(in: RoundedRectangle(cornerRadius: 12), tint: .red, interactive: false)
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
         .contextMenu {
@@ -260,7 +258,7 @@ struct TypingIndicatorView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 18))
+        .liquidGlass(in: RoundedRectangle(cornerRadius: 18), interactive: false)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
