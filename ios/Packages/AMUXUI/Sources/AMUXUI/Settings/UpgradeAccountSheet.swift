@@ -30,14 +30,14 @@ struct UpgradeAccountSheet: View {
                             .autocorrectionDisabled()
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
-                            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+                            .liquidGlass(in: RoundedRectangle(cornerRadius: 16), interactive: false)
                             .accessibilityIdentifier("upgrade.emailField")
 
                         SecureField("Password", text: $password)
                             .textContentType(.newPassword)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
-                            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+                            .liquidGlass(in: RoundedRectangle(cornerRadius: 16), interactive: false)
                             .accessibilityIdentifier("upgrade.passwordField")
                     }
 
