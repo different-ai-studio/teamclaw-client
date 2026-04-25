@@ -10,6 +10,7 @@ public struct MembersTab: View {
     let store: ActorStore
     let connectedAgentsStore: ConnectedAgentsStore?
     var onReconnect: (() -> Void)?
+    var onSignOut: (() -> Void)?
 
     @State private var showSettings = false
     @State private var showInvite   = false
@@ -21,7 +22,8 @@ public struct MembersTab: View {
                 activeTeam: TeamSummary?,
                 store: ActorStore,
                 connectedAgentsStore: ConnectedAgentsStore? = nil,
-                onReconnect: (() -> Void)? = nil) {
+                onReconnect: (() -> Void)? = nil,
+                onSignOut: (() -> Void)? = nil) {
         self.pairing = pairing
         self.mqtt = mqtt
         self.sessionViewModel = sessionViewModel
@@ -30,6 +32,7 @@ public struct MembersTab: View {
         self.store = store
         self.connectedAgentsStore = connectedAgentsStore
         self.onReconnect = onReconnect
+        self.onSignOut = onSignOut
     }
 
     public var body: some View {
@@ -62,7 +65,8 @@ public struct MembersTab: View {
                     SettingsView(pairing: pairing,
                                  connectedAgentsStore: connectedAgentsStore,
                                  activeTeam: activeTeam,
-                                 onReconnect: onReconnect)
+                                 onReconnect: onReconnect,
+                                 onSignOut: onSignOut)
                 }
                 .sheet(isPresented: $showInvite) {
                     MemberInviteSheet(store: store)

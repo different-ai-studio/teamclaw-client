@@ -74,6 +74,7 @@ public protocol AppOnboardingStore: Sendable {
     func signInWithGoogle() async throws
     func handleAuthCallback(url: URL) async throws
     func accessToken() async throws -> String
+    func signOut() async throws
 }
 
 @Observable
@@ -185,6 +186,22 @@ public final class AppOnboardingCoordinator {
 
     public func accessToken() async throws -> String {
         try await store.accessToken()
+    }
+
+    public func signOut() async {
+        guard !isBusy else { return }
+        isBusy = true
+        errorMessage = nil
+        do {
+            try await store.signOut()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        currentContext = nil
+        pendingCreatedTeam = nil
+        pendingMagicLinkEmail = nil
+        route = .needsAuth
+        isBusy = false
     }
 
     public func handleAuthCallback(url: URL) async {

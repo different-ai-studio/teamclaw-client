@@ -8,6 +8,7 @@ public struct RootTabView: View {
     let activeTeam: TeamSummary?
     let currentActorID: String?
     var onReconnect: (() -> Void)?
+    var onSignOut: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel = SessionListViewModel()
@@ -23,13 +24,15 @@ public struct RootTabView: View {
                 teamclawService: TeamclawService?,
                 activeTeam: TeamSummary? = nil,
                 currentActorID: String? = nil,
-                onReconnect: (() -> Void)? = nil) {
+                onReconnect: (() -> Void)? = nil,
+                onSignOut: (() -> Void)? = nil) {
         self.mqtt = mqtt
         self.pairing = pairing
         self.teamclawService = teamclawService
         self.activeTeam = activeTeam
         self.currentActorID = currentActorID
         self.onReconnect = onReconnect
+        self.onSignOut = onSignOut
     }
 
     public var body: some View {
@@ -44,7 +47,8 @@ public struct RootTabView: View {
                             refreshSessionsFromBackend: refreshSessionsFromBackend,
                             navigationPath: $sessionsPath,
                             connectedAgentsStore: connectedAgentsStore,
-                            onReconnect: onReconnect)
+                            onReconnect: onReconnect,
+                            onSignOut: onSignOut)
             }
             Tab("Tasks", systemImage: "checklist", value: AppTab.tasks) {
                 TasksTab(mqtt: mqtt,
@@ -53,7 +57,8 @@ public struct RootTabView: View {
                          activeTeam: activeTeam,
                          sessionViewModel: viewModel,
                          connectedAgentsStore: connectedAgentsStore,
-                         onReconnect: onReconnect)
+                         onReconnect: onReconnect,
+                         onSignOut: onSignOut)
             }
             Tab("Actors", systemImage: "person.2", value: AppTab.members) {
                 if let actorStore {
@@ -64,7 +69,8 @@ public struct RootTabView: View {
                                activeTeam: activeTeam,
                                store: actorStore,
                                connectedAgentsStore: connectedAgentsStore,
-                               onReconnect: onReconnect)
+                               onReconnect: onReconnect,
+                               onSignOut: onSignOut)
                 } else {
                     ContentUnavailableView("No Team Selected",
                                           systemImage: "person.2",

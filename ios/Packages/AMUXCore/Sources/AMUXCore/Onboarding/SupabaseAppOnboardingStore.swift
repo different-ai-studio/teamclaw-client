@@ -219,6 +219,10 @@ public actor SupabaseAppOnboardingStore: AppOnboardingStore {
     public func accessToken() async throws -> String {
         try await client.auth.session.accessToken
     }
+
+    public func signOut() async throws {
+        try await client.auth.signOut()
+    }
 }
 
 private struct MemberRow: Decodable, Sendable {

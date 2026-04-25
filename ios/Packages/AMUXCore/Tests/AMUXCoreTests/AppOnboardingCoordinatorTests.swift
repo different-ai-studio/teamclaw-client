@@ -146,6 +146,10 @@ private actor InMemoryOnboardingStore: AppOnboardingStore {
         ""
     }
 
+    func signOut() async throws {
+        // no-op
+    }
+
     enum InMemoryError: Error {
         case missingCreatedTeam
     }

@@ -49,6 +49,9 @@ struct ContentView: View {
                     currentActorID: onboarding.currentContext?.memberActorID,
                     onReconnect: {
                         forceReconnect()
+                    },
+                    onSignOut: {
+                        signOut()
                     }
                 )
                 .task {
@@ -91,6 +94,15 @@ struct ContentView: View {
                 logger.info("App became active, forcing MQTT reconnect…")
                 forceReconnect()
             }
+        }
+    }
+
+    private func signOut() {
+        connectTask?.cancel()
+        isConnecting = false
+        Task {
+            await mqtt.disconnect()
+            await onboarding.signOut()
         }
     }
 
@@ -169,4 +181,5 @@ private actor FailingOnboardingStore: AppOnboardingStore {
     func signInWithGoogle() async throws { throw error }
     func handleAuthCallback(url: URL) async throws { throw error }
     func accessToken() async throws -> String { throw error }
+    func signOut() async throws { throw error }
 }

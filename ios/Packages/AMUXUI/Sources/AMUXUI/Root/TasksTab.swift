@@ -10,6 +10,7 @@ public struct TasksTab: View {
     let sessionViewModel: SessionListViewModel
     let connectedAgentsStore: ConnectedAgentsStore?
     var onReconnect: (() -> Void)?
+    var onSignOut: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
 
@@ -27,7 +28,8 @@ public struct TasksTab: View {
         activeTeam: TeamSummary?,
         sessionViewModel: SessionListViewModel,
         connectedAgentsStore: ConnectedAgentsStore? = nil,
-        onReconnect: (() -> Void)? = nil
+        onReconnect: (() -> Void)? = nil,
+        onSignOut: (() -> Void)? = nil
     ) {
         self.mqtt = mqtt
         self.pairing = pairing
@@ -36,6 +38,7 @@ public struct TasksTab: View {
         self.sessionViewModel = sessionViewModel
         self.connectedAgentsStore = connectedAgentsStore
         self.onReconnect = onReconnect
+        self.onSignOut = onSignOut
     }
 
     public var body: some View {
@@ -63,7 +66,8 @@ public struct TasksTab: View {
                     SettingsView(pairing: pairing,
                                  connectedAgentsStore: connectedAgentsStore,
                                  activeTeam: activeTeam,
-                                 onReconnect: onReconnect)
+                                 onReconnect: onReconnect,
+                                 onSignOut: onSignOut)
                 }
                 .navigationDestination(for: String.self) { id in
                     if id.hasPrefix("task:") {

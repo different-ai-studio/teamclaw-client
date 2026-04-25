@@ -9,6 +9,7 @@ public struct SettingsView: View {
     let connectedAgentsStore: ConnectedAgentsStore?
     let activeTeam: TeamSummary?
     let onReconnect: (() -> Void)?
+    let onSignOut: (() -> Void)?
 
     @State private var mqttHost: String = ""
     @State private var daemonDeviceID: String = ""
@@ -21,14 +22,18 @@ public struct SettingsView: View {
     @State private var teamDetails: TeamDetails?
     @State private var teamLoadError: String?
 
+    @State private var showSignOutConfirm = false
+
     public init(pairing: PairingManager,
                 connectedAgentsStore: ConnectedAgentsStore?,
                 activeTeam: TeamSummary? = nil,
-                onReconnect: (() -> Void)? = nil) {
+                onReconnect: (() -> Void)? = nil,
+                onSignOut: (() -> Void)? = nil) {
         self.pairing = pairing
         self.connectedAgentsStore = connectedAgentsStore
         self.activeTeam = activeTeam
         self.onReconnect = onReconnect
+        self.onSignOut = onSignOut
     }
 
     private var appVersion: String {
@@ -160,6 +165,31 @@ public struct SettingsView: View {
                             .font(.caption.monospaced())
                     }
                 }
+
+                if onSignOut != nil {
+                    Section {
+                        Button(role: .destructive) {
+                            showSignOutConfirm = true
+                        } label: {
+                            Text("Sign Out")
+                                .font(.body.weight(.medium))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .accessibilityIdentifier("settings.signOutButton")
+                    }
+                }
+            }
+            .confirmationDialog(
+                "Sign out of AMUX?",
+                isPresented: $showSignOutConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Sign Out", role: .destructive) {
+                    let action = onSignOut
+                    dismiss()
+                    action?()
+                }
+                Button("Cancel", role: .cancel) {}
             }
             .navigationTitle("Settings").navigationBarTitleDisplayMode(.large)
             .task {

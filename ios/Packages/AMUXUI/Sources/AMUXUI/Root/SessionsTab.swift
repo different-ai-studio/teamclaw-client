@@ -15,6 +15,7 @@ public struct SessionsTab: View {
     let refreshSessionsFromBackend: () async -> Void
     let connectedAgentsStore: ConnectedAgentsStore?
     var onReconnect: (() -> Void)?
+    var onSignOut: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
 
@@ -36,7 +37,8 @@ public struct SessionsTab: View {
                 refreshSessionsFromBackend: @escaping () async -> Void,
                 navigationPath: Binding<[String]>,
                 connectedAgentsStore: ConnectedAgentsStore? = nil,
-                onReconnect: (() -> Void)? = nil) {
+                onReconnect: (() -> Void)? = nil,
+                onSignOut: (() -> Void)? = nil) {
         self.mqtt = mqtt
         self.pairing = pairing
         self.teamclawService = teamclawService
@@ -47,6 +49,7 @@ public struct SessionsTab: View {
         self._navigationPath = navigationPath
         self.connectedAgentsStore = connectedAgentsStore
         self.onReconnect = onReconnect
+        self.onSignOut = onSignOut
     }
 
     public var body: some View {
@@ -106,7 +109,8 @@ public struct SessionsTab: View {
                 SettingsView(pairing: pairing,
                              connectedAgentsStore: connectedAgentsStore,
                              activeTeam: activeTeam,
-                             onReconnect: onReconnect)
+                             onReconnect: onReconnect,
+                             onSignOut: onSignOut)
             }
             .sheet(isPresented: $showNewSession) {
                 NewSessionSheet(mqtt: mqtt, deviceId: pairing.deviceId,
