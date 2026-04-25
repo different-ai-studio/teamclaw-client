@@ -17,7 +17,7 @@ struct PairingManagerTests {
         let store = InMemoryStore()
         let manager = PairingManager(store: store)
 
-        let url = URL(string: "amux://join?broker=mqtts://broker.example.com:8883&device=mac-1&token=tok-abc&username=u&password=p")!
+        let url = URL(string: "amux://join?broker=mqtts://broker.example.com:8883&device=mac-1&token=tok-abc")!
         try manager.pair(from: url)
 
         #expect(manager.isPaired)
@@ -25,8 +25,6 @@ struct PairingManagerTests {
         #expect(manager.brokerPort == 8883)
         #expect(manager.deviceId == "mac-1")
         #expect(manager.authToken == "tok-abc")
-        #expect(manager.username == "u")
-        #expect(manager.password == "p")
         #expect(manager.useTLS == true)
         #expect(store.saved?.deviceId == "mac-1")
     }
@@ -74,7 +72,7 @@ struct PairingManagerTests {
         let store = InMemoryStore()
         store.saved = PairingCredentials(
             brokerHost: "h", brokerPort: 8883, useTLS: true,
-            username: "u", password: "p", deviceId: "d", authToken: "t"
+            deviceId: "d", authToken: "t"
         )
         let manager = PairingManager(store: store)
         #expect(manager.isPaired)
