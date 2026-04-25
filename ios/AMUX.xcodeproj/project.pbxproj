@@ -304,7 +304,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.7;
+				MARKETING_VERSION = 1.0.8;
 				PRODUCT_BUNDLE_IDENTIFIER = tech.teamclaw.mobile;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
@@ -324,7 +324,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.7;
+				MARKETING_VERSION = 1.0.8;
 				PRODUCT_BUNDLE_IDENTIFIER = tech.teamclaw.mobile;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
