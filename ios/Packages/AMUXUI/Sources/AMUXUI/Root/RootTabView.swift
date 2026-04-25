@@ -103,11 +103,19 @@ public struct RootTabView: View {
         .overlay(alignment: .top) {
             ConnectionBannerOverlay(mqtt: mqtt, onReconnect: onReconnect)
         }
-        .task {
-            viewModel.start(mqtt: mqtt, deviceId: pairing.deviceId, modelContext: modelContext, teamclawService: teamclawService)
-        }
         .task(id: activeTeam?.id) {
             await configureStores()
+            // SessionListVM needs both teamID and the daemon's device_id to
+            // build runtime/+/state subscription paths. configureStores
+            // populates pairing.deviceId from connectedAgentsStore on first
+            // run, so start *after* it returns rather than racing it.
+            viewModel.start(
+                mqtt: mqtt,
+                teamID: activeTeam?.id ?? "",
+                deviceId: pairing.deviceId,
+                modelContext: modelContext,
+                teamclawService: teamclawService
+            )
         }
         .onReceive(NotificationCenter.default.publisher(for: .amuxInviteTokenReceived)) { note in
             guard let token = note.userInfo?["token"] as? String,
@@ -155,6 +163,18 @@ public struct RootTabView: View {
                 connectedAgentsStore = store
                 await store.reload()
             }
+        }
+        // Backfill `pairing.deviceId` from the resolved daemon row in Supabase.
+        // Post-Phase-4 the pairing flow no longer captures the daemon's
+        // device_id locally, but downstream subscribers (SessionListVM and
+        // RuntimeDetailVM legacy fallback) still expect it on the pairing
+        // manager. Stopgap until pairing.deviceId is split into
+        // iOS-install-id vs. daemon-device-id and call sites are migrated to
+        // resolve via ConnectedAgentsStore directly.
+        if pairing.deviceId.isEmpty,
+           let resolvedDeviceID = connectedAgentsStore?.agents.first?.deviceID,
+           !resolvedDeviceID.isEmpty {
+            try? pairing.updateDaemonDeviceID(resolvedDeviceID)
         }
         if agentAccessRepo == nil {
             agentAccessRepo = try? SupabaseAgentAccessRepository()
