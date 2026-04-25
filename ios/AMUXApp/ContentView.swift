@@ -165,4 +165,5 @@ private actor FailingOnboardingStore: AppOnboardingStore {
     func signInWithAppleCredential(idToken: String, nonce: String) async throws { throw error }
     func signInWithGoogle() async throws { throw error }
     func handleAuthCallback(url: URL) async throws { throw error }
+    func accessToken() async throws -> String { throw error }
 }

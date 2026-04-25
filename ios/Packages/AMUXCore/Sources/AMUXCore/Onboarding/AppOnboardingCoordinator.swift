@@ -73,6 +73,7 @@ public protocol AppOnboardingStore: Sendable {
     func signInWithAppleCredential(idToken: String, nonce: String) async throws
     func signInWithGoogle() async throws
     func handleAuthCallback(url: URL) async throws
+    func accessToken() async throws -> String
 }
 
 @Observable
@@ -180,6 +181,10 @@ public final class AppOnboardingCoordinator {
 
     public func signInWithGoogle() async {
         await performAuth { try await self.store.signInWithGoogle() }
+    }
+
+    public func accessToken() async throws -> String {
+        try await store.accessToken()
     }
 
     public func handleAuthCallback(url: URL) async {

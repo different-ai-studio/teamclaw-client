@@ -215,6 +215,10 @@ public actor SupabaseAppOnboardingStore: AppOnboardingStore {
     public func handleAuthCallback(url: URL) async throws {
         _ = try await client.auth.session(from: url)
     }
+
+    public func accessToken() async throws -> String {
+        try await client.auth.session.accessToken
+    }
 }
 
 private struct MemberRow: Decodable, Sendable {
