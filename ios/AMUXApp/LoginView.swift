@@ -33,12 +33,14 @@ struct LoginView: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
                         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+                        .accessibilityIdentifier("login.emailField")
 
                     SecureField("Password", text: $password)
                         .textContentType(mode == .signIn ? .password : .newPassword)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
                         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+                        .accessibilityIdentifier("login.passwordField")
                 }
 
                 if let err = coordinator.errorMessage {
@@ -66,6 +68,7 @@ struct LoginView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(coordinator.isBusy || email.isEmpty || password.isEmpty)
+                .accessibilityIdentifier("login.submitButton")
 
                 // Toggle sign in / sign up
                 Button(mode == .signIn ? "Don't have an account? Create one" : "Already have an account? Sign in") {
@@ -74,6 +77,7 @@ struct LoginView: View {
                 }
                 .font(.footnote)
                 .frame(maxWidth: .infinity)
+                .accessibilityIdentifier("login.toggleModeButton")
 
                 // Divider
                 HStack {

@@ -36,6 +36,7 @@ struct WelcomeView: View {
                 .buttonStyle(.borderedProminent)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 48)
+                .accessibilityIdentifier("welcome.getStartedButton")
             }
             .navigationDestination(isPresented: $showLogin) {
                 LoginView(coordinator: coordinator)
