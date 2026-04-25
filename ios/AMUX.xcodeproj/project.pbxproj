@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		10E560BDB3C439BFC2808E85 /* AMUXUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C07BD2A492D93FDCCB10637D /* AMUXUITests.swift */; };
 		15AE54E5F6CE826C9D3884B5 /* AMUXCore in Frameworks */ = {isa = PBXBuildFile; productRef = E240150FE27A7C45F36DE38D /* AMUXCore */; };
 		16C83AF390462FDDFA5ABAEE /* AMUXApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 499D508CBB7FB4FD1F584D9D /* AMUXApp.swift */; };
 		29C3F045A406DBA4AD7D1F32 /* OnboardingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A57443CB6DA7A01B751BBA00 /* OnboardingViews.swift */; };
@@ -29,6 +30,8 @@
 		92EC5FA726FD730FCA929AD0 /* AMUX.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AMUX.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A57443CB6DA7A01B751BBA00 /* OnboardingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingViews.swift; sourceTree = "<group>"; };
 		AA5C333674232A156EF5A6D1 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		B26E4EC39A79E60BACC23B33 /* AMUXUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AMUXUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C07BD2A492D93FDCCB10637D /* AMUXUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AMUXUITests.swift; sourceTree = "<group>"; };
 		F467BD534BE686B6EACBD702 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		FDEFC0BF7C8A215582AF7257 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -48,10 +51,19 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		334DCAF382DCB0E595087C5F /* AMUXUITests */ = {
+			isa = PBXGroup;
+			children = (
+				C07BD2A492D93FDCCB10637D /* AMUXUITests.swift */,
+			);
+			path = AMUXUITests;
+			sourceTree = "<group>";
+		};
 		83793258F8E10835639EAA01 = {
 			isa = PBXGroup;
 			children = (
 				DE118744A87DC657033FEE83 /* AMUXApp */,
+				334DCAF382DCB0E595087C5F /* AMUXUITests */,
 				F3F3AE62103A736D5640947B /* Packages */,
 				963A4419258D8363CB0E797F /* Products */,
 			);
@@ -61,6 +73,7 @@
 			isa = PBXGroup;
 			children = (
 				92EC5FA726FD730FCA929AD0 /* AMUX.app */,
+				B26E4EC39A79E60BACC23B33 /* AMUXUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -115,6 +128,23 @@
 			productReference = 92EC5FA726FD730FCA929AD0 /* AMUX.app */;
 			productType = "com.apple.product-type.application";
 		};
+		95B89C84C28FD2B5C770C9CD /* AMUXUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B9AF2FA3A02B0144B1983184 /* Build configuration list for PBXNativeTarget "AMUXUITests" */;
+			buildPhases = (
+				9236A1FFDE3DE4D2E2430A38 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AMUXUITests;
+			packageProductDependencies = (
+			);
+			productName = AMUXUITests;
+			productReference = B26E4EC39A79E60BACC23B33 /* AMUXUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -126,6 +156,10 @@
 				TargetAttributes = {
 					88EBDC80E588A3914F746958 = {
 						DevelopmentTeam = 43G5A6G9QV;
+					};
+					95B89C84C28FD2B5C770C9CD = {
+						DevelopmentTeam = 43G5A6G9QV;
+						TestTargetID = 88EBDC80E588A3914F746958;
 					};
 				};
 			};
@@ -150,6 +184,7 @@
 			projectRoot = "";
 			targets = (
 				88EBDC80E588A3914F746958 /* AMUX */,
+				95B89C84C28FD2B5C770C9CD /* AMUXUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -175,6 +210,14 @@
 				EC3990515ABE38A90617C32E /* LoginView.swift in Sources */,
 				29C3F045A406DBA4AD7D1F32 /* OnboardingViews.swift in Sources */,
 				E162A3FC8793994442C23372 /* WelcomeView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9236A1FFDE3DE4D2E2430A38 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				10E560BDB3C439BFC2808E85 /* AMUXUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -277,6 +320,42 @@
 			};
 			name = Debug;
 		};
+		AF5BBA59AEF13AF33DF324DD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = 43G5A6G9QV;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = tech.teamclaw.mobile.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = AMUX;
+			};
+			name = Release;
+		};
+		D35A66B38C4E530AC328810F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = 43G5A6G9QV;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = tech.teamclaw.mobile.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = AMUX;
+			};
+			name = Debug;
+		};
 		F01C4BD30A608FD31F758A76 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -348,6 +427,15 @@
 			buildConfigurations = (
 				695700892E6C371673F78B5E /* Debug */,
 				53CB5489784828B4A38F152A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B9AF2FA3A02B0144B1983184 /* Build configuration list for PBXNativeTarget "AMUXUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D35A66B38C4E530AC328810F /* Debug */,
+				AF5BBA59AEF13AF33DF324DD /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

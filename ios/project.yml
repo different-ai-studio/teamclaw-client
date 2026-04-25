@@ -36,3 +36,15 @@ targets:
         MARKETING_VERSION: "1.0.6"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "5.10"
+
+  AMUXUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: AMUXUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: tech.teamclaw.mobile.uitests
+        DEVELOPMENT_TEAM: 43G5A6G9QV
+        SWIFT_VERSION: "5.10"
+        TEST_TARGET_NAME: AMUX
