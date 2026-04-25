@@ -993,6 +993,21 @@ impl SessionManager {
             .collect()
     }
 
+    /// Fan-out wrapper around `LivePublisher::publish_acp_event` for a single
+    /// session. Mirrors the `publish_agent_message` indirection so server.rs
+    /// can stay decoupled from the LivePublisher type.
+    pub async fn publish_agent_acp_event(
+        &self,
+        session_id: &str,
+        agent_actor_id: &str,
+        envelope: &crate::proto::amux::Envelope,
+    ) {
+        let _ = self
+            .live_publisher
+            .publish_acp_event(session_id, agent_actor_id, envelope)
+            .await;
+    }
+
     /// Publish an agent's output as a session message.
     ///
     /// `model` is the model id the agent was running on when it produced this

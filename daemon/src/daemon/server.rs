@@ -547,16 +547,20 @@ impl DaemonServer {
                     session.last_output_summary = summary;
                     let _ = self.sessions.save(&self.sessions_path);
                 }
-                // Publish completed output to collab sessions this agent participates in
+                // Publish completed output to collab sessions this agent participates in.
+                // sessions_for_agent and publish_agent_message both want the daemon's
+                // Supabase actor_id (UUID) — the per-spawn 8-char `agent_id` we use as the
+                // RuntimeManager key never appears in collab session participant rows.
                 if let Some(tc) = &self.teamclaw {
-                    let collab_sessions = tc.sessions_for_agent(agent_id);
+                    let actor_id = self.actor_id.clone();
+                    let collab_sessions = tc.sessions_for_agent(&actor_id);
                     // Safe to read current_model here: the daemon event loop is single-threaded and
                     // check_agent_busy prevents prompt overlap, so no SetModel can interleave between
                     // the agent's reply and this lookup. If those invariants change, capture the model
                     // at prompt arrival on the AcpEvent instead.
                     let model = self.agents.current_model(agent_id).cloned().unwrap_or_default();
                     for sid in &collab_sessions {
-                        tc.publish_agent_message(sid, agent_id, &output.text, &model).await;
+                        tc.publish_agent_message(sid, &actor_id, &output.text, &model).await;
                     }
                 }
             }
@@ -607,9 +611,32 @@ impl DaemonServer {
         if !is_ambient {
             self.history.append(agent_id, &envelope);
         }
-        let publisher = Publisher::new(&self.mqtt);
-        if let Err(e) = publisher.publish_runtime_event(agent_id, &envelope).await {
-            warn!(agent_id, "failed to publish agent event: {}", e);
+        // Fan out to session/{sid}/live for every session this agent
+        // participates in. Replaces the legacy runtime/{r}/events topic which
+        // required iOS to know the daemon's device_id and the spawn-time
+        // runtime_id — now iOS subscribes by session_id (which it owns).
+        // Untracked agents (e.g. ambient pre-session events) fall back to the
+        // legacy per-runtime topic so the event isn't dropped on the floor.
+        if let Some(tc) = &self.teamclaw {
+            // Use the daemon's Supabase actor_id (not the per-spawn 8-char agent_id)
+            // because session participants store Supabase agent UUIDs.
+            let actor_id = self.actor_id.clone();
+            let sessions = tc.sessions_for_agent(&actor_id);
+            if sessions.is_empty() {
+                let publisher = Publisher::new(&self.mqtt);
+                if let Err(e) = publisher.publish_runtime_event(agent_id, &envelope).await {
+                    warn!(agent_id, "failed to publish agent event (legacy fallback): {}", e);
+                }
+            } else {
+                for sid in &sessions {
+                    tc.publish_agent_acp_event(sid, &actor_id, &envelope).await;
+                }
+            }
+        } else {
+            let publisher = Publisher::new(&self.mqtt);
+            if let Err(e) = publisher.publish_runtime_event(agent_id, &envelope).await {
+                warn!(agent_id, "failed to publish agent event (no teamclaw): {}", e);
+            }
         }
     }
 

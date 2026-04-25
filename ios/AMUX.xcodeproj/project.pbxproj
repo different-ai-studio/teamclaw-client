@@ -21,10 +21,12 @@
 		E162A3FC8793994442C23372 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA5C333674232A156EF5A6D1 /* WelcomeView.swift */; };
 		EB09506708CCBE1B923FBFAE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 25D67C6EB2C2948CCFE684D1 /* Assets.xcassets */; };
 		EC3990515ABE38A90617C32E /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 514F7615E8C226A5F3660A5F /* LoginView.swift */; };
+		F4C758D14EA8FC4DFFD453E8 /* AMUXSessionLiveDiagTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2304BE28BB84D7C798F28A65 /* AMUXSessionLiveDiagTest.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		08132EB197A0E82A4E7F3C97 /* ChooseAuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChooseAuthView.swift; sourceTree = "<group>"; };
+		2304BE28BB84D7C798F28A65 /* AMUXSessionLiveDiagTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AMUXSessionLiveDiagTest.swift; sourceTree = "<group>"; };
 		25D67C6EB2C2948CCFE684D1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		278531282E6CC92737596EAF /* AMUXCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AMUXCore; path = Packages/AMUXCore; sourceTree = SOURCE_ROOT; };
 		499D508CBB7FB4FD1F584D9D /* AMUXApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AMUXApp.swift; sourceTree = "<group>"; };
@@ -61,6 +63,7 @@
 			isa = PBXGroup;
 			children = (
 				E16412C0DABEF538623C6257 /* AMUXAuthUITests.swift */,
+				2304BE28BB84D7C798F28A65 /* AMUXSessionLiveDiagTest.swift */,
 				7089CE9863C2F15703551691 /* AMUXSessionStreamingUITests.swift */,
 				C07BD2A492D93FDCCB10637D /* AMUXUITests.swift */,
 			);
@@ -228,6 +231,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A77EC78143196C418FE87C82 /* AMUXAuthUITests.swift in Sources */,
+				F4C758D14EA8FC4DFFD453E8 /* AMUXSessionLiveDiagTest.swift in Sources */,
 				4553E608B533CD245A887A39 /* AMUXSessionStreamingUITests.swift in Sources */,
 				10E560BDB3C439BFC2808E85 /* AMUXUITests.swift in Sources */,
 			);

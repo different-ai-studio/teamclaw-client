@@ -3,6 +3,7 @@ use prost::Message;
 use rumqttc::{AsyncClient, QoS};
 use uuid::Uuid;
 
+use crate::proto::amux::Envelope as AmuxEnvelope;
 use crate::proto::teamclaw::{LiveEventEnvelope, Participant, SessionMessageEnvelope, TaskEvent};
 use crate::mqtt::Topics;
 
@@ -42,6 +43,22 @@ impl LivePublisher {
         event: &TaskEvent,
     ) -> crate::error::Result<()> {
         self.publish(event_type, session_id, actor_id, event.encode_to_vec())
+            .await
+    }
+
+    /// Publishes an ACP `Envelope` (output deltas, thinking, tool_use, etc.)
+    /// to the session/{id}/live channel. Wraps the envelope bytes inside a
+    /// `LiveEventEnvelope` with `event_type = "acp.event"`. iOS subscribes by
+    /// session_id (which it owns), so this replaces the legacy per-runtime
+    /// `runtime/{id}/events` topic that required iOS to know the daemon's
+    /// device_id and the daemon-generated runtime_id.
+    pub async fn publish_acp_event(
+        &self,
+        session_id: &str,
+        actor_id: &str,
+        envelope: &AmuxEnvelope,
+    ) -> crate::error::Result<()> {
+        self.publish("acp.event", session_id, actor_id, envelope.encode_to_vec())
             .await
     }
 
