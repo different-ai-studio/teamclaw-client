@@ -211,8 +211,11 @@ impl DaemonServer {
                         break;
                     }
                     Ok(_) => {}
-                    Err(rumqttc::ConnectionError::ConnectionRefused(_)) => {
-                        warn!("MQTT connection refused during connect, refreshing token");
+                    Err(rumqttc::ConnectionError::ConnectionRefused(code)) => {
+                        warn!(
+                            reason = ?code,
+                            "MQTT connection refused during connect, refreshing token"
+                        );
                         tokio::time::sleep(Duration::from_secs(3)).await;
                         continue 'outer;
                     }
@@ -285,8 +288,8 @@ impl DaemonServer {
                         }
                     }
                     // EMQX rejected connection (JWT expired).
-                    Ok(Err(rumqttc::ConnectionError::ConnectionRefused(_))) => {
-                        warn!("MQTT connection refused (token expired), reconnecting");
+                    Ok(Err(rumqttc::ConnectionError::ConnectionRefused(code))) => {
+                        warn!(reason = ?code, "MQTT connection refused (token expired), reconnecting");
                         break; // outer loop gets fresh token
                     }
                     Ok(Err(e)) => {
