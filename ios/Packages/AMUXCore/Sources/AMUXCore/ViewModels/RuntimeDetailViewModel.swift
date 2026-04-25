@@ -266,7 +266,21 @@ public final class RuntimeDetailViewModel {
 
         recomputeGroups()
 
-        let eventsTopic = MQTTTopics.runtimeEvents(teamID: teamID, deviceID: deviceId, runtimeID: runtimeId)
+        // Two subscription paths:
+        //   - Session-backed (the modern flow): subscribe to
+        //     `amux/{team}/session/{sid}/live` and decode `Amux_Envelope` out
+        //     of LiveEventEnvelope bodies tagged `event_type = "acp.event"`.
+        //     iOS owns the session_id so this avoids the deviceId/runtimeId
+        //     resolution dance that the legacy runtime/{r}/events path needed.
+        //   - Runtime-only (legacy fallback): subscribe to
+        //     `runtime/{r}/events` directly and decode raw envelopes. This
+        //     path stays for now because TasksTab/SessionsTab still create
+        //     RuntimeDetailView from a Runtime row without a Session.
+        let sessionLiveTopic: String? = session.map {
+            MQTTTopics.sessionLive(teamID: teamID, sessionID: $0.sessionId)
+        }
+        let runtimeEventsTopic = MQTTTopics.runtimeEvents(teamID: teamID, deviceID: deviceId, runtimeID: runtimeId)
+        let subscribeTopic = sessionLiveTopic ?? runtimeEventsTopic
         task = Task {
             // Outer loop: each iteration represents a fresh MQTT connection lifecycle.
             // When the inner stream finishes (e.g. after disconnect clears continuations),
@@ -280,16 +294,24 @@ public final class RuntimeDetailViewModel {
                 }
 
                 let stream = mqtt.messages()
-                try? await mqtt.subscribe(eventsTopic)
-                print("[RuntimeDetailVM] subscribed to \(eventsTopic)")
+                try? await mqtt.subscribe(subscribeTopic)
+                print("[RuntimeDetailVM] subscribed to \(subscribeTopic)")
 
                 // Pull any events we missed while disconnected (no-op on first
                 // connect if local cache is empty and daemon has nothing newer).
                 try? await requestIncrementalSync(modelContext: modelContext)
 
                 for await msg in stream {
-                    guard msg.topic == eventsTopic else { continue }
-                    guard let envelope = try? ProtoMQTTCoder.decode(Amux_Envelope.self, from: msg.payload) else { continue }
+                    guard msg.topic == subscribeTopic else { continue }
+                    let envelope: Amux_Envelope?
+                    if sessionLiveTopic != nil {
+                        guard let live = try? Teamclaw_LiveEventEnvelope(serializedBytes: msg.payload),
+                              live.eventType == "acp.event" else { continue }
+                        envelope = try? Amux_Envelope(serializedBytes: live.body)
+                    } else {
+                        envelope = try? Amux_Envelope(serializedBytes: msg.payload)
+                    }
+                    guard let envelope else { continue }
                     handleEnvelope(envelope, modelContext: modelContext)
                 }
                 // Stream finished — connection likely dropped. Loop and resubscribe.

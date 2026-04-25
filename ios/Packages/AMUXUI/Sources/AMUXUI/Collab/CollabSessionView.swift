@@ -99,6 +99,7 @@ public struct SessionView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .liquidGlass(in: Capsule())
+                .accessibilityIdentifier("collab.messageField")
 
             Button {
                 viewModel.sendMessage(promptText)
@@ -112,6 +113,7 @@ public struct SessionView: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("collab.sendButton")
             .liquidGlass(in: Circle())
             .disabled(!canSend)
             .opacity(canSend ? 1 : 0.4)

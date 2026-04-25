@@ -48,6 +48,7 @@ public struct ChatInputBar: View {
                 Image(systemName: "square.and.pencil")
                     .font(.title2)
             }
+            .accessibilityIdentifier("chatInput.compose")
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
@@ -89,6 +90,7 @@ public struct ChatInputBar: View {
                     .padding(.vertical, 10)
                     .disabled(isDisabled)
                     .focused($isInputFocused)
+                    .accessibilityIdentifier("chatInput.textField")
 
                     if showActionButton {
                         actionButton
@@ -133,6 +135,7 @@ public struct ChatInputBar: View {
                 .background(canSend ? Color.blue : Color.secondary, in: Circle())
         }
         .disabled(!canSend)
+        .accessibilityIdentifier("chatInput.send")
     }
 
     private var canSend: Bool {

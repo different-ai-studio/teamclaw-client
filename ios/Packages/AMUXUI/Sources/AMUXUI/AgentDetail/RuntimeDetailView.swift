@@ -261,8 +261,10 @@ public struct RuntimeDetailView: View {
                         }
                         if viewModel.isActive {
                             Button { Task { try? await viewModel.cancelTask() } } label: { Image(systemName: "stop.fill").font(.title3) }
+                                .accessibilityIdentifier("runtime.stopButton")
                         } else {
                             Button { showReplySheet = true } label: { Image(systemName: "arrowshape.turn.up.left").font(.title3) }
+                                .accessibilityIdentifier("runtime.replyButton")
                         }
                     }
                     .foregroundStyle(.primary)
@@ -459,6 +461,7 @@ private struct ReplySheet: View {
                         .scrollContentBackground(.hidden)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
+                        .accessibilityIdentifier("reply.textEditor")
                         .overlay(alignment: .topLeading) {
                             if text.isEmpty {
                                 Text("Send a message…")
@@ -581,6 +584,7 @@ private struct ReplySheet: View {
                     .disabled(!canSend)
                     .opacity(canSend ? 1 : 0.4)
                     .animation(.easeInOut(duration: 0.15), value: hasPendingSlashCommand)
+                    .accessibilityIdentifier("reply.sendButton")
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
