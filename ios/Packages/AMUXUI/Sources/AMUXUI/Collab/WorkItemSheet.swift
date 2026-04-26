@@ -55,9 +55,9 @@ struct CreateTaskSheet: View {
         NavigationStack {
             Form {
                 Section("Title") {
-                    TextField("Ship task", text: $title)
+                    TextField("Ship task", text: $title, axis: .vertical)
                         .focused($titleFocused)
-                        .onSubmit { save() }
+                        .lineLimit(2...5)
                 }
 
                 if let errorMessage = taskStore.errorMessage {
@@ -137,7 +137,8 @@ struct EditTaskSheet: View {
         NavigationStack {
             Form {
                 Section("Title") {
-                    TextField("Task title", text: $title)
+                    TextField("Task title", text: $title, axis: .vertical)
+                        .lineLimit(2...5)
                 }
 
                 Section("Description") {
