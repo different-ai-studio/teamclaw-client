@@ -49,3 +49,15 @@ targets:
         SWIFT_VERSION: "5.10"
         TEST_TARGET_NAME: AMUX
         GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  AMUXUITests:
+    build:
+      targets:
+        AMUXUITests: test
+    test:
+      targets:
+        - AMUXUITests
+      environmentVariables:
+        AMUX_TEST_EMAIL: $(AMUX_TEST_EMAIL)
+        AMUX_TEST_PASSWORD: $(AMUX_TEST_PASSWORD)

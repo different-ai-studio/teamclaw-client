@@ -112,6 +112,90 @@ final class AMUXAuthUITests: XCTestCase {
         assertMQTTConnected()
     }
 
+    // MARK: - Daemon invite link
+
+    /// Verifies the full daemon-invite flow: Actors tab → Invite sheet → Agent kind →
+    /// backend creates the invite → deeplink is displayed and copyable.
+    /// Requires auth credentials (same as testSignInAndMQTTConnects).
+    @MainActor
+    func testDaemonInviteLinkGenerated() throws {
+        try XCTSkipIf(testEmail.isEmpty || testPassword.isEmpty,
+                      "Set AMUX_TEST_EMAIL and AMUX_TEST_PASSWORD to run this test")
+
+        // Reach the main UI (sign in if needed).
+        if !app.tabBars.buttons["Actors"].waitForExistence(timeout: 6) {
+            let getStarted = app.buttons["welcome.getStartedButton"]
+            XCTAssertTrue(getStarted.waitForExistence(timeout: 6))
+            getStarted.tap()
+
+            let emailField = app.textFields["login.emailField"]
+            XCTAssertTrue(emailField.waitForExistence(timeout: 5))
+            emailField.tap()
+            emailField.typeText(testEmail)
+
+            let passwordField = app.secureTextFields["login.passwordField"]
+            passwordField.tap()
+            passwordField.typeText(testPassword)
+
+            app.buttons["login.submitButton"].tap()
+
+            XCTAssertTrue(app.tabBars.buttons["Actors"].waitForExistence(timeout: 20),
+                          "Actors tab should appear after sign-in")
+        }
+
+        // Navigate to Actors tab.
+        app.tabBars.buttons["Actors"].tap()
+
+        // Open the invite sheet. In iOS 26, ToolbarItem buttons use the SF Symbol name as
+        // their XCUITest identifier regardless of .accessibilityIdentifier modifiers.
+        let inviteButton = app.navigationBars["Actors"].buttons["person.badge.plus"]
+        XCTAssertTrue(inviteButton.waitForExistence(timeout: 15),
+                      "Invite button not found\n\(app.debugDescription)")
+        inviteButton.tap()
+
+        // Switch kind to "Agent". Picker(.segmented) doesn't propagate identifiers in iOS 26,
+        // so find the segmented control by type and tap the "Agent" segment by label.
+        let kindPicker = app.segmentedControls.firstMatch
+        XCTAssertTrue(kindPicker.waitForExistence(timeout: 5),
+                      "Kind picker should appear in invite sheet\n\(app.debugDescription)")
+        kindPicker.buttons["Agent"].tap()
+
+        // Enter a name for the daemon. TextField identifiers don't propagate in Form
+        // sections on iOS 26, so find by type (there is only one text field in the sheet).
+        let nameField = app.textFields.firstMatch
+        XCTAssertTrue(nameField.waitForExistence(timeout: 3))
+        nameField.tap()
+        nameField.typeText("TestDaemon")
+
+        // Tap Invite — toolbar button accessible via nav bar label.
+        let inviteNavBar = app.navigationBars["Invite"]
+        let submitButton = inviteNavBar.buttons["Invite"]
+        XCTAssertTrue(submitButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(submitButton.isEnabled, "Invite button should be enabled after entering a name")
+        submitButton.tap()
+
+        // Wait for the deeplink to appear (backend round-trip).
+        // staticText identifier doesn't propagate through Form/SwiftUI in iOS 26,
+        // so match by label prefix instead.
+        let deeplinkPredicate = NSPredicate(format: "label BEGINSWITH 'amux://'")
+        let deeplinkText = app.staticTexts.matching(deeplinkPredicate).firstMatch
+        XCTAssertTrue(deeplinkText.waitForExistence(timeout: 15),
+                      "Deeplink should appear after invite is created\n\(app.debugDescription)")
+
+        XCTAssertTrue(deeplinkText.label.hasPrefix("amux://"),
+                      "Deeplink should use amux:// scheme, got: \(deeplinkText.label)")
+
+        // Tap Copy link (no assertion — pasteboard is not readable in UI tests).
+        let copyButton = app.buttons["Copy link"]
+        XCTAssertTrue(copyButton.waitForExistence(timeout: 3))
+        copyButton.tap()
+
+        // Dismiss via Done button.
+        let doneButton = inviteNavBar.buttons["Done"]
+        XCTAssertTrue(doneButton.waitForExistence(timeout: 3))
+        doneButton.tap()
+    }
+
     // MARK: - Helpers
 
     /// Asserts the app is connected to MQTT by verifying the New Session button is present.

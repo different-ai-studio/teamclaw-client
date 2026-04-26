@@ -35,8 +35,11 @@ public struct MemberInviteSheet: View {
                     }
                     .pickerStyle(.segmented)
                     .disabled(invite != nil)
+                    .accessibilityIdentifier("invite.kindPicker")
 
-                    TextField("Name", text: $name).disabled(invite != nil)
+                    TextField("Name", text: $name)
+                        .disabled(invite != nil)
+                        .accessibilityIdentifier("invite.nameField")
 
                     if kind == .member {
                         Picker("Role", selection: $teamRole) {
@@ -58,14 +61,17 @@ public struct MemberInviteSheet: View {
                     Section("Share invite") {
                         Text(invite.deeplink).font(.footnote)
                             .textSelection(.enabled).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("invite.deeplinkText")
                         ShareLink(item: invite.deeplink) {
                             Label("Share link", systemImage: "square.and.arrow.up")
                         }
+                        .accessibilityIdentifier("invite.shareLinkButton")
                         Button {
                             UIPasteboard.general.string = invite.deeplink
                         } label: {
                             Label("Copy link", systemImage: "doc.on.doc")
                         }
+                        .accessibilityIdentifier("invite.copyLinkButton")
                         LabeledContent("Expires",
                                        value: invite.expiresAt.formatted(date: .abbreviated, time: .shortened))
                             .font(.caption)
@@ -83,6 +89,7 @@ public struct MemberInviteSheet: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if invite != nil {
                         Button { reset(); dismiss() } label: { Text("Done") }
+                            .accessibilityIdentifier("invite.doneButton")
                     } else {
                         Button { run() } label: {
                             HStack(spacing: 6) {
@@ -92,6 +99,7 @@ public struct MemberInviteSheet: View {
                         }
                         .disabled(!canInvite)
                         .opacity(canInvite ? 1 : 0.4)
+                        .accessibilityIdentifier("invite.submitButton")
                     }
                 }
             }
