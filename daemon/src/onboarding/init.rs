@@ -65,6 +65,7 @@ pub async fn run(raw_url: &str, config_path: Option<&Path>) -> SupabaseResult<In
         existing_daemon_cfg,
         &claim.display_name,
         &claim.team_id,
+        &claim.actor_id,
         &invite,
     );
     daemon_cfg.save(&daemon_path).map_err(|e| {
@@ -79,10 +80,10 @@ pub async fn run(raw_url: &str, config_path: Option<&Path>) -> SupabaseResult<In
     })
 }
 
-fn default_daemon_config(display_name: &str) -> DaemonConfig {
+fn default_daemon_config(display_name: &str, actor_id: &str) -> DaemonConfig {
     DaemonConfig {
         device: DeviceConfig {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: actor_id.to_string(),
             name: display_name.to_string(),
         },
         mqtt: MqttConfig {
@@ -97,9 +98,14 @@ fn daemon_config_for_invite(
     existing: Option<DaemonConfig>,
     display_name: &str,
     team_id: &str,
+    actor_id: &str,
     invite: &ParsedInvite,
 ) -> DaemonConfig {
-    let mut daemon_cfg = existing.unwrap_or_else(|| default_daemon_config(display_name));
+    let mut daemon_cfg = existing.unwrap_or_else(|| default_daemon_config(display_name, actor_id));
+    // device.id must equal actor_id — the Supabase access-token hook embeds
+    // ACL rules under `amux/{team}/device/{actor_id}/...`, so any other
+    // value makes EMQX reject the daemon's CONNECT (LWT topic denied).
+    daemon_cfg.device.id = actor_id.to_string();
     daemon_cfg.team_id = Some(team_id.to_string());
     daemon_cfg.mqtt.broker_url = invite
         .broker_url
@@ -118,12 +124,14 @@ mod tests {
             None,
             "macmini-5",
             "team-1",
+            "actor-1",
             &ParsedInvite {
                 token: "tok".into(),
                 broker_url: Some("mqtts://broker.example.com:8883".into()),
             },
         );
         assert_eq!(cfg.team_id.as_deref(), Some("team-1"));
+        assert_eq!(cfg.device.id, "actor-1");
         assert_eq!(cfg.device.name, "macmini-5");
         assert_eq!(cfg.mqtt.broker_url, "mqtts://broker.example.com:8883");
     }
@@ -134,6 +142,7 @@ mod tests {
             None,
             "macmini-5",
             "team-1",
+            "actor-1",
             &ParsedInvite {
                 token: "tok".into(),
                 broker_url: None,
@@ -143,11 +152,14 @@ mod tests {
     }
 
     #[test]
-    fn existing_device_identity_is_preserved() {
+    fn existing_device_id_is_replaced_with_actor_id() {
+        // device.id MUST equal actor_id — EMQX rejects any other value
+        // because the JWT ACL is keyed on actor_id. Re-init with a
+        // different actor must overwrite a stale device.id.
         let cfg = daemon_config_for_invite(
             Some(DaemonConfig {
                 device: DeviceConfig {
-                    id: "device-123".into(),
+                    id: "stale-device-uuid".into(),
                     name: "existing-device".into(),
                 },
                 mqtt: MqttConfig {
@@ -158,12 +170,13 @@ mod tests {
             }),
             "new-display-name",
             "team-2",
+            "actor-2",
             &ParsedInvite {
                 token: "tok".into(),
                 broker_url: Some("mqtts://broker.example.com:8883".into()),
             },
         );
-        assert_eq!(cfg.device.id, "device-123");
+        assert_eq!(cfg.device.id, "actor-2");
         assert_eq!(cfg.device.name, "existing-device");
         assert_eq!(cfg.team_id.as_deref(), Some("team-2"));
         assert_eq!(cfg.mqtt.broker_url, "mqtts://broker.example.com:8883");
