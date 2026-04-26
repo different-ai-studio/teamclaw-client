@@ -45,3 +45,6 @@ mac/AMUXMac.xcodeproj/
 ios/build/
 mac/build/
 
+# XcodeGen-regenerated schemes (defined in ios/project.yml)
+ios/AMUX.xcodeproj/xcshareddata/
+
