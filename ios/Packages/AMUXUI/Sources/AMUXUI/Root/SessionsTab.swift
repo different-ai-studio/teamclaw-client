@@ -14,6 +14,7 @@ public struct SessionsTab: View {
     @Bindable var viewModel: SessionListViewModel
     let refreshSessionsFromBackend: () async -> Void
     let connectedAgentsStore: ConnectedAgentsStore?
+    let actorStore: ActorStore?
     var onReconnect: (() -> Void)?
     var onSignOut: (() -> Void)?
 
@@ -21,6 +22,7 @@ public struct SessionsTab: View {
 
     @State private var showSettings = false
     @State private var showNewSession = false
+    @State private var showInvite = false
     @Binding var navigationPath: [String]
 
     @State private var isEditing = false
@@ -37,6 +39,7 @@ public struct SessionsTab: View {
                 refreshSessionsFromBackend: @escaping () async -> Void,
                 navigationPath: Binding<[String]>,
                 connectedAgentsStore: ConnectedAgentsStore? = nil,
+                actorStore: ActorStore? = nil,
                 onReconnect: (() -> Void)? = nil,
                 onSignOut: (() -> Void)? = nil) {
         self.mqtt = mqtt
@@ -48,6 +51,7 @@ public struct SessionsTab: View {
         self.refreshSessionsFromBackend = refreshSessionsFromBackend
         self._navigationPath = navigationPath
         self.connectedAgentsStore = connectedAgentsStore
+        self.actorStore = actorStore
         self.onReconnect = onReconnect
         self.onSignOut = onSignOut
     }
@@ -61,7 +65,9 @@ public struct SessionsTab: View {
                 isEditing: $isEditing,
                 selectedIDs: $selectedIDs,
                 teamclawService: teamclawService,
-                actorId: "ios-\(pairing.authToken.prefix(6))"
+                actorId: "ios-\(pairing.authToken.prefix(6))",
+                noAccessibleAgent: connectedAgentsStore?.agents.isEmpty == true,
+                onInviteFirstAgent: actorStore == nil ? nil : { showInvite = true }
             )
             .navigationTitle("Sessions")
             .navigationBarTitleDisplayMode(.large)
@@ -124,6 +130,11 @@ public struct SessionsTab: View {
                     navigationPath = [agentId]
                 }
                 .modifier(ZoomTransitionModifier(sourceID: "newSession", namespace: sheetTransition))
+            }
+            .sheet(isPresented: $showInvite) {
+                if let actorStore {
+                    MemberInviteSheet(store: actorStore)
+                }
             }
             .task {
                 viewModel.start(

@@ -71,8 +71,9 @@ public struct MemberListContent: View {
                     if showOwnAgentNotice {
                         Section {
                             ownAgentNotice
-                                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                                 .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
                         }
                     }
                     ForEach(filtered, id: \.actorId) { a in
@@ -101,27 +102,22 @@ public struct MemberListContent: View {
         Button {
             onAddYourAgent?()
         } label: {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(spacing: 8) {
                 Image(systemName: "lightbulb")
-                    .font(.title3)
+                    .font(.footnote)
                     .foregroundStyle(.tint)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Add your own agent")
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(.primary)
-                    Text("You don't have access to any agent in this team yet. Invite one to start your own sessions.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                }
+                Text("Add your own agent")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.footnote)
+                    .font(.caption)
                     .foregroundStyle(.tertiary)
             }
-            .padding(14)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
             .background(
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: 10)
                     .fill(Color.accentColor.opacity(0.10))
             )
         }

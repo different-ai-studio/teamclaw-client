@@ -15,6 +15,12 @@ struct SessionListContent: View {
     @Binding var selectedIDs: Set<String>
     let teamclawService: TeamclawService?
     let actorId: String
+    /// True when the current user has zero accessible agents in this team.
+    /// The empty-state copy switches to an invite-first-agent CTA in that case.
+    let noAccessibleAgent: Bool
+    /// Tap handler for the empty-state CTA. Caller presents an invite sheet.
+    /// Pass nil to hide the action (e.g. when no ActorStore is available yet).
+    let onInviteFirstAgent: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
 
@@ -36,6 +42,23 @@ struct SessionListContent: View {
             } else if !hasContent {
                 if hasActiveSearch {
                     ContentUnavailableView.search(text: viewModel.searchText)
+                } else if noAccessibleAgent {
+                    ContentUnavailableView {
+                        Label("Invite your first agent", systemImage: "cpu")
+                    } description: {
+                        Text("You don't have access to any agent in this team yet. Invite one to start a session.")
+                    } actions: {
+                        Button {
+                            onInviteFirstAgent?()
+                        } label: {
+                            Text("Invite agent")
+                                .fontWeight(.semibold)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                        }
+                        .glassProminentButtonStyle()
+                        .accessibilityIdentifier("sessions.inviteFirstAgentButton")
+                    }
                 } else {
                     ContentUnavailableView("No Sessions", systemImage: "cpu",
                         description: Text("Start a new session to begin"))

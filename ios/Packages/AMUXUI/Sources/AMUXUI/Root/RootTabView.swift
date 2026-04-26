@@ -59,6 +59,7 @@ public struct RootTabView: View {
                             refreshSessionsFromBackend: refreshSessionsFromBackend,
                             navigationPath: $sessionsPath,
                             connectedAgentsStore: connectedAgentsStore,
+                            actorStore: actorStore,
                             onReconnect: onReconnect,
                             onSignOut: onSignOut)
             }
