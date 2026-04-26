@@ -66,6 +66,17 @@ public final class RuntimeDetailViewModel {
     public var participantCount: Int { session?.participantCount ?? 0 }
     public var hasRuntime: Bool { runtime != nil }
 
+    /// Bucket key for AgentEvent storage. Multiple sessions sharing a single
+    /// daemon agent identity (Runtime.runtimeId == daemon's Supabase actor_id
+    /// — see resolveRuntime) would otherwise collide their event histories
+    /// under one shared agentId, leaking session N-1's prompts/replies into
+    /// session N's view. When a session is in scope we key by session_id;
+    /// the legacy runtime-only path (no session) keeps using runtime.runtimeId.
+    private var eventScopeKey: String {
+        if let session, !session.sessionId.isEmpty { return session.sessionId }
+        return runtime?.runtimeId ?? ""
+    }
+
     public init(runtime: Runtime?, mqtt: MQTTService, teamID: String = "", deviceId: String, peerId: String, session: Session? = nil, teamclawService: TeamclawService? = nil) {
         self.runtime = runtime; self.mqtt = mqtt; self.deviceId = deviceId; self.teamID = teamID; self.peerId = peerId
         self.session = session; self.teamclawService = teamclawService
@@ -224,24 +235,25 @@ public final class RuntimeDetailViewModel {
 
         // Load cached events immediately (works offline)
         let runtimeId = runtime.runtimeId
+        let scope = eventScopeKey
         let descriptor = FetchDescriptor<AgentEvent>(
-            predicate: #Predicate { $0.agentId == runtimeId },
+            predicate: #Predicate { $0.agentId == scope },
             sortBy: [SortDescriptor(\.sequence)]
         )
         events = (try? modelContext.fetch(descriptor)) ?? []
         rebuildIndexes()
 
         // Insert initial prompt as first user bubble if not already present
-        let initialPrompt = if !runtime.currentPrompt.isEmpty {
-            runtime.currentPrompt
-        } else if let session, !session.summary.isEmpty {
+        let initialPrompt = if let session, !session.summary.isEmpty {
             session.summary
+        } else if !runtime.currentPrompt.isEmpty {
+            runtime.currentPrompt
         } else {
             ""
         }
 
         if !initialPrompt.isEmpty && !events.contains(where: { $0.eventType == "user_prompt" }) {
-            let promptEvent = AgentEvent(agentId: runtimeId, sequence: 0, eventType: "user_prompt")
+            let promptEvent = AgentEvent(agentId: scope, sequence: 0, eventType: "user_prompt")
             promptEvent.text = initialPrompt
             modelContext.insert(promptEvent)
             events.insert(promptEvent, at: 0)
@@ -326,9 +338,9 @@ public final class RuntimeDetailViewModel {
 
         // Flush any in-progress streaming text to a persisted event
         // so it's visible when the user returns
-        if isStreaming, !streamingText.isEmpty, let runtime, let ctx = startModelContext {
+        if isStreaming, !streamingText.isEmpty, runtime != nil, let ctx = startModelContext {
             let seq = (events.last?.sequence ?? 0) + 1
-            let event = AgentEvent(agentId: runtime.runtimeId, sequence: seq, eventType: "output")
+            let event = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "output")
             event.text = streamingText
             event.isComplete = false
             event.model = streamingModel
@@ -378,7 +390,7 @@ public final class RuntimeDetailViewModel {
                     if let modelStamp { events[idx].model = modelStamp }
                     lastIncompleteOutputIndex = nil
                 } else {
-                    let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "output")
+                    let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "output")
                     event.text = o.text; event.isComplete = true
                     event.model = modelStamp
                     modelContext.insert(event); appendEvent(event)
@@ -406,14 +418,14 @@ public final class RuntimeDetailViewModel {
                 last.text = (last.text ?? "") + t.text
                 if let modelStamp { last.model = modelStamp }
             } else {
-                let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "thinking")
+                let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "thinking")
                 event.text = t.text
                 event.model = modelStamp
                 modelContext.insert(event); appendEvent(event)
             }
             dirty = true
         case .toolUse(let tu):
-            let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "tool_use")
+            let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "tool_use")
             event.toolName = tu.toolName; event.toolId = tu.toolID; event.text = tu.description_p
             modelContext.insert(event); appendEvent(event)
             dirty = true
@@ -422,17 +434,17 @@ public final class RuntimeDetailViewModel {
                 events[idx].success = tr.success
                 events[idx].isComplete = true
             } else {
-                let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "tool_result")
+                let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "tool_result")
                 event.toolId = tr.toolID; event.success = tr.success; event.text = tr.summary
                 modelContext.insert(event); appendEvent(event)
             }
             dirty = true
         case .error(let e):
-            let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "error")
+            let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "error")
             event.text = e.message; modelContext.insert(event); appendEvent(event)
             dirty = true
         case .permissionRequest(let pr):
-            let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "permission_request")
+            let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "permission_request")
             event.toolName = pr.toolName; event.toolId = pr.requestID; event.text = pr.description_p
             modelContext.insert(event); appendEvent(event)
             dirty = true
@@ -449,7 +461,7 @@ public final class RuntimeDetailViewModel {
             if let idx = todoUpdateIndex, idx < events.count, events[idx].eventType == "todo_update" {
                 events[idx].text = text
             } else {
-                let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "todo_update")
+                let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "todo_update")
                 event.text = text
                 modelContext.insert(event); appendEvent(event)
             }
@@ -459,7 +471,7 @@ public final class RuntimeDetailViewModel {
             dirty = true
             if sc.newStatus == .idle {
                 if isStreaming && !streamingText.isEmpty {
-                    let event = AgentEvent(agentId: runtime!.runtimeId, sequence: sequence, eventType: "output")
+                    let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "output")
                     event.text = streamingText; event.isComplete = true
                     event.model = streamingModel
                     modelContext.insert(event); appendEvent(event)
@@ -504,7 +516,7 @@ public final class RuntimeDetailViewModel {
             // Confirmation: set runtime to active (triggers typing indicator)
             runtime?.status = Int(Amux_AgentStatus.active.rawValue)
         case .promptRejected(let pr):
-            let event = AgentEvent(agentId: runtime?.runtimeId ?? "", sequence: sequence, eventType: "error")
+            let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "error")
             event.text = "Rejected: \(pr.reason)"
             appendEvent(event)
             recomputeGroups()
@@ -605,10 +617,10 @@ public final class RuntimeDetailViewModel {
     }
 
     public func sendPrompt(_ text: String, modelId: String? = nil, modelContext: ModelContext? = nil) async throws {
-        if let runtime {
+        if runtime != nil {
             // Runtime session: send ACP command
             let seq = (events.last?.sequence ?? 0) + 1
-            let userEvent = AgentEvent(agentId: runtime.runtimeId, sequence: seq, eventType: "user_prompt")
+            let userEvent = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "user_prompt")
             userEvent.text = text
             if let ctx = modelContext ?? syncModelContext { ctx.insert(userEvent); try? ctx.save() }
             appendEvent(userEvent)
@@ -622,7 +634,7 @@ public final class RuntimeDetailViewModel {
         } else if let session, let teamclawService {
             // Shared session: add local bubble + send via TeamclawService
             let seq = (events.last?.sequence ?? 0) + 1
-            let userEvent = AgentEvent(agentId: session.sessionId, sequence: seq, eventType: "user_prompt")
+            let userEvent = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "user_prompt")
             userEvent.text = text
             if let ctx = modelContext ?? startModelContext { ctx.insert(userEvent); try? ctx.save() }
             appendEvent(userEvent)
