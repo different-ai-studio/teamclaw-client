@@ -241,10 +241,20 @@ private struct CollabSessionDestinationView: View {
                     .id("collab-agent:\(session.sessionId)")
                 }
             } else {
-                Text("Session not found")
-                    .task(id: sessionId) {
-                        await reloadSessionIfNeeded()
+                // Don't flash "Session not found" while SwiftData /
+                // Supabase round-trip is still in flight (e.g. right
+                // after navigating from NewSessionSheet). Only declare
+                // missing once we've actually attempted a refresh.
+                Group {
+                    if attemptedRefresh {
+                        Text("Session not found")
+                    } else {
+                        ProgressView()
                     }
+                }
+                .task(id: sessionId) {
+                    await reloadSessionIfNeeded()
+                }
             }
         }
         .task(id: sessionId) {

@@ -613,6 +613,10 @@ public struct NewSessionSheet: View {
         )
 
         Task {
+            // 1. Supabase create — must await (this is the failure surface
+            //    we report to the user). Once this succeeds, the session
+            //    truly exists for the team; later steps are best-effort
+            //    background work.
             do {
                 let repository = try SupabaseSessionRepository()
                 try await repository.createSession(
@@ -627,36 +631,51 @@ public struct NewSessionSheet: View {
                         participants: participantActors.map { SessionParticipantInput(actorID: $0.actorId) }
                     )
                 )
-
-                teamclawService?.subscribeToSession(sessionID)
-                await MainActor.run {
-                    let session = persistSession(info)
-                    session.primaryAgentId = primaryAgentID
-                    try? modelContext.save()
-                    viewModel.reloadSessions(modelContext: modelContext)
-                }
-
-                if let primaryAgentID, !primaryAgentID.isEmpty {
-                    _ = try await startAgentAndWaitForState(
-                        initialPrompt: text,
-                        sessionID: sessionID
-                    )
-                }
-                teamclawService?.sendMessage(sessionId: sessionID, content: text)
-
-                await MainActor.run {
-                    isSending = false
-                    newSessionLogger.info(
-                        "shared-session success destination=collab:\(sessionID, privacy: .public)"
-                    )
-                    onSessionCreated?("collab:\(sessionID)")
-                    dismiss()
-                }
             } catch {
                 await MainActor.run {
                     isSending = false
                     errorMessage = error.localizedDescription
                 }
+                return
+            }
+
+            // 2. iOS-local persist + subscribe so the SessionDetail view
+            //    can resolve the new Session model immediately.
+            teamclawService?.subscribeToSession(sessionID)
+            await MainActor.run {
+                let session = persistSession(info)
+                session.primaryAgentId = primaryAgentID
+                try? modelContext.save()
+                viewModel.reloadSessions(modelContext: modelContext)
+            }
+
+            // 3. Navigate immediately — don't make the user wait for ACP
+            //    init. The agent spawn + first message are kicked off
+            //    detached; the SessionDetail view streams ACP events as
+            //    they arrive.
+            await MainActor.run {
+                isSending = false
+                newSessionLogger.info(
+                    "shared-session success destination=collab:\(sessionID, privacy: .public)"
+                )
+                onSessionCreated?("collab:\(sessionID)")
+                dismiss()
+            }
+
+            // 4. Background: spawn the agent (waits for ACP init), then
+            //    publish the first user message on session/live.
+            //    `try?` swallows errors — they show up as the user not
+            //    seeing a reply, and the daemon log carries the real
+            //    cause. UI is already in SessionDetail, no error sheet to
+            //    surface to.
+            Task {
+                if let primaryAgentID, !primaryAgentID.isEmpty {
+                    _ = try? await startAgentAndWaitForState(
+                        initialPrompt: text,
+                        sessionID: sessionID
+                    )
+                }
+                teamclawService?.sendMessage(sessionId: sessionID, content: text)
             }
         }
     }
