@@ -445,10 +445,40 @@ public final class TeamclawService {
     ///   `send_prompt` when the model differs from the agent's current model.
     public func sendMessage(sessionId: String, content: String, modelId: String? = nil) {
         guard let mqtt else { return }
-        guard let actorId = currentHumanActorId else {
-            print("[TeamclawService] refusing to send session message before localMemberId resolves")
-            return
+        // The publish needs an actor_id but `localMemberId` may not have
+        // been resolved yet (the one-shot FetchPeers in `start()` raced
+        // with `connectedAgentsStore` populating). Push the resolution
+        // into an async retry so we don't drop the user's message.
+        Task {
+            let actorId: String
+            if let resolved = currentHumanActorId {
+                actorId = resolved
+            } else {
+                let peers = await fetchPeersAcrossDaemons()
+                syncPeers(peers)
+                guard let resolved = currentHumanActorId else {
+                    print("[TeamclawService] refusing to send session message before localMemberId resolves")
+                    return
+                }
+                actorId = resolved
+            }
+            await self.publishSessionMessage(
+                sessionId: sessionId,
+                content: content,
+                actorId: actorId,
+                modelId: modelId,
+                mqtt: mqtt
+            )
         }
+    }
+
+    private func publishSessionMessage(
+        sessionId: String,
+        content: String,
+        actorId: String,
+        modelId: String?,
+        mqtt: MQTTService
+    ) async {
         var message = Teamclaw_Message()
         message.messageID = UUID().uuidString
         message.sessionID = sessionId
@@ -485,9 +515,7 @@ public final class TeamclawService {
         }
 
         let topic = MQTTTopics.sessionLive(teamID: teamId, sessionID: sessionId)
-        Task {
-            try? await mqtt.publish(topic: topic, payload: data, retain: false)
-        }
+        try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
 
     public func makeCreateSessionRequest(
