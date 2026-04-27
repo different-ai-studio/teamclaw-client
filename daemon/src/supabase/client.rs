@@ -296,6 +296,40 @@ pub struct WorkspaceRow {
     pub id: String,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct SupabaseSessionRow {
+    pub id: String,
+    pub team_id: String,
+    #[serde(default)]
+    pub created_by_actor_id: Option<String>,
+    #[serde(default)]
+    pub primary_agent_id: Option<String>,
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub idea_id: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct SupabaseParticipantRow {
+    pub session_id: String,
+    pub actor_id: String,
+    #[serde(default)]
+    pub role: Option<String>,
+    pub joined_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionAndParticipants {
+    pub session: SupabaseSessionRow,
+    pub participants: Vec<SupabaseParticipantRow>,
+}
+
 impl SupabaseClient {
     /// Upsert an agent_runtimes row keyed on (agent_id, backend_session_id).
     pub async fn upsert_agent_runtime(
@@ -431,6 +465,65 @@ impl SupabaseClient {
             code: None,
             message: "workspace upsert returned no rows".into(),
         })
+    }
+
+    /// Fetch a `sessions` row alongside its `session_participants`. Used when
+    /// the daemon receives a `runtimeStart` for an iOS-created collab session
+    /// and needs to learn the session's identity + roster before subscribing
+    /// to `session/{sid}/live`.
+    pub async fn fetch_session_with_participants(
+        &self,
+        session_id: &str,
+    ) -> SupabaseResult<SessionAndParticipants> {
+        let token = self.access_token().await?;
+
+        let session_url = format!(
+            "{}/rest/v1/sessions?id=eq.{}&select=id,team_id,created_by_actor_id,primary_agent_id,mode,title,summary,idea_id,created_at",
+            self.cfg.url, session_id
+        );
+        let resp = self
+            .http
+            .get(&session_url)
+            .header("apikey", &self.cfg.anon_key)
+            .bearer_auth(&token)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(SupabaseError::Rpc {
+                code: Some(status.as_u16().to_string()),
+                message: format!("fetch_session: {text}"),
+            });
+        }
+        let mut rows: Vec<SupabaseSessionRow> = resp.json().await?;
+        let session = rows.pop().ok_or_else(|| SupabaseError::Rpc {
+            code: Some("404".into()),
+            message: format!("session {session_id} not found"),
+        })?;
+
+        let part_url = format!(
+            "{}/rest/v1/session_participants?session_id=eq.{}&select=session_id,actor_id,role,joined_at",
+            self.cfg.url, session_id
+        );
+        let resp = self
+            .http
+            .get(&part_url)
+            .header("apikey", &self.cfg.anon_key)
+            .bearer_auth(&token)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(SupabaseError::Rpc {
+                code: Some(status.as_u16().to_string()),
+                message: format!("fetch_participants: {text}"),
+            });
+        }
+        let participants: Vec<SupabaseParticipantRow> = resp.json().await?;
+
+        Ok(SessionAndParticipants { session, participants })
     }
 }
 
