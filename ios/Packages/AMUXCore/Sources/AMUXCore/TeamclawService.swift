@@ -2,6 +2,9 @@ import Foundation
 import Observation
 import SwiftProtobuf
 import SwiftData
+import os
+
+private let teamclawLogger = Logger(subsystem: "com.amux.app", category: "TeamclawService")
 
 @Observable
 @MainActor
@@ -455,11 +458,11 @@ public final class TeamclawService {
     public func sendMessage(sessionId: String, content: String, modelId: String? = nil) {
         let sidPrefix = String(sessionId.prefix(8))
         guard let mqtt else {
-            print("[TeamclawService] sendMessage[\(sidPrefix)] aborted: mqtt nil")
+            teamclawLogger.warning("sendMessage[\(sidPrefix, privacy: .public)] aborted: mqtt nil")
             return
         }
         guard let actorId = currentHumanActorId else {
-            print("[TeamclawService] sendMessage[\(sidPrefix)] refusing: localMemberId not resolved")
+            teamclawLogger.warning("sendMessage[\(sidPrefix, privacy: .public)] refusing: localMemberId not resolved")
             return
         }
         var message = Teamclaw_Message()
@@ -480,7 +483,7 @@ public final class TeamclawService {
         do {
             body = try messageEnvelope.serializedData()
         } catch {
-            print("[TeamclawService] sendMessage[\(sidPrefix)] failed to serialize SessionMessageEnvelope")
+            teamclawLogger.error("sendMessage[\(sidPrefix, privacy: .public)] failed to serialize SessionMessageEnvelope")
             return
         }
 
@@ -493,20 +496,22 @@ public final class TeamclawService {
         live.body = body
 
         guard let data = try? live.serializedData() else {
-            print("[TeamclawService] sendMessage[\(sidPrefix)] failed to serialize LiveEventEnvelope")
+            teamclawLogger.error("sendMessage[\(sidPrefix, privacy: .public)] failed to serialize LiveEventEnvelope")
             return
         }
 
         let topic = MQTTTopics.sessionLive(teamID: teamId, sessionID: sessionId)
         let msgIdPrefix = String(message.messageID.prefix(8))
-        let connState = mqtt.connectionState
-        print("[TeamclawService] sendMessage[\(sidPrefix)] msgId=\(msgIdPrefix) actor=\(actorId.prefix(8)) bytes=\(data.count) topic=\(topic) mqtt=\(connState)")
+        let actorPrefix = String(actorId.prefix(8))
+        let connState = mqtt.connectionState.rawValue
+        let bytes = data.count
+        teamclawLogger.notice("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) actor=\(actorPrefix, privacy: .public) bytes=\(bytes, privacy: .public) topic=\(topic, privacy: .public) mqtt=\(connState, privacy: .public)")
         Task {
             do {
                 try await mqtt.publish(topic: topic, payload: data, retain: false)
-                print("[TeamclawService] sendMessage[\(sidPrefix)] msgId=\(msgIdPrefix) publish OK")
+                teamclawLogger.notice("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) publish OK")
             } catch {
-                print("[TeamclawService] sendMessage[\(sidPrefix)] msgId=\(msgIdPrefix) publish FAILED: \(error)")
+                teamclawLogger.error("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) publish FAILED: \(String(describing: error), privacy: .public)")
             }
         }
     }
