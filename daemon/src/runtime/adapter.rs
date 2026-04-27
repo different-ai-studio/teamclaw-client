@@ -587,8 +587,11 @@ async fn run_acp_session(
     // Use Rc to share conn across spawn_local tasks
     let conn = Rc::new(conn);
 
-    // Send the initial prompt
-    {
+    // Send the initial prompt (skipped when empty — iOS new-session flow
+    // now passes empty initial_prompt and delivers the user's first
+    // message via session/live instead, so the runtime sees only one
+    // copy of the prompt instead of two).
+    if !initial_prompt.is_empty() {
         let conn = conn.clone();
         let session_id = session_id.clone();
         let event_tx = event_tx.clone();
