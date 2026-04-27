@@ -163,6 +163,7 @@ private struct RuntimeDestinationView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var runtime: Runtime?
     @State private var session: Session?
+    @State private var attemptedLoad = false
 
     var body: some View {
         Group {
@@ -186,8 +187,10 @@ private struct RuntimeDestinationView: View {
                     connectedAgentsStore: connectedAgentsStore
                 )
                 .id("agent:\(runtime.runtimeId)")
-            } else {
+            } else if attemptedLoad {
                 Text("Agent not found")
+            } else {
+                ProgressView()
             }
         }
         .task(id: runtimeId) {
@@ -204,6 +207,12 @@ private struct RuntimeDestinationView: View {
 
         let sessionDescriptor = FetchDescriptor<Session>()
         session = (try? modelContext.fetch(sessionDescriptor))?.first(where: { $0.primaryAgentId == runtimeId })
+
+        // Same flash-suppression trick as CollabSessionDestinationView:
+        // hold a ProgressView until SwiftData has actually been queried,
+        // so newly-routed runtime IDs don't briefly render "Agent not
+        // found" before the row lands.
+        attemptedLoad = true
     }
 }
 
@@ -296,11 +305,16 @@ private struct CollabSessionDestinationView: View {
             return
         }
 
+        // Run the refresh + reload BEFORE flipping `attemptedRefresh`. The
+        // flag gates the "Session not found" copy, so flipping it before
+        // the network round-trip completes flashes that copy on screen
+        // for the duration of `refreshSessionsFromBackend()` — exactly the
+        // bug we're trying to suppress.
+        await refreshSessionsFromBackend()
+        await loadSession()
         await MainActor.run {
             attemptedRefresh = true
         }
-        await refreshSessionsFromBackend()
-        await loadSession()
         if session == nil {
             await MainActor.run {
                 logKnownSessions()
