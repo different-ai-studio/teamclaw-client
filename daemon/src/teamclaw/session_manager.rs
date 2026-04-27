@@ -1009,6 +1009,7 @@ impl SessionManager {
             reply_to_message_id: message.reply_to_message_id.clone(),
             mentions: message.mentions.clone(),
             model: message.model.clone(),
+            metadata_json: message.metadata_json.clone(),
         };
 
         let mut store = MessageStore::load(&self.config_dir, session_id)?;
@@ -1371,12 +1372,16 @@ fn session_type_to_proto(s: &str) -> teamclaw::SessionType {
     }
 }
 
-fn message_kind_to_string(kind: i32) -> String {
-    match kind {
-        x if x == teamclaw::MessageKind::Text as i32 => "text",
-        x if x == teamclaw::MessageKind::System as i32 => "system",
-        x if x == teamclaw::MessageKind::WorkEvent as i32 => "work_event",
-        _ => "unknown",
+pub(crate) fn message_kind_to_string(kind: i32) -> String {
+    match teamclaw::MessageKind::try_from(kind).unwrap_or(teamclaw::MessageKind::Unknown) {
+        teamclaw::MessageKind::Text => "text",
+        teamclaw::MessageKind::System => "system",
+        teamclaw::MessageKind::WorkEvent => "work_event",
+        teamclaw::MessageKind::AgentThinking => "agent_thinking",
+        teamclaw::MessageKind::AgentToolCall => "agent_tool_call",
+        teamclaw::MessageKind::AgentToolResult => "agent_tool_result",
+        teamclaw::MessageKind::AgentReply => "agent_reply",
+        teamclaw::MessageKind::Unknown => "unknown",
     }
     .to_string()
 }

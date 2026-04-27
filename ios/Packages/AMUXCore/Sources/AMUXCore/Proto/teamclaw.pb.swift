@@ -111,6 +111,10 @@ public enum Teamclaw_MessageKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   case text // = 1
   case system // = 2
   case workEvent // = 3
+  case agentThinking // = 4
+  case agentToolCall // = 5
+  case agentToolResult // = 6
+  case agentReply // = 7
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -123,6 +127,10 @@ public enum Teamclaw_MessageKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     case 1: self = .text
     case 2: self = .system
     case 3: self = .workEvent
+    case 4: self = .agentThinking
+    case 5: self = .agentToolCall
+    case 6: self = .agentToolResult
+    case 7: self = .agentReply
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -133,6 +141,10 @@ public enum Teamclaw_MessageKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     case .text: return 1
     case .system: return 2
     case .workEvent: return 3
+    case .agentThinking: return 4
+    case .agentToolCall: return 5
+    case .agentToolResult: return 6
+    case .agentReply: return 7
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -143,6 +155,10 @@ public enum Teamclaw_MessageKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     .text,
     .system,
     .workEvent,
+    .agentThinking,
+    .agentToolCall,
+    .agentToolResult,
+    .agentReply,
   ]
 
 }
@@ -281,6 +297,11 @@ public struct Teamclaw_Message: Sendable {
   public var mentions: [String] = []
 
   public var model: String = String()
+
+  /// Free-form JSON for kind-specific structured data (tool args, tool result
+  /// payload, etc.). Empty for plain text/agent reply messages. Renderers
+  /// should be defensive — schema may evolve.
+  public var metadataJson: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1375,7 +1396,7 @@ extension Teamclaw_ActorType: SwiftProtobuf._ProtoNameProviding {
 }
 
 extension Teamclaw_MessageKind: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0MESSAGE_KIND_UNKNOWN\0\u{1}TEXT\0\u{1}SYSTEM\0\u{1}WORK_EVENT\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0MESSAGE_KIND_UNKNOWN\0\u{1}TEXT\0\u{1}SYSTEM\0\u{1}WORK_EVENT\0\u{1}AGENT_THINKING\0\u{1}AGENT_TOOL_CALL\0\u{1}AGENT_TOOL_RESULT\0\u{1}AGENT_REPLY\0")
 }
 
 extension Teamclaw_IdeaStatus: SwiftProtobuf._ProtoNameProviding {
@@ -1559,7 +1580,7 @@ extension Teamclaw_Participant: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
 
 extension Teamclaw_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}message_id\0\u{3}session_id\0\u{3}sender_actor_id\0\u{1}kind\0\u{1}content\0\u{3}created_at\0\u{3}reply_to_message_id\0\u{1}mentions\0\u{1}model\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}message_id\0\u{3}session_id\0\u{3}sender_actor_id\0\u{1}kind\0\u{1}content\0\u{3}created_at\0\u{3}reply_to_message_id\0\u{1}mentions\0\u{1}model\0\u{3}metadata_json\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1576,6 +1597,7 @@ extension Teamclaw_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       case 7: try { try decoder.decodeSingularStringField(value: &self.replyToMessageID) }()
       case 8: try { try decoder.decodeRepeatedStringField(value: &self.mentions) }()
       case 9: try { try decoder.decodeSingularStringField(value: &self.model) }()
+      case 10: try { try decoder.decodeSingularStringField(value: &self.metadataJson) }()
       default: break
       }
     }
@@ -1609,6 +1631,9 @@ extension Teamclaw_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     if !self.model.isEmpty {
       try visitor.visitSingularStringField(value: self.model, fieldNumber: 9)
     }
+    if !self.metadataJson.isEmpty {
+      try visitor.visitSingularStringField(value: self.metadataJson, fieldNumber: 10)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1622,6 +1647,7 @@ extension Teamclaw_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     if lhs.replyToMessageID != rhs.replyToMessageID {return false}
     if lhs.mentions != rhs.mentions {return false}
     if lhs.model != rhs.model {return false}
+    if lhs.metadataJson != rhs.metadataJson {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

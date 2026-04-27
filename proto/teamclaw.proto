@@ -23,6 +23,10 @@ enum MessageKind {
   TEXT = 1;
   SYSTEM = 2;
   WORK_EVENT = 3;
+  AGENT_THINKING = 4;
+  AGENT_TOOL_CALL = 5;
+  AGENT_TOOL_RESULT = 6;
+  AGENT_REPLY = 7;
 }
 
 enum IdeaStatus {
@@ -73,6 +77,10 @@ message Message {
   string reply_to_message_id = 7;
   repeated string mentions = 8;
   string model = 9;
+  // Free-form JSON for kind-specific structured data (tool args, tool result
+  // payload, etc.). Empty for plain text/agent reply messages. Renderers
+  // should be defensive — schema may evolve.
+  string metadata_json = 10;
 }
 
 message Idea {

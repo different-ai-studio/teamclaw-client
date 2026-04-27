@@ -26,6 +26,11 @@ pub struct StoredMessage {
     /// `#[serde(default)]` deserializes those as empty string.
     #[serde(default)]
     pub model: String,
+    /// Free-form JSON for kind-specific structured data (tool args, tool
+    /// result payload, etc.). Empty for plain text/agent reply messages.
+    /// Absent in older TOML files — `#[serde(default)]` keeps them parsing.
+    #[serde(default)]
+    pub metadata_json: String,
 }
 
 impl MessageStore {
@@ -122,6 +127,7 @@ impl MessageStore {
             reply_to_message_id: msg.reply_to_message_id.clone(),
             mentions: msg.mentions.clone(),
             model: msg.model.clone(),
+            metadata_json: msg.metadata_json.clone(),
         }
     }
 }
@@ -131,6 +137,10 @@ fn message_kind_to_proto(s: &str) -> teamclaw::MessageKind {
         "text" => teamclaw::MessageKind::Text,
         "system" => teamclaw::MessageKind::System,
         "work_event" => teamclaw::MessageKind::WorkEvent,
+        "agent_thinking" => teamclaw::MessageKind::AgentThinking,
+        "agent_tool_call" => teamclaw::MessageKind::AgentToolCall,
+        "agent_tool_result" => teamclaw::MessageKind::AgentToolResult,
+        "agent_reply" => teamclaw::MessageKind::AgentReply,
         _ => teamclaw::MessageKind::Unknown,
     }
 }
@@ -152,6 +162,7 @@ mod tests {
             reply_to_message_id: String::new(),
             mentions: vec![],
             model: String::new(),
+            metadata_json: String::new(),
         }
     }
 
