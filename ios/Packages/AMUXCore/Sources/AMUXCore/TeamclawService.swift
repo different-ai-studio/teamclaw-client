@@ -152,6 +152,17 @@ public final class TeamclawService {
             try? await mqtt.unsubscribe(MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: id))
         }
         subscribedDeviceIDs = desired
+
+        // FetchPeers needs at least one subscribed daemon to be able to issue
+        // the RPC. The one-shot fetch in `start()` runs before
+        // `connectedAgentsStore` populates, so it normally returns no peers
+        // and `localMemberId` never resolves. Re-fetch whenever new daemons
+        // come online so subsequent `sendMessage` calls can pass their actor
+        // guard.
+        if !toAdd.isEmpty {
+            let peers = await fetchPeersAcrossDaemons()
+            syncPeers(peers)
+        }
     }
 
     private func waitForAgentsMutation() async {
