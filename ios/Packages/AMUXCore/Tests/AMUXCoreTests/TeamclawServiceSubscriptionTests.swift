@@ -260,6 +260,58 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         XCTAssertFalse(published[0].2)
     }
 
+    /// Reproduces a reported regression where the second user message on a
+    /// session never reaches the daemon. We call `sendMessage` twice on the
+    /// same session and verify both publishes hit MQTT with the expected
+    /// topic — no localMemberId reset, no stale state, no swallowed errors.
+    func testSendMessageTwiceInSameSessionPublishesTwice() async throws {
+        var published: [(String, Data, Bool)] = []
+        let mqtt = MQTTService(
+            subscribeHook: { _ in },
+            unsubscribeHook: { _ in },
+            publishHook: { topic, payload, retain in
+                published.append((topic, payload, retain))
+            }
+        )
+        let service = TeamclawService()
+        let container = try makeModelContainer()
+        let store = await makeStore(deviceID: "device1")
+
+        service.configureRuntimeForTesting(
+            mqtt: mqtt,
+            teamId: "team1",
+            peerId: "peer1",
+            modelContainer: container,
+            connectedAgentsStore: store
+        )
+        service.setLocalMemberIdForTesting("member1")
+
+        service.sendMessage(sessionId: "sess-1", content: "first")
+        service.sendMessage(sessionId: "sess-1", content: "second")
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(published.count, 2,
+                       "Both messages should publish — second message regression check")
+        let expectedTopic = MQTTTopics.sessionLive(teamID: "team1", sessionID: "sess-1")
+        XCTAssertEqual(published[0].0, expectedTopic)
+        XCTAssertEqual(published[1].0, expectedTopic)
+
+        let firstEnv = try Teamclaw_LiveEventEnvelope(serializedBytes: published[0].1)
+        let secondEnv = try Teamclaw_LiveEventEnvelope(serializedBytes: published[1].1)
+        XCTAssertEqual(firstEnv.eventType, "message.created")
+        XCTAssertEqual(secondEnv.eventType, "message.created")
+        XCTAssertNotEqual(firstEnv.eventID, secondEnv.eventID,
+                          "Each publish should carry a fresh event_id")
+
+        let firstMsg = try Teamclaw_SessionMessageEnvelope(serializedBytes: firstEnv.body).message
+        let secondMsg = try Teamclaw_SessionMessageEnvelope(serializedBytes: secondEnv.body).message
+        XCTAssertEqual(firstMsg.content, "first")
+        XCTAssertEqual(secondMsg.content, "second")
+        XCTAssertEqual(firstMsg.senderActorID, "member1")
+        XCTAssertEqual(secondMsg.senderActorID, "member1")
+        XCTAssertNotEqual(firstMsg.messageID, secondMsg.messageID)
+    }
+
     func testEndForegroundSessionUnsubscribesLiveTopic() async throws {
         let mqtt = MQTTService(
             subscribeHook: { _ in },

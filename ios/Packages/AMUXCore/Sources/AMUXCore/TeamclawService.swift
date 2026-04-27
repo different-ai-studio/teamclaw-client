@@ -453,9 +453,13 @@ public final class TeamclawService {
     ///   the daemon's collab→agent dispatch path, which calls `send_set_model` before
     ///   `send_prompt` when the model differs from the agent's current model.
     public func sendMessage(sessionId: String, content: String, modelId: String? = nil) {
-        guard let mqtt else { return }
+        let sidPrefix = String(sessionId.prefix(8))
+        guard let mqtt else {
+            print("[TeamclawService] sendMessage[\(sidPrefix)] aborted: mqtt nil")
+            return
+        }
         guard let actorId = currentHumanActorId else {
-            print("[TeamclawService] refusing to send session message before localMemberId resolves")
+            print("[TeamclawService] sendMessage[\(sidPrefix)] refusing: localMemberId not resolved")
             return
         }
         var message = Teamclaw_Message()
@@ -476,7 +480,7 @@ public final class TeamclawService {
         do {
             body = try messageEnvelope.serializedData()
         } catch {
-            print("[TeamclawService] failed to serialize SessionMessageEnvelope")
+            print("[TeamclawService] sendMessage[\(sidPrefix)] failed to serialize SessionMessageEnvelope")
             return
         }
 
@@ -489,13 +493,21 @@ public final class TeamclawService {
         live.body = body
 
         guard let data = try? live.serializedData() else {
-            print("[TeamclawService] failed to serialize LiveEventEnvelope")
+            print("[TeamclawService] sendMessage[\(sidPrefix)] failed to serialize LiveEventEnvelope")
             return
         }
 
         let topic = MQTTTopics.sessionLive(teamID: teamId, sessionID: sessionId)
+        let msgIdPrefix = String(message.messageID.prefix(8))
+        let connState = mqtt.connectionState
+        print("[TeamclawService] sendMessage[\(sidPrefix)] msgId=\(msgIdPrefix) actor=\(actorId.prefix(8)) bytes=\(data.count) topic=\(topic) mqtt=\(connState)")
         Task {
-            try? await mqtt.publish(topic: topic, payload: data, retain: false)
+            do {
+                try await mqtt.publish(topic: topic, payload: data, retain: false)
+                print("[TeamclawService] sendMessage[\(sidPrefix)] msgId=\(msgIdPrefix) publish OK")
+            } catch {
+                print("[TeamclawService] sendMessage[\(sidPrefix)] msgId=\(msgIdPrefix) publish FAILED: \(error)")
+            }
         }
     }
 
