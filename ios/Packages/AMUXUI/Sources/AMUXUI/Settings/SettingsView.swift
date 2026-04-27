@@ -17,7 +17,6 @@ public struct SettingsView: View {
     let onSignOut: (() -> Void)?
 
     @State private var mqttHost: String = ""
-    @State private var daemonDeviceID: String = ""
     @State private var saveError: String?
 
     @State private var supaURL: String = ""
@@ -51,8 +50,7 @@ public struct SettingsView: View {
     }
 
     private var hasMQTTChanges: Bool {
-        mqttHost != pairing.brokerHost ||
-        daemonDeviceID != pairing.deviceId
+        mqttHost != pairing.brokerHost
     }
 
     private var hasSupabaseChanges: Bool {
@@ -123,7 +121,6 @@ public struct SettingsView: View {
 
                 Section("MQTT Server") {
                     LabeledField(label: "Host", text: $mqttHost, placeholder: "ai.ucar.cc")
-                    LabeledField(label: "Daemon ID", text: $daemonDeviceID, placeholder: "mac-mini-4")
 
                     if let err = saveError {
                         Text(err).font(.footnote).foregroundStyle(.red)
@@ -234,7 +231,6 @@ public struct SettingsView: View {
             .navigationTitle("Settings").navigationBarTitleDisplayMode(.large)
             .task {
                 mqttHost = pairing.brokerHost
-                daemonDeviceID = pairing.deviceId
                 supaURL = SupabaseServerStore.currentURL()
                 supaKey = SupabaseServerStore.currentKey()
                 await loadTeam()
@@ -257,7 +253,6 @@ public struct SettingsView: View {
     private func save() {
         do {
             try pairing.updateMQTTServer(host: mqttHost)
-            try pairing.updateDaemonDeviceID(daemonDeviceID)
             saveError = nil
             onReconnect?()
             dismiss()

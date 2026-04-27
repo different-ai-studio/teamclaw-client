@@ -119,7 +119,7 @@ public struct SessionsTab: View {
                              onSignOut: onSignOut)
             }
             .sheet(isPresented: $showNewSession) {
-                NewSessionSheet(mqtt: mqtt, deviceId: pairing.deviceId,
+                NewSessionSheet(mqtt: mqtt,
                                peerId: "ios-\(pairing.authToken.prefix(6))",
                                teamclawService: teamclawService,
                                teamID: activeTeam?.id ?? "",
@@ -140,7 +140,7 @@ public struct SessionsTab: View {
                 viewModel.start(
                     mqtt: mqtt,
                     teamID: activeTeam?.id ?? "",
-                    deviceId: pairing.deviceId,
+                    connectedAgentsStore: connectedAgentsStore,
                     modelContext: modelContext,
                     teamclawService: teamclawService
                 )
@@ -170,7 +170,6 @@ private struct RuntimeDestinationView: View {
                 RuntimeDetailView(
                     session: session,
                     mqtt: mqtt,
-                    deviceId: pairing.deviceId,
                     peerId: "ios-\(pairing.authToken.prefix(6))",
                     teamclawService: nil,
                     navigationPath: $navigationPath,
@@ -181,7 +180,6 @@ private struct RuntimeDestinationView: View {
                 RuntimeDetailView(
                     runtime: runtime,
                     mqtt: mqtt,
-                    deviceId: pairing.deviceId,
                     peerId: "ios-\(pairing.authToken.prefix(6))",
                     allAgentIds: allAgentIds,
                     navigationPath: $navigationPath,
@@ -236,7 +234,6 @@ private struct CollabSessionDestinationView: View {
                     .id("session:\(session.sessionId)")
                 } else {
                     RuntimeDetailView(session: session, mqtt: mqtt,
-                                      deviceId: pairing.deviceId,
                                       peerId: "ios-\(pairing.authToken.prefix(6))",
                                       teamclawService: teamclawService,
                                       navigationPath: $navigationPath,

@@ -25,18 +25,18 @@ public struct TaskListView: View {
         VStack(spacing: 0) {
             if let errorMessage = taskStore.errorMessage, taskStore.tasks.isEmpty, !taskStore.isLoading {
                 ContentUnavailableView(
-                    "Couldn’t Load Tasks",
+                    "Couldn’t Load Ideas",
                     systemImage: "exclamationmark.triangle",
                     description: Text(errorMessage)
                 )
             } else if taskStore.isLoading && taskStore.tasks.isEmpty {
-                ProgressView("Loading tasks…")
+                ProgressView("Loading ideas…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if taskStore.tasks.isEmpty {
                 ContentUnavailableView(
-                    "No Tasks",
-                    systemImage: "checklist",
-                    description: Text("Tap + to create a task")
+                    "No Ideas",
+                    systemImage: TaskUIPresentation.systemImage,
+                    description: Text("Tap + to create an idea")
                 )
             } else {
                 List {
@@ -60,7 +60,7 @@ public struct TaskListView: View {
                 }
             }
         }
-        .navigationTitle("Tasks")
+        .navigationTitle(TaskUIPresentation.pluralTitle)
         .navigationBarTitleDisplayMode(.large)
         .safeAreaInset(edge: .bottom) {
             if !taskStore.archivedTasks.isEmpty {

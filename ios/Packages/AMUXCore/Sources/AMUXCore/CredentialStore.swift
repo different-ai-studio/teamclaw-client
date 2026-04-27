@@ -4,20 +4,17 @@ public struct PairingCredentials: Equatable, Sendable {
     public var brokerHost: String
     public var brokerPort: Int
     public var useTLS: Bool
-    public var deviceId: String
     public var authToken: String
 
     public init(
         brokerHost: String,
         brokerPort: Int,
         useTLS: Bool,
-        deviceId: String,
         authToken: String
     ) {
         self.brokerHost = brokerHost
         self.brokerPort = brokerPort
         self.useTLS = useTLS
-        self.deviceId = deviceId
         self.authToken = authToken
     }
 }
@@ -39,7 +36,6 @@ public final class UserDefaultsCredentialStore: CredentialStore, @unchecked Send
     public func save(_ c: PairingCredentials) throws {
         defaults.set(c.brokerHost, forKey: Keys.brokerHost)
         defaults.set(c.brokerPort, forKey: Keys.brokerPort)
-        defaults.set(c.deviceId, forKey: Keys.deviceId)
         defaults.set(c.authToken, forKey: Keys.authToken)
         defaults.set(c.useTLS, forKey: Keys.useTLS)
     }
@@ -55,21 +51,22 @@ public final class UserDefaultsCredentialStore: CredentialStore, @unchecked Send
             brokerHost: host,
             brokerPort: port,
             useTLS: defaults.bool(forKey: Keys.useTLS),
-            deviceId: defaults.string(forKey: Keys.deviceId) ?? "",
             authToken: defaults.string(forKey: Keys.authToken) ?? ""
         )
     }
 
     public func clear() throws {
         for key in Keys.all { defaults.removeObject(forKey: key) }
+        // Also remove the legacy device-id key written by older builds, so a
+        // clean unpair doesn't leave stale routing state on disk.
+        defaults.removeObject(forKey: "amux_device_id")
     }
 
     private enum Keys {
         static let brokerHost = "amux_broker_host"
         static let brokerPort = "amux_broker_port"
-        static let deviceId   = "amux_device_id"
         static let authToken  = "amux_auth_token"
         static let useTLS     = "amux_use_tls"
-        static let all = [brokerHost, brokerPort, deviceId, authToken, useTLS]
+        static let all = [brokerHost, brokerPort, authToken, useTLS]
     }
 }

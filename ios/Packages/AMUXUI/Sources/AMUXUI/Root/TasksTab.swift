@@ -44,7 +44,7 @@ public struct TasksTab: View {
     public var body: some View {
         NavigationStack(path: $navigationPath) {
             content
-                .navigationTitle("Tasks")
+                .navigationTitle(TaskUIPresentation.pluralTitle)
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
@@ -79,12 +79,11 @@ public struct TasksTab: View {
                                 sessionViewModel: sessionViewModel,
                                 teamclawService: teamclawService,
                                 mqtt: mqtt,
-                                deviceId: pairing.deviceId,
                                 peerId: "ios-\(pairing.authToken.prefix(6))",
                                 navigationPath: $navigationPath
                             )
                         } else {
-                            Text("Task store unavailable")
+                            Text("Idea store unavailable")
                         }
                     } else if id.hasPrefix("collab:") {
                         let sessionId = String(id.dropFirst("collab:".count))
@@ -98,7 +97,6 @@ public struct TasksTab: View {
                                 RuntimeDetailView(
                                     session: session,
                                     mqtt: mqtt,
-                                    deviceId: pairing.deviceId,
                                     peerId: "ios-\(pairing.authToken.prefix(6))",
                                     teamclawService: teamclawService,
                                     navigationPath: $navigationPath,
@@ -112,7 +110,6 @@ public struct TasksTab: View {
                         RuntimeDetailView(
                             runtime: runtime,
                             mqtt: mqtt,
-                            deviceId: pairing.deviceId,
                             peerId: "ios-\(pairing.authToken.prefix(6))",
                             allAgentIds: sessionViewModel.runtimes.map(\.runtimeId),
                             navigationPath: $navigationPath,
@@ -134,18 +131,18 @@ public struct TasksTab: View {
             ContentUnavailableView(
                 "No Team Selected",
                 systemImage: "person.3",
-                description: Text("Create or join a team to manage tasks.")
+                description: Text("Create or join a team to manage ideas.")
             )
         } else if let taskSetupError {
             ContentUnavailableView(
-                "Couldn’t Set Up Tasks",
+                "Couldn’t Set Up Ideas",
                 systemImage: "exclamationmark.triangle",
                 description: Text(taskSetupError)
             )
         } else if let taskStore {
             TaskListView(taskStore: taskStore, showCreate: $showCreate)
         } else {
-            ProgressView("Loading tasks…")
+            ProgressView("Loading ideas…")
         }
     }
 

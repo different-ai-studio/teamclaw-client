@@ -84,7 +84,8 @@ public struct MemberListContent: View {
                                 mqtt: mqtt,
                                 sessionViewModel: sessionViewModel,
                                 store: store,
-                                teamclawService: teamclawService
+                                teamclawService: teamclawService,
+                                connectedAgentsStore: connectedAgentsStore
                             )
                         } label: {
                             ActorRow(actor: a)
@@ -161,6 +162,7 @@ private struct ActorDetailView: View {
     let sessionViewModel: SessionListViewModel
     let store: ActorStore
     let teamclawService: TeamclawService?
+    let connectedAgentsStore: ConnectedAgentsStore?
     @Environment(\.dismiss) private var dismiss
     @State private var authorizedHumansStore: AgentAuthorizedHumansStore?
     @State private var workspaceStore: WorkspaceStore?
@@ -177,8 +179,17 @@ private struct ActorDetailView: View {
     @State private var isDeleting = false
     @State private var deleteErrorMessage: String?
 
+    /// Daemon `device_id` for the agent being viewed — only meaningful when
+    /// `actor` is itself an agent. Empty for humans (where workspace
+    /// management isn't offered) or when ConnectedAgentsStore hasn't yet
+    /// resolved this agent's row.
     private var daemonDeviceID: String {
-        pairing.deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !actor.isMember,
+              let agent = connectedAgentsStore?.agents.first(where: { $0.id == actor.actorId }),
+              let id = agent.deviceID else {
+            return ""
+        }
+        return id.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var peerID: String {
@@ -386,7 +397,7 @@ private struct ActorDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(actor.isMember
-                 ? "They will lose access to all of this team's tasks and sessions."
+                 ? "They will lose access to all of this team's ideas and sessions."
                  : "The agent's Supabase identity, daemon credentials, and member authorizations will be deleted.")
         }
         .task {
@@ -483,8 +494,9 @@ private struct ActorDetailView: View {
         isAddingWorkspace = true
         workspaceErrorMessage = nil
 
+        let target = daemonDeviceID
         Task {
-            let (ok, err) = await teamclawService.addWorkspaceRpc(path: path)
+            let (ok, err) = await teamclawService.addWorkspaceRpc(targetDeviceID: target, path: path)
             await MainActor.run {
                 isAddingWorkspace = false
                 if ok {

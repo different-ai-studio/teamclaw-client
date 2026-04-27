@@ -5,8 +5,6 @@ import AMUXCore
 public struct InviteSheet: View {
     let session: Session
     let teamclawService: TeamclawService
-    let teamId: String
-    let deviceId: String
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -14,11 +12,9 @@ public struct InviteSheet: View {
     @State private var selectedIds: Set<String> = []
     @State private var isSending = false
 
-    public init(session: Session, teamclawService: TeamclawService, teamId: String, deviceId: String) {
+    public init(session: Session, teamclawService: TeamclawService) {
         self.session = session
         self.teamclawService = teamclawService
-        self.teamId = teamId
-        self.deviceId = deviceId
     }
 
     public var body: some View {

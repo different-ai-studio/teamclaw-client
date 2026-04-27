@@ -15,6 +15,10 @@ struct AMUXApp: App {
             options.enableAutoPerformanceTracing = true
             options.enableUIViewControllerTracing = true
             options.enableSwizzling = true
+            // Sentry's Core Data swizzling spams "saveSpan is nil" once per
+            // SwiftData save (every event the chat view streams). Disable it —
+            // we don't have any direct Core Data usage to observe anyway.
+            options.enableCoreDataTracing = false
             options.attachScreenshot = true
             options.attachViewHierarchy = true
             #if DEBUG

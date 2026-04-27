@@ -4,7 +4,7 @@ import AMUXCore
 public struct NewCollabSheet: View {
     let teamclawService: TeamclawService
     let teamId: String
-    let deviceId: String
+    let targetDeviceID: String
     let peerId: String
     let onCreated: (String) -> Void
 
@@ -16,13 +16,13 @@ public struct NewCollabSheet: View {
     public init(
         teamclawService: TeamclawService,
         teamId: String,
-        deviceId: String,
+        targetDeviceID: String,
         peerId: String,
         onCreated: @escaping (String) -> Void
     ) {
         self.teamclawService = teamclawService
         self.teamId = teamId
-        self.deviceId = deviceId
+        self.targetDeviceID = targetDeviceID
         self.peerId = peerId
         self.onCreated = onCreated
     }
@@ -73,12 +73,16 @@ public struct NewCollabSheet: View {
             summary: summary.trimmingCharacters(in: .whitespacesAndNewlines)
         )
 
+        guard !targetDeviceID.isEmpty else {
+            isSending = false
+            return
+        }
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8).lowercased())
-        rpcReq.senderDeviceID = deviceId
+        rpcReq.senderDeviceID = targetDeviceID
         rpcReq.method = .createSession(createReq)
 
-        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
         if let data = try? rpcReq.serializedData() {
             Task {
                 try? await mqtt.publish(topic: topic, payload: data, retain: false)

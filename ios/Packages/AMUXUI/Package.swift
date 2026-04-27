@@ -20,5 +20,9 @@ let package = Package(
             ],
             resources: [.process("Resources")]
         ),
+        .testTarget(
+            name: "AMUXUIPackageTests",
+            dependencies: ["AMUXUI"]
+        ),
     ]
 )

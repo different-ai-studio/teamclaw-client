@@ -4,6 +4,38 @@ import SwiftData
 
 @MainActor
 final class TeamclawServiceSubscriptionTests: XCTestCase {
+
+    /// In-memory `AgentAccessRepository` returning a fixed agent set so tests
+    /// can drive `ConnectedAgentsStore.agents` deterministically. The
+    /// real Supabase-backed repository requires network and JWT.
+    private final class FakeAgentAccessRepository: AgentAccessRepository, @unchecked Sendable {
+        let agents: [ConnectedAgent]
+        init(agents: [ConnectedAgent]) { self.agents = agents }
+        func listConnectedAgents(teamID: String) async throws -> [ConnectedAgent] { agents }
+        func listAuthorizedHumans(agentID: String) async throws -> [AgentAuthorizedHuman] { [] }
+        func canManageAuthorizedHumans(teamID: String) async throws -> Bool { false }
+        func grantAuthorizedHuman(agentID: String, memberID: String, permissionLevel: String) async throws {}
+        func deviceID(for agentID: String) async throws -> String? {
+            agents.first(where: { $0.id == agentID })?.deviceID
+        }
+        func teamAgentCount(teamID: String) async throws -> Int { agents.count }
+    }
+
+    private func makeStore(deviceID: String) async -> ConnectedAgentsStore {
+        let agent = ConnectedAgent(
+            id: "agent-\(deviceID)",
+            displayName: "Test",
+            agentKind: "claude",
+            permissionLevel: "owner",
+            lastActiveAt: .now,
+            deviceID: deviceID
+        )
+        let repo = FakeAgentAccessRepository(agents: [agent])
+        let store = ConnectedAgentsStore(teamID: "team1", repository: repo)
+        await store.reload()
+        return store
+    }
+
     func testStartRehydratesForegroundSessionSubscriptionsOnNewMQTTRuntime() async throws {
         let firstMQTT = MQTTService(
             subscribeHook: { _ in },
@@ -12,13 +44,14 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         let service = TeamclawService()
         let container = try makeModelContainer()
         let modelContext = ModelContext(container)
+        let store = await makeStore(deviceID: "device1")
 
         service.configureRuntimeForTesting(
             mqtt: firstMQTT,
             teamId: "team1",
-            deviceId: "device1",
             peerId: "peer1",
-            modelContainer: container
+            modelContainer: container,
+            connectedAgentsStore: store
         )
 
         try await service.beginForegroundSession("sess-1")
@@ -32,21 +65,21 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         service.start(
             mqtt: restartedMQTT,
             teamId: "team1",
-            deviceId: "device1",
             peerId: "peer1",
-            modelContext: modelContext
+            modelContext: modelContext,
+            connectedAgentsStore: store
         )
 
         await Task.yield()
         try await Task.sleep(for: .milliseconds(50))
 
         XCTAssertEqual(
-            restartedMQTT.subscribedTopics,
-            [
+            Set(restartedMQTT.subscribedTopics),
+            Set([
                 MQTTTopics.deviceNotify(teamID: "team1", deviceID: "device1"),
                 MQTTTopics.deviceRpcResponse(teamID: "team1", deviceID: "device1"),
                 MQTTTopics.sessionLive(teamID: "team1", sessionID: "sess-1"),
-            ]
+            ])
         )
         XCTAssertEqual(service.foregroundSessionIDs, ["sess-1"])
 
@@ -60,13 +93,14 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         )
         let service = TeamclawService()
         let container = try makeModelContainer()
+        let store = await makeStore(deviceID: "device1")
 
         service.configureRuntimeForTesting(
             mqtt: mqtt,
             teamId: "team1",
-            deviceId: "device1",
             peerId: "peer1",
-            modelContainer: container
+            modelContainer: container,
+            connectedAgentsStore: store
         )
 
         var notify = Teamclaw_Notify()
@@ -92,13 +126,14 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         )
         let service = TeamclawService()
         let container = try makeModelContainer()
+        let store = await makeStore(deviceID: "device1")
 
         service.configureRuntimeForTesting(
             mqtt: mqtt,
             teamId: "team1",
-            deviceId: "device1",
             peerId: "peer1",
-            modelContainer: container
+            modelContainer: container,
+            connectedAgentsStore: store
         )
 
         var notify = Teamclaw_Notify()
@@ -126,13 +161,14 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         )
         let service = TeamclawService()
         let container = try makeModelContainer()
+        let store = await makeStore(deviceID: "device1")
 
         service.configureRuntimeForTesting(
             mqtt: mqtt,
             teamId: "team1",
-            deviceId: "device1",
             peerId: "peer1",
-            modelContainer: container
+            modelContainer: container,
+            connectedAgentsStore: store
         )
 
         try await service.beginForegroundSession("sess-foreground")
@@ -163,13 +199,14 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         )
         let service = TeamclawService()
         let container = try makeModelContainer()
+        let store = await makeStore(deviceID: "device1")
 
         service.configureRuntimeForTesting(
             mqtt: mqtt,
             teamId: "team1",
-            deviceId: "device1",
             peerId: "peer1",
-            modelContainer: container
+            modelContainer: container,
+            connectedAgentsStore: store
         )
 
         try await service.beginForegroundSession("sess-1")
@@ -201,13 +238,14 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         )
         let service = TeamclawService()
         let container = try makeModelContainer()
+        let store = await makeStore(deviceID: "device1")
 
         service.configureRuntimeForTesting(
             mqtt: mqtt,
             teamId: "team1",
-            deviceId: "device1",
             peerId: "peer1",
-            modelContainer: container
+            modelContainer: container,
+            connectedAgentsStore: store
         )
 
         // Phase 2b: localMemberId is now resolved via FetchPeers RPC on connect.
@@ -229,13 +267,14 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         )
         let service = TeamclawService()
         let container = try makeModelContainer()
+        let store = await makeStore(deviceID: "device1")
 
         service.configureRuntimeForTesting(
             mqtt: mqtt,
             teamId: "team1",
-            deviceId: "device1",
             peerId: "peer1",
-            modelContainer: container
+            modelContainer: container,
+            connectedAgentsStore: store
         )
 
         try await service.beginForegroundSession("sess-1")
@@ -262,13 +301,14 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         )
         let service = TeamclawService()
         let container = try makeModelContainer()
+        let store = await makeStore(deviceID: "device1")
 
         service.configureRuntimeForTesting(
             mqtt: mqtt,
             teamId: "team1",
-            deviceId: "device1",
             peerId: "peer1",
-            modelContainer: container
+            modelContainer: container,
+            connectedAgentsStore: store
         )
 
         try await service.beginForegroundSession("sess-1")

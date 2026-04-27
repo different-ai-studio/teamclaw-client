@@ -54,17 +54,16 @@ final class RuntimeStartRpcTests: XCTestCase {
 
     private func configuredService(
         mqtt: MQTTService,
-        teamId: String = "team1",
-        deviceId: String = "dev-a"
+        teamId: String = "team1"
     ) throws -> TeamclawService {
         let service = TeamclawService()
         let container = try makeModelContainer()
         service.configureRuntimeForTesting(
             mqtt: mqtt,
             teamId: teamId,
-            deviceId: deviceId,
             peerId: "peer1",
-            modelContainer: container
+            modelContainer: container,
+            connectedAgentsStore: nil
         )
         return service
     }
@@ -83,6 +82,7 @@ final class RuntimeStartRpcTests: XCTestCase {
         let service = try configuredService(mqtt: mqtt)
 
         async let outcome = service.runtimeStartRpc(
+            targetDeviceID: "dev-a",
             agentType: .claudeCode,
             workspaceId: "ws-1",
             worktree: "/tmp/work",
@@ -133,6 +133,7 @@ final class RuntimeStartRpcTests: XCTestCase {
         let service = try configuredService(mqtt: mqtt)
 
         async let outcome = service.runtimeStartRpc(
+            targetDeviceID: "dev-a",
             agentType: .claudeCode,
             workspaceId: "ws-1",
             worktree: "/tmp/work",
@@ -179,6 +180,7 @@ final class RuntimeStartRpcTests: XCTestCase {
         let service = try configuredService(mqtt: mqtt)
 
         async let outcome = service.runtimeStartRpc(
+            targetDeviceID: "dev-a",
             agentType: .claudeCode,
             workspaceId: "ws-1",
             worktree: "/tmp/work",
@@ -218,6 +220,7 @@ final class RuntimeStartRpcTests: XCTestCase {
         let service = TeamclawService()
         // Intentionally no configureRuntimeForTesting — mqtt stays nil.
         let outcome = await service.runtimeStartRpc(
+            targetDeviceID: "dev-a",
             agentType: .claudeCode,
             workspaceId: "ws-1",
             worktree: "/tmp/work",

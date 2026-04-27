@@ -6,7 +6,6 @@ public final class PairingManager {
     public private(set) var isPaired: Bool = false
     public private(set) var brokerHost: String = ""
     public private(set) var brokerPort: Int = 8883
-    public private(set) var deviceId: String = ""
     public private(set) var authToken: String = ""
     public private(set) var useTLS: Bool = true
 
@@ -36,16 +35,10 @@ public final class PairingManager {
         try store.save(currentCredentials())
     }
 
-    public func updateDaemonDeviceID(_ deviceID: String) throws {
-        self.deviceId = deviceID.trimmingCharacters(in: .whitespacesAndNewlines)
-        try store.save(currentCredentials())
-    }
-
     public func unpair() throws {
         isPaired = false
         brokerHost = ""
         brokerPort = 8883
-        deviceId = ""
         authToken = ""
         useTLS = true
         try store.clear()
@@ -56,7 +49,6 @@ public final class PairingManager {
             brokerHost: "ai.ucar.cc",
             brokerPort: 8883,
             useTLS: true,
-            deviceId: deviceId,
             authToken: authToken
         )
         try? store.save(defaults)
@@ -67,7 +59,6 @@ public final class PairingManager {
         brokerHost = c.brokerHost
         brokerPort = c.brokerPort
         useTLS = c.useTLS
-        deviceId = c.deviceId
         authToken = c.authToken
         isPaired = !c.brokerHost.isEmpty
     }
@@ -77,7 +68,6 @@ public final class PairingManager {
             brokerHost: brokerHost,
             brokerPort: brokerPort,
             useTLS: useTLS,
-            deviceId: deviceId,
             authToken: authToken
         )
     }
@@ -100,7 +90,6 @@ public final class PairingManager {
             item.value.map { (item.name, $0.filter { !$0.isWhitespace && !$0.isNewline }) }
         })
         guard let broker = params["broker"],
-              let device = params["device"],
               let token = params["token"] else {
             throw PairingError.missingFields
         }
@@ -116,7 +105,6 @@ public final class PairingManager {
             brokerHost: host,
             brokerPort: port,
             useTLS: tls,
-            deviceId: device,
             authToken: token
         )
     }
@@ -128,7 +116,7 @@ public final class PairingManager {
         public var errorDescription: String? {
             switch self {
             case .invalidURL: "Invalid pairing URL"
-            case .missingFields: "Missing broker, device, or token in URL"
+            case .missingFields: "Missing broker or token in URL"
             }
         }
     }

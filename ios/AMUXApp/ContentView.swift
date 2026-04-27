@@ -142,14 +142,9 @@ struct ContentView: View {
                 clientId: clientId, useTLS: pairing.useTLS
             )
             logger.info("MQTT connected")
-
-            teamclawService.start(
-                mqtt: mqtt,
-                teamId: onboarding.currentContext?.team.id ?? "",
-                deviceId: pairing.deviceId,
-                peerId: "ios-\(userID.prefix(8))",
-                modelContext: modelContext
-            )
+            // TeamclawService.start is invoked from RootTabView.configureStores
+            // once ConnectedAgentsStore has loaded; it owns its own
+            // wait-for-MQTT loop so racing this connect call is safe.
         } catch {
             logger.error("MQTT connect failed: \(error)")
         }

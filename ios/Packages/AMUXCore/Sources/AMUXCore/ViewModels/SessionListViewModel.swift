@@ -40,7 +40,11 @@ public final class SessionListViewModel {
 
     public init() {}
 
-    public func start(mqtt: MQTTService, teamID: String = "", deviceId: String, modelContext: ModelContext, teamclawService: TeamclawService? = nil) {
+    public func start(mqtt: MQTTService,
+                      teamID: String = "",
+                      connectedAgentsStore: ConnectedAgentsStore?,
+                      modelContext: ModelContext,
+                      teamclawService: TeamclawService? = nil) {
         // Create a dedicated context from the same container for async work
         let container = modelContext.container
         let ctx = ModelContext(container)
@@ -50,28 +54,21 @@ public final class SessionListViewModel {
         workspaces = (try? ctx.fetch(FetchDescriptor<Workspace>(sortBy: [SortDescriptor(\.displayName)]))) ?? []
         sessions = (try? ctx.fetch(FetchDescriptor<Session>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
 
-        guard !deviceId.isEmpty else {
-            isLoading = false
-            task?.cancel()
-            task = nil
-            return
-        }
-
         task?.cancel()
+
         // Daemon fans each session out to its own retained topic
-        // `device/{id}/runtime/{runtime}/state` (one RuntimeInfo per message)
-        // so a single publish never relies on a large broker packet limit. We
-        // subscribe to the wildcard and rebuild our dict as retained
-        // messages arrive.
-        let runtimeStatePrefix = MQTTTopics.runtimeStatePrefix(teamID: teamID, deviceID: deviceId)
-        let runtimeStateSuffix = "/state"
-        let runtimeStateWildcard = MQTTTopics.runtimeStateWildcard(teamID: teamID, deviceID: deviceId)
-        task = Task {
+        // `device/{daemon_device_id}/runtime/{runtime}/state` (one RuntimeInfo
+        // per message). With multiple daemons in scope we maintain one
+        // wildcard subscription per known daemon device-id and re-sync the set
+        // whenever ConnectedAgentsStore reloads. Topic shape filtering happens
+        // in `parseRuntimeStateTopic`; the per-device subscriptions just gate
+        // delivery from the broker.
+        task = Task { [weak self] in
+            guard let self else { return }
             // Outer loop: each iteration represents a fresh MQTT connection
             // lifecycle. When the inner stream ends (disconnect clears
             // continuations), loop back, wait for reconnect, and resubscribe
             // so the broker re-delivers retained runtime/workspace lists.
-            // Mirrors the pattern RuntimeDetailViewModel uses.
             while !Task.isCancelled {
                 var waited = 0
                 while mqtt.connectionState != .connected {
@@ -81,8 +78,6 @@ public final class SessionListViewModel {
                     if waited >= 15_000 {
                         NSLog("[SessionListVM] timed out waiting for MQTT (state: %@)", String(describing: mqtt.connectionState))
                         isLoading = false
-                        // Keep looping — user-triggered reconnect will flip
-                        // connectionState and unblock the next iteration.
                         break
                     }
                 }
@@ -93,40 +88,51 @@ public final class SessionListViewModel {
                 }
 
                 let stream = mqtt.messages()
-                try? await mqtt.subscribe(runtimeStateWildcard)
-                isLoading = false
-                NSLog("[SessionListVM] subscribed to %@", runtimeStateWildcard)
 
-                // Phase 2b: workspaces come from FetchWorkspaces RPC instead
-                // of retained topic subscription. One-shot fetch on connect.
-                // Phase 2c will call syncWorkspaces from workspace-mutation
-                // success handlers; until then, users don't see changes made
-                // from other devices until they reconnect. Acceptable for the
-                // compat window since daemon still publishes retained
-                // deviceWorkspaces for pre-Phase-2b clients.
+                // Per-agent subscription set, kept in sync with
+                // connectedAgentsStore.agents via Observation tracking below.
+                await self.resyncRuntimeStateSubscriptions(
+                    mqtt: mqtt,
+                    teamID: teamID,
+                    store: connectedAgentsStore
+                )
+                self.isLoading = false
+
+                let observer = Task { [weak self] in
+                    guard let self else { return }
+                    while !Task.isCancelled {
+                        await self.waitForAgentsMutation(store: connectedAgentsStore)
+                        if Task.isCancelled { return }
+                        await self.resyncRuntimeStateSubscriptions(
+                            mqtt: mqtt,
+                            teamID: teamID,
+                            store: connectedAgentsStore
+                        )
+                    }
+                }
+
                 if let teamclawService {
                     Task { [weak self] in
                         guard let self else { return }
                         let workspaces = await teamclawService.fetchWorkspaces()
-                        syncWorkspaces(workspaces, modelContext: ctx)
+                        self.syncWorkspaces(workspaces, modelContext: ctx)
                     }
                 }
 
                 for await msg in stream {
-                    guard msg.topic.hasPrefix(runtimeStatePrefix),
-                          msg.topic.hasSuffix(runtimeStateSuffix) else { continue }
+                    guard let parsed = Self.parseRuntimeStateTopic(msg.topic, teamID: teamID) else { continue }
                     // Empty retained payload = the daemon cleared this runtime's
                     // slot (session deletion). Drop the local row to match.
                     if msg.payload.isEmpty {
-                        let runtimeId = String(msg.topic.dropFirst(runtimeStatePrefix.count).dropLast(runtimeStateSuffix.count))
-                        removeRuntime(runtimeId: runtimeId, modelContext: ctx)
-                        refreshSessions(modelContext: ctx)
+                        self.removeRuntime(runtimeId: parsed.runtimeId, modelContext: ctx)
+                        self.refreshSessions(modelContext: ctx)
                         continue
                     }
                     guard let info = try? ProtoMQTTCoder.decode(Amux_RuntimeInfo.self, from: msg.payload) else { continue }
-                    syncRuntime(info, modelContext: ctx)
-                    refreshSessions(modelContext: ctx)
+                    self.syncRuntime(info, daemonDeviceId: parsed.daemonDeviceId, modelContext: ctx)
+                    self.refreshSessions(modelContext: ctx)
                 }
+                observer.cancel()
                 if Task.isCancelled { return }
                 NSLog("[SessionListVM] stream ended, waiting to resubscribe…")
             }
@@ -135,10 +141,68 @@ public final class SessionListViewModel {
 
     public func stop() { task?.cancel(); task = nil }
 
-    private func syncRuntime(_ proto: Amux_RuntimeInfo, modelContext: ModelContext) {
+    /// Diffs the desired daemon device-id set against the currently subscribed
+    /// set and adjusts `runtime/+/state` subscriptions accordingly. Idempotent.
+    private func resyncRuntimeStateSubscriptions(
+        mqtt: MQTTService,
+        teamID: String,
+        store: ConnectedAgentsStore?
+    ) async {
+        let desired: Set<String> = {
+            guard let store else { return [] }
+            return Set(store.agents.compactMap(\.deviceID).filter { !$0.isEmpty })
+        }()
+        let toAdd = desired.subtracting(subscribedDeviceIDs)
+        let toRemove = subscribedDeviceIDs.subtracting(desired)
+        for id in toAdd {
+            let topic = MQTTTopics.runtimeStateWildcard(teamID: teamID, deviceID: id)
+            try? await mqtt.subscribe(topic)
+            NSLog("[SessionListVM] subscribed to %@", topic)
+        }
+        for id in toRemove {
+            let topic = MQTTTopics.runtimeStateWildcard(teamID: teamID, deviceID: id)
+            try? await mqtt.unsubscribe(topic)
+        }
+        subscribedDeviceIDs = desired
+    }
+
+    /// Suspends until any tracked property of `store.agents` mutates. Returns
+    /// immediately if the store is nil.
+    private func waitForAgentsMutation(store: ConnectedAgentsStore?) async {
+        guard let store else {
+            try? await Task.sleep(for: .seconds(60))
+            return
+        }
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            withObservationTracking {
+                _ = store.agents
+            } onChange: {
+                cont.resume()
+            }
+        }
+    }
+
+    /// Returns the daemon device-id and runtime-id when `topic` matches
+    /// `amux/{team}/device/{dev}/runtime/{rid}/state`. Nil otherwise.
+    private static func parseRuntimeStateTopic(_ topic: String, teamID: String) -> (daemonDeviceId: String, runtimeId: String)? {
+        let parts = topic.split(separator: "/")
+        guard parts.count == 7,
+              parts[0] == "amux",
+              parts[2] == "device",
+              parts[4] == "runtime",
+              parts[6] == "state" else {
+            return nil
+        }
+        let normalizedTeam = MQTTTopics.normalizedTeamID(teamID)
+        guard parts[1] == Substring(normalizedTeam) else { return nil }
+        return (daemonDeviceId: String(parts[3]), runtimeId: String(parts[5]))
+    }
+
+    private func syncRuntime(_ proto: Amux_RuntimeInfo, daemonDeviceId: String, modelContext: ModelContext) {
         let id = proto.runtimeID
         let descriptor = FetchDescriptor<Runtime>(predicate: #Predicate { $0.runtimeId == id })
         if let existing = try? modelContext.fetch(descriptor).first {
+            existing.daemonDeviceId = daemonDeviceId
             // Mark unread and update timestamp if there's new activity
             if existing.lastOutputSummary != proto.lastOutputSummary
                 || existing.toolUseCount != Int(proto.toolUseCount) {
@@ -177,6 +241,7 @@ public final class SessionListViewModel {
             )
             newRuntime.lastEventTime = .now
             newRuntime.hasUnread = true
+            newRuntime.daemonDeviceId = daemonDeviceId
             let models = proto.availableModels.map { AvailableModel(id: $0.id, displayName: $0.displayName) }
             if let json = try? JSONEncoder().encode(models),
                let str = String(data: json, encoding: .utf8) {
@@ -235,6 +300,10 @@ public final class SessionListViewModel {
     /// `sessionId` isn't in the set — this is how we keep MQTT-retained
     /// session garbage on the shared broker from showing up in the list.
     public var validSessionIDs: Set<String>?
+
+    /// Daemon device-ids whose `runtime/+/state` topic we currently hold an
+    /// active subscription on. Mutated only by `resyncRuntimeStateSubscriptions`.
+    private var subscribedDeviceIDs: Set<String> = []
 
     /// Call this from views when sessions are known to have changed (e.g. after TeamclawService sync).
     public func reloadSessions(modelContext: ModelContext) {

@@ -26,21 +26,25 @@ public struct RuntimeDetailView: View {
     @Binding var navigationPath: [String]
     let connectedAgentsStore: ConnectedAgentsStore?
 
-    public init(runtime: Runtime, mqtt: MQTTService, deviceId: String, peerId: String,
+    public init(runtime: Runtime, mqtt: MQTTService, peerId: String,
                 allAgentIds: [String], navigationPath: Binding<[String]>,
                 connectedAgentsStore: ConnectedAgentsStore? = nil) {
         _viewModel = State(initialValue: RuntimeDetailViewModel(
-            runtime: runtime, mqtt: mqtt, deviceId: deviceId, peerId: peerId))
+            runtime: runtime, mqtt: mqtt, peerId: peerId,
+            connectedAgentsStore: connectedAgentsStore))
         self.allAgentIds = allAgentIds
         self._navigationPath = navigationPath
         self.connectedAgentsStore = connectedAgentsStore
     }
 
-    public init(session: Session, mqtt: MQTTService, deviceId: String, peerId: String,
+    public init(session: Session, mqtt: MQTTService, peerId: String,
                 teamclawService: TeamclawService?, navigationPath: Binding<[String]>,
                 connectedAgentsStore: ConnectedAgentsStore? = nil) {
         _viewModel = State(initialValue: RuntimeDetailViewModel(
-            runtime: nil, mqtt: mqtt, teamID: session.teamId, deviceId: deviceId, peerId: peerId, session: session, teamclawService: teamclawService))
+            runtime: nil, mqtt: mqtt, teamID: session.teamId,
+            peerId: peerId, session: session,
+            teamclawService: teamclawService,
+            connectedAgentsStore: connectedAgentsStore))
         self.allAgentIds = []
         self._navigationPath = navigationPath
         self.connectedAgentsStore = connectedAgentsStore
@@ -329,6 +333,8 @@ public struct RuntimeDetailView: View {
 
     private func forkToCollab(members: [CachedActor]) {
         guard let runtime = viewModel.runtime else { return }
+        let daemonDeviceId = viewModel.daemonDeviceIdRef
+        guard !daemonDeviceId.isEmpty else { return }
         // Use last output summary or session title as handoff context
         let summary = runtime.lastOutputSummary.isEmpty
             ? "Forked from agent session: \(runtime.sessionTitle.isEmpty ? runtime.runtimeId : runtime.sessionTitle)"
@@ -336,18 +342,17 @@ public struct RuntimeDetailView: View {
 
         var createReq = Teamclaw_CreateSessionRequest()
         createReq.sessionType = .collab
-        createReq.teamID = viewModel.deviceIdRef  // v1: use deviceId as teamId
+        createReq.teamID = viewModel.session?.teamId ?? ""
         createReq.title = runtime.sessionTitle.isEmpty ? "Collab: \(runtime.worktree.split(separator: "/").last.map(String.init) ?? runtime.runtimeId)" : "Collab: \(runtime.sessionTitle)"
         createReq.summary = summary
         createReq.inviteActorIds = members.map(\.actorId)
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = viewModel.deviceIdRef
+        rpcReq.senderDeviceID = daemonDeviceId
         rpcReq.method = .createSession(createReq)
 
-        let deviceId = viewModel.deviceIdRef
-        let topic = MQTTTopics.deviceRpcRequest(teamID: viewModel.session?.teamId ?? "", deviceID: deviceId)
+        let topic = MQTTTopics.deviceRpcRequest(teamID: viewModel.session?.teamId ?? "", deviceID: daemonDeviceId)
         Task {
             if let data = try? rpcReq.serializedData() {
                 try? await viewModel.mqttRef.publish(topic: topic, payload: data, retain: false)

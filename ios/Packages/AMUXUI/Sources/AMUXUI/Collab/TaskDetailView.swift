@@ -8,7 +8,6 @@ public struct TaskDetailView: View {
     let sessionViewModel: SessionListViewModel
     let teamclawService: TeamclawService?
     let mqtt: MQTTService
-    let deviceId: String
     let peerId: String
     @Binding var navigationPath: [String]
 
@@ -34,7 +33,6 @@ public struct TaskDetailView: View {
         sessionViewModel: SessionListViewModel,
         teamclawService: TeamclawService?,
         mqtt: MQTTService,
-        deviceId: String,
         peerId: String,
         navigationPath: Binding<[String]>
     ) {
@@ -43,7 +41,6 @@ public struct TaskDetailView: View {
         self.sessionViewModel = sessionViewModel
         self.teamclawService = teamclawService
         self.mqtt = mqtt
-        self.deviceId = deviceId
         self.peerId = peerId
         self._navigationPath = navigationPath
     }
@@ -70,7 +67,7 @@ public struct TaskDetailView: View {
             if let item {
                 content(for: item)
             } else {
-                ContentUnavailableView("Task Not Found", systemImage: "checklist")
+                ContentUnavailableView("Idea Not Found", systemImage: TaskUIPresentation.systemImage)
             }
         }
         .onAppear { seedLocals() }
@@ -154,7 +151,7 @@ public struct TaskDetailView: View {
                 }
             }
         }
-        .navigationTitle("Task")
+        .navigationTitle(TaskUIPresentation.singularTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
@@ -175,7 +172,6 @@ public struct TaskDetailView: View {
         .sheet(isPresented: $showNewSession) {
             NewSessionSheet(
                 mqtt: mqtt,
-                deviceId: deviceId,
                 peerId: peerId,
                 teamclawService: teamclawService,
                 viewModel: sessionViewModel,
@@ -187,7 +183,7 @@ public struct TaskDetailView: View {
             )
         }
         .confirmationDialog(
-            item.archived ? "Unarchive this task?" : "Archive this task?",
+            item.archived ? "Unarchive this idea?" : "Archive this idea?",
             isPresented: $showArchiveConfirm,
             titleVisibility: .visible
         ) {
@@ -198,8 +194,8 @@ public struct TaskDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(item.archived
-                 ? "The task will reappear in the main list."
-                 : "Archived tasks are hidden from the main list but can be restored later.")
+                 ? "The idea will reappear in the main list."
+                 : "Archived ideas are hidden from the main list but can be restored later.")
         }
     }
 

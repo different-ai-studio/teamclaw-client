@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import UIKit
 import AMUXCore
 import os
 
@@ -13,7 +12,6 @@ public struct NewSessionSheet: View {
     @Environment(\.modelContext) private var modelContext
 
     let mqtt: MQTTService
-    let deviceId: String
     let peerId: String
     let teamclawService: TeamclawService?
     let teamID: String
@@ -56,14 +54,11 @@ public struct NewSessionSheet: View {
         return scopedTasks.isEmpty ? tasks : scopedTasks
     }
     private var shouldShowWorkspaceRow: Bool { primaryAgentID != nil }
-    private var requesterDeviceID: String {
-        UIDevice.current.identifierForVendor?.uuidString ?? "ios-\(peerId)"
-    }
 
     /// Set by parent — called with agentId when session is created
     var onSessionCreated: ((String) -> Void)?
 
-    public init(mqtt: MQTTService, deviceId: String, peerId: String, teamclawService: TeamclawService? = nil,
+    public init(mqtt: MQTTService, peerId: String, teamclawService: TeamclawService? = nil,
                 teamID: String = "", currentActorID: String? = nil, isAgentAvailable: Bool = true,
                 connectedAgentsStore: ConnectedAgentsStore? = nil,
                 viewModel: SessionListViewModel,
@@ -71,7 +66,6 @@ public struct NewSessionSheet: View {
                 preselectedCollaborators: [CachedActor] = [],
                 onSessionCreated: ((String) -> Void)? = nil) {
         self.mqtt = mqtt
-        self.deviceId = deviceId
         self.peerId = peerId
         self.teamclawService = teamclawService
         self.teamID = teamID
@@ -354,7 +348,7 @@ public struct NewSessionSheet: View {
 
     private var taskRow: some View {
         HStack(alignment: .center, spacing: 8) {
-            Text("Task")
+            Text(TaskUIPresentation.singularTitle)
                 .foregroundStyle(.secondary)
             Spacer()
             Menu {
@@ -450,11 +444,11 @@ public struct NewSessionSheet: View {
         let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let taskBlock: String
         if !description.isEmpty && !title.isEmpty && description != title {
-            taskBlock = "Task: \(title)\n\n\(description)"
+            taskBlock = "Idea: \(title)\n\n\(description)"
         } else if !description.isEmpty {
-            taskBlock = "Task: \(description)"
+            taskBlock = "Idea: \(description)"
         } else if !title.isEmpty {
-            taskBlock = "Task: \(title)"
+            taskBlock = "Idea: \(title)"
         } else {
             return userText
         }
@@ -516,7 +510,7 @@ public struct NewSessionSheet: View {
             }
 
             let routeDevice = effectiveDeviceID
-            guard !routeDevice.isEmpty, routeDevice != requesterDeviceID else {
+            guard !routeDevice.isEmpty else {
                 await MainActor.run {
                     isSending = false
                     errorMessage = "Daemon device ID is not configured."
@@ -526,16 +520,16 @@ public struct NewSessionSheet: View {
 
             await MainActor.run {
                 debugStatusMessage = "starting runtime…"
-                debugTransportMessage = "team=\(effectiveTeamID) route=\(routeDevice) reply=\(requesterDeviceID) (RPC)"
+                debugTransportMessage = "team=\(effectiveTeamID) route=\(routeDevice) (RPC)"
             }
 
             let outcome = await teamclawService.runtimeStartRpc(
+                targetDeviceID: routeDevice,
                 agentType: selectedAgentType,
                 workspaceId: selectedWorkspaceRecord?.id ?? "",
                 worktree: selectedWorkspaceRecord?.path ?? "",
                 sessionId: "",
-                initialPrompt: text,
-                targetDeviceID: routeDevice
+                initialPrompt: text
             )
 
             await MainActor.run {
@@ -565,20 +559,15 @@ public struct NewSessionSheet: View {
         teamID.isEmpty ? "teamclaw" : teamID
     }
 
-    /// Daemon device UUID to publish MQTT commands at. Picks the primary
-    /// agent's registered `agents.device_id` when set (populated by the
-    /// daemon on start), otherwise falls back to the user-typed value in
-    /// Settings for older daemons.
+    /// Daemon device UUID to publish MQTT commands at. Resolved from the
+    /// in-memory ConnectedAgentsStore: prefer the picked primary agent's
+    /// `agents.device_id`; otherwise fall back to the most-recently-active
+    /// connected agent's deviceID. Returns "" when no daemon is reachable.
     private var effectiveDeviceID: String {
         if let primary = primaryAgentID,
            let agent = connectedAgentsStore?.agents.first(where: { $0.id == primary }),
            let id = agent.deviceID, !id.isEmpty {
             return id
-        }
-
-        let configuredDeviceID = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !configuredDeviceID.isEmpty, configuredDeviceID != requesterDeviceID {
-            return configuredDeviceID
         }
 
         let inferredDeviceIDs = connectedAgentsStore?.agents.sorted(by: { lhs, rhs in
@@ -590,11 +579,11 @@ public struct NewSessionSheet: View {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
 
         if let inferredDeviceID = inferredDeviceIDs?
-            .first(where: { !$0.isEmpty && $0 != requesterDeviceID }) {
+            .first(where: { !$0.isEmpty }) {
             return inferredDeviceID
         }
 
-        return configuredDeviceID
+        return ""
     }
 
     private func createSharedSession(text: String, title: String) {
@@ -822,22 +811,22 @@ public struct NewSessionSheet: View {
         }
 
         let routeDevice = effectiveDeviceID
-        guard !routeDevice.isEmpty, routeDevice != requesterDeviceID else {
+        guard !routeDevice.isEmpty else {
             throw SessionCreationError.rpc("Daemon device ID is not configured.")
         }
 
         await MainActor.run {
             debugStatusMessage = "starting runtime for session \(sessionID)…"
-            debugTransportMessage = "team=\(effectiveTeamID) route=\(routeDevice) reply=\(requesterDeviceID) (RPC)"
+            debugTransportMessage = "team=\(effectiveTeamID) route=\(routeDevice) (RPC)"
         }
 
         let outcome = await teamclawService.runtimeStartRpc(
+            targetDeviceID: routeDevice,
             agentType: selectedAgentType,
             workspaceId: selectedWorkspaceRecord?.id ?? "",
             worktree: selectedWorkspaceRecord?.path ?? "",
             sessionId: sessionID,
-            initialPrompt: initialPrompt,
-            targetDeviceID: routeDevice
+            initialPrompt: initialPrompt
         )
 
         switch outcome {

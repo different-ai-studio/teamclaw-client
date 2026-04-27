@@ -63,7 +63,7 @@ public struct RootTabView: View {
                             onReconnect: onReconnect,
                             onSignOut: onSignOut)
             }
-            Tab("Tasks", systemImage: "checklist", value: AppTab.tasks) {
+            Tab(TaskUIPresentation.pluralTitle, systemImage: TaskUIPresentation.systemImage, value: AppTab.tasks) {
                 TasksTab(mqtt: mqtt,
                          pairing: pairing,
                          teamclawService: teamclawService,
@@ -106,14 +106,14 @@ public struct RootTabView: View {
         }
         .task(id: activeTeam?.id) {
             await configureStores()
-            // SessionListVM needs both teamID and the daemon's device_id to
-            // build runtime/+/state subscription paths. configureStores
-            // populates pairing.deviceId from connectedAgentsStore on first
-            // run, so start *after* it returns rather than racing it.
+            // SessionListVM observes ConnectedAgentsStore directly and fans
+            // its `runtime/+/state` subscriptions out per known daemon, so we
+            // start it after configureStores so the initial agent set is
+            // already loaded.
             viewModel.start(
                 mqtt: mqtt,
                 teamID: activeTeam?.id ?? "",
-                deviceId: pairing.deviceId,
+                connectedAgentsStore: connectedAgentsStore,
                 modelContext: modelContext,
                 teamclawService: teamclawService
             )
@@ -165,17 +165,18 @@ public struct RootTabView: View {
                 await store.reload()
             }
         }
-        // Backfill `pairing.deviceId` from the resolved daemon row in Supabase.
-        // Post-Phase-4 the pairing flow no longer captures the daemon's
-        // device_id locally, but downstream subscribers (SessionListVM and
-        // RuntimeDetailVM legacy fallback) still expect it on the pairing
-        // manager. Stopgap until pairing.deviceId is split into
-        // iOS-install-id vs. daemon-device-id and call sites are migrated to
-        // resolve via ConnectedAgentsStore directly.
-        if pairing.deviceId.isEmpty,
-           let resolvedDeviceID = connectedAgentsStore?.agents.first?.deviceID,
-           !resolvedDeviceID.isEmpty {
-            try? pairing.updateDaemonDeviceID(resolvedDeviceID)
+        // TeamclawService needs ConnectedAgentsStore to fan its per-daemon
+        // notify+rpcRes subscriptions out, so kick it off here (after the
+        // store has loaded) instead of in ContentView. start() is idempotent
+        // — listenerTask?.cancel() handles re-entry on team changes.
+        if let teamclawService {
+            teamclawService.start(
+                mqtt: mqtt,
+                teamId: activeTeam.id,
+                peerId: "ios-\(pairing.authToken.prefix(6))",
+                modelContext: modelContext,
+                connectedAgentsStore: connectedAgentsStore
+            )
         }
         if agentAccessRepo == nil {
             agentAccessRepo = try? SupabaseAgentAccessRepository()

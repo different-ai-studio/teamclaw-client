@@ -23,6 +23,13 @@ public final class Runtime {
     public var availableModelsJSON: String = ""
     public var currentModel: String?
 
+    /// MQTT device-id of the daemon that owns this runtime — populated from
+    /// the topic path when SessionListVM ingests `runtime/{rid}/state`. Used
+    /// by RuntimeDetailVM to publish commands to the right
+    /// `device/{daemon_device_id}/runtime/{rid}/commands` topic without
+    /// needing a Session row alongside.
+    public var daemonDeviceId: String = ""
+
     public init(runtimeId: String, agentType: Int = 1, worktree: String = "", branch: String = "",
                 status: Int = 1, startedAt: Date = .now, currentPrompt: String = "",
                 workspaceId: String = "") {

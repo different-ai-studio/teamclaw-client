@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import SwiftProtobuf
 import SwiftData
 
@@ -11,8 +12,13 @@ public final class TeamclawService {
     private var mqtt: MQTTService?
     public var mqttRef: MQTTService? { mqtt }
     private var teamId: String = ""
-    private var deviceId: String = ""
     private var peerId: String = ""
+    private var connectedAgentsStore: ConnectedAgentsStore?
+    /// Daemon device-ids whose `rpc/res` and `notify` topics are currently
+    /// subscribed. Kept in sync with `connectedAgentsStore.agents` via the
+    /// observer task that `start()` launches.
+    private var subscribedDeviceIDs: Set<String> = []
+    private var agentObserverTask: Task<Void, Never>?
     /// Member id of the local actor, resolved from the retained device peer
     /// list by matching our own peer_id. Populated once
     /// PeerList arrives; used as `sender_actor_id` on outgoing RPCs so the
@@ -42,18 +48,19 @@ public final class TeamclawService {
     public func start(
         mqtt: MQTTService,
         teamId: String,
-        deviceId: String,
         peerId: String,
-        modelContext: ModelContext
+        modelContext: ModelContext,
+        connectedAgentsStore: ConnectedAgentsStore?
     ) {
         listenerTask?.cancel()
+        agentObserverTask?.cancel()
         let container = modelContext.container
         configureRuntime(
             mqtt: mqtt,
             teamId: teamId,
-            deviceId: deviceId,
             peerId: peerId,
-            modelContainer: container
+            modelContainer: container,
+            connectedAgentsStore: connectedAgentsStore
         )
         let ctx = ModelContext(container)
 
@@ -62,7 +69,8 @@ public final class TeamclawService {
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         ))) ?? []
 
-        listenerTask = Task {
+        listenerTask = Task { [weak self] in
+            guard let self else { return }
             // Wait for MQTT connection (up to 15s)
             var waited = 0
             while mqtt.connectionState != .connected {
@@ -77,41 +85,100 @@ public final class TeamclawService {
 
             let stream = mqtt.messages()
 
-            // Subscribe to core teamclaw topics
-            try? await mqtt.subscribe(MQTTTopics.deviceNotify(teamID: teamId, deviceID: deviceId))
-            try? await mqtt.subscribe(MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId))
-            await rehydrateForegroundSessionSubscriptions(on: mqtt)
+            // Per-daemon notify+rpcRes subscriptions. Re-synced on agents-store
+            // mutations so newly-resolved daemons start receiving notify and
+            // RPC responses without a manual reconnect.
+            await self.resyncDaemonSubscriptions()
+            await self.rehydrateForegroundSessionSubscriptions(on: mqtt)
+
+            self.agentObserverTask = Task { [weak self] in
+                guard let self else { return }
+                while !Task.isCancelled {
+                    await self.waitForAgentsMutation()
+                    if Task.isCancelled { return }
+                    await self.resyncDaemonSubscriptions()
+                }
+            }
 
             // Phase 2b: peers come from FetchPeers RPC instead of retained
             // devicePeers subscription. One-shot fetch after subscribe; notify
             // handler does follow-ups on peers.changed / members.changed.
             Task { [weak self] in
                 guard let self else { return }
-                let peers = await self.fetchPeers()
+                let peers = await self.fetchPeersAcrossDaemons()
                 self.syncPeers(peers)
             }
 
-            isConnected = true
+            self.isConnected = true
             print("[TeamclawService] subscribed to teamclaw topics for team: \(teamId)")
 
             for await incoming in stream {
                 if Task.isCancelled { break }
-                await handleIncoming(incoming, modelContext: ctx)
+                await self.handleIncoming(incoming, modelContext: ctx)
             }
 
-            isConnected = false
+            self.isConnected = false
         }
     }
 
     public func stop() {
         listenerTask?.cancel()
         listenerTask = nil
+        agentObserverTask?.cancel()
+        agentObserverTask = nil
         isConnected = false
         for sessionId in foregroundSessionIDsSet {
             let topic = MQTTTopics.sessionLive(teamID: teamId, sessionID: sessionId)
             mqtt?.unsubscribeForLifecycleStop(topic)
         }
         foregroundSessionIDsSet.removeAll()
+        subscribedDeviceIDs.removeAll()
+    }
+
+    private func resyncDaemonSubscriptions() async {
+        guard let mqtt else { return }
+        let desired: Set<String> = {
+            guard let store = connectedAgentsStore else { return [] }
+            return Set(store.agents.compactMap(\.deviceID).filter { !$0.isEmpty })
+        }()
+        let toAdd = desired.subtracting(subscribedDeviceIDs)
+        let toRemove = subscribedDeviceIDs.subtracting(desired)
+        for id in toAdd {
+            try? await mqtt.subscribe(MQTTTopics.deviceNotify(teamID: teamId, deviceID: id))
+            try? await mqtt.subscribe(MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: id))
+        }
+        for id in toRemove {
+            try? await mqtt.unsubscribe(MQTTTopics.deviceNotify(teamID: teamId, deviceID: id))
+            try? await mqtt.unsubscribe(MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: id))
+        }
+        subscribedDeviceIDs = desired
+    }
+
+    private func waitForAgentsMutation() async {
+        guard let store = connectedAgentsStore else {
+            try? await Task.sleep(for: .seconds(60))
+            return
+        }
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            withObservationTracking {
+                _ = store.agents
+            } onChange: {
+                cont.resume()
+            }
+        }
+    }
+
+    /// Fans FetchPeers RPCs across every known daemon and concatenates the
+    /// results. Pre-multi-daemon code only queried `self.deviceId`; we mirror
+    /// the same intent (resolve our peer record for `localMemberId`) but no
+    /// longer require a single privileged daemon. Returns an empty array if no
+    /// daemons are subscribed yet.
+    private func fetchPeersAcrossDaemons() async -> [Amux_PeerInfo] {
+        var combined: [Amux_PeerInfo] = []
+        for id in subscribedDeviceIDs.sorted() {
+            combined.append(contentsOf: await fetchPeers(targetDeviceID: id))
+        }
+        return combined
     }
 
     // MARK: - Message Dispatch
@@ -119,7 +186,7 @@ public final class TeamclawService {
     private func handleIncoming(_ incoming: MQTTIncoming, modelContext: ModelContext) async {
         let topic = incoming.topic
 
-        if topic == MQTTTopics.deviceNotify(teamID: teamId, deviceID: deviceId) {
+        if let notifyDeviceID = parseDeviceNotifyTopic(topic) {
             guard let notify = try? Teamclaw_Notify(serializedBytes: incoming.payload) else {
                 print("[TeamclawService] failed to decode device/notify payload as Notify")
                 return
@@ -131,11 +198,13 @@ public final class TeamclawService {
                     await refreshSessionState(for: notify.refreshHint, modelContext: modelContext)
                 }
             case "peers.changed":
-                let peers = await fetchPeers()
+                // Refresh peers from the daemon that emitted the notify, since
+                // its peer set is the authority for joins/leaves in its scope.
+                let peers = await fetchPeers(targetDeviceID: notifyDeviceID)
                 syncPeers(peers)
             case "workspaces.changed":
                 // Placeholder: Task 6 wires the returned array into state.
-                _ = await fetchWorkspaces()
+                _ = await fetchWorkspaces(targetDeviceID: notifyDeviceID)
             default:
                 break
             }
@@ -432,8 +501,9 @@ public final class TeamclawService {
         return createReq
     }
 
-    public func createTask(description: String, workspaceId: String = "") async -> Bool {
+    public func createTask(targetDeviceID: String, description: String, workspaceId: String = "") async -> Bool {
         guard let mqtt else { return false }
+        guard !targetDeviceID.isEmpty else { return false }
 
         let title: String
         if description.count <= 50 {
@@ -460,11 +530,12 @@ public final class TeamclawService {
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = deviceId
+        rpcReq.senderDeviceID = targetDeviceID
         rpcReq.method = .createTask(createReq)
 
         let requestId = rpcReq.requestID
-        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
+        let resTopic = MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: targetDeviceID)
         let stream = mqtt.messages()
 
         guard let data = try? rpcReq.serializedData() else { return false }
@@ -473,7 +544,7 @@ public final class TeamclawService {
         let deadline = Date().addingTimeInterval(10)
         for await msg in stream {
             if Date() > deadline { break }
-            if msg.topic == MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId) {
+            if msg.topic == resTopic {
                 if let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
                    response.requestID == requestId {
                     return response.success
@@ -490,8 +561,9 @@ public final class TeamclawService {
     /// `syncTaskEvent`. The call site typically flips `archived` on the
     /// SwiftData model first for optimistic UI; if the RPC fails, the next
     /// broadcast will reinstate the prior value.
-    public func archiveTask(taskId: String, sessionId: String, archived: Bool) async {
+    public func archiveTask(targetDeviceID: String, taskId: String, sessionId: String, archived: Bool) async {
         guard let mqtt else { return }
+        guard !targetDeviceID.isEmpty else { return }
 
         var update = Teamclaw_UpdateTaskRequest()
         update.sessionID = sessionId
@@ -500,10 +572,10 @@ public final class TeamclawService {
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = deviceId
+        rpcReq.senderDeviceID = targetDeviceID
         rpcReq.method = .updateTask(update)
 
-        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
@@ -518,8 +590,9 @@ public final class TeamclawService {
     /// - Parameter status: one of `"open"`, `"in_progress"`, `"done"`.
     ///   Any other value is sent as `.unknown` (which SwiftProtobuf skips,
     ///   producing a no-op update on the daemon side).
-    public func updateTaskStatus(taskId: String, sessionId: String, status: String) async {
+    public func updateTaskStatus(targetDeviceID: String, taskId: String, sessionId: String, status: String) async {
         guard let mqtt else { return }
+        guard !targetDeviceID.isEmpty else { return }
 
         var update = Teamclaw_UpdateTaskRequest()
         update.sessionID = sessionId
@@ -528,10 +601,10 @@ public final class TeamclawService {
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = deviceId
+        rpcReq.senderDeviceID = targetDeviceID
         rpcReq.method = .updateTask(update)
 
-        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
@@ -541,6 +614,7 @@ public final class TeamclawService {
     /// passed (SwiftProtobuf treats empty strings as "unset" on the
     /// daemon side). Status omitted when `nil`. Fire-and-forget.
     public func updateTask(
+        targetDeviceID: String,
         taskId: String,
         sessionId: String,
         title: String? = nil,
@@ -548,6 +622,7 @@ public final class TeamclawService {
         status: String? = nil
     ) async {
         guard let mqtt else { return }
+        guard !targetDeviceID.isEmpty else { return }
 
         var update = Teamclaw_UpdateTaskRequest()
         update.sessionID = sessionId
@@ -558,10 +633,10 @@ public final class TeamclawService {
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = deviceId
+        rpcReq.senderDeviceID = targetDeviceID
         rpcReq.method = .updateTask(update)
 
-        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
@@ -627,7 +702,13 @@ public final class TeamclawService {
         guard let session = (try? modelContext.fetch(descriptor))?.first else {
             return
         }
-        guard let targetDeviceID = await rpcTargetDeviceID(for: session.primaryAgentId) else {
+        let resolvedDeviceID: String?
+        if let cached = resolveDeviceID(forPrimaryAgentID: session.primaryAgentId) {
+            resolvedDeviceID = cached
+        } else {
+            resolvedDeviceID = await rpcTargetDeviceID(for: session.primaryAgentId)
+        }
+        guard let targetDeviceID = resolvedDeviceID else {
             return
         }
 
@@ -636,10 +717,11 @@ public final class TeamclawService {
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = deviceId
+        rpcReq.senderDeviceID = targetDeviceID
         rpcReq.method = .fetchSession(req)
 
         let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
+        let resTopic = MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: targetDeviceID)
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
 
@@ -647,7 +729,7 @@ public final class TeamclawService {
         let deadline = Date().addingTimeInterval(10)
         for await msg in stream {
             if Date() > deadline { break }
-            guard msg.topic == MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId),
+            guard msg.topic == resTopic,
                   let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
                   response.requestID == rpcReq.requestID,
                   response.success,
@@ -669,7 +751,13 @@ public final class TeamclawService {
             predicate: #Predicate { $0.sessionId == sessionId }
         )
         guard let session = (try? ctx.fetch(descriptor))?.first else { return }
-        guard let targetDeviceID = await rpcTargetDeviceID(for: session.primaryAgentId) else {
+        let resolvedDeviceID: String?
+        if let cached = resolveDeviceID(forPrimaryAgentID: session.primaryAgentId) {
+            resolvedDeviceID = cached
+        } else {
+            resolvedDeviceID = await rpcTargetDeviceID(for: session.primaryAgentId)
+        }
+        guard let targetDeviceID = resolvedDeviceID else {
             return
         }
 
@@ -680,10 +768,11 @@ public final class TeamclawService {
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = deviceId
+        rpcReq.senderDeviceID = targetDeviceID
         rpcReq.method = .fetchSessionMessages(req)
 
         let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
+        let resTopic = MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: targetDeviceID)
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
 
@@ -691,7 +780,7 @@ public final class TeamclawService {
         let deadline = Date().addingTimeInterval(10)
         for await msg in stream {
             if Date() > deadline { break }
-            guard msg.topic == MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId),
+            guard msg.topic == resTopic,
                   let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
                   response.requestID == rpcReq.requestID,
                   response.success,
@@ -706,22 +795,24 @@ public final class TeamclawService {
         }
     }
 
-    /// Fetches the daemon's current in-memory peer set via FetchPeers RPC.
-    /// Phase 2b replacement for the retained devicePeers topic subscription.
+    /// Fetches a single daemon's current in-memory peer set via FetchPeers
+    /// RPC. Phase 2b replacement for the retained devicePeers topic subscription.
     /// Returns empty array on timeout or decode error — the retained topic
     /// semantics degraded the same way, and callers are idempotent.
-    public func fetchPeers() async -> [Amux_PeerInfo] {
+    public func fetchPeers(targetDeviceID: String) async -> [Amux_PeerInfo] {
         guard let mqtt else { return [] }
+        guard !targetDeviceID.isEmpty else { return [] }
 
         let fetch = Teamclaw_FetchPeersRequest()  // empty request
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = deviceId
+        rpcReq.senderDeviceID = targetDeviceID
         rpcReq.method = .fetchPeers(fetch)
 
         let requestId = rpcReq.requestID
-        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
+        let resTopic = MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: targetDeviceID)
         let stream = mqtt.messages()
 
         guard let data = try? rpcReq.serializedData() else { return [] }
@@ -730,7 +821,7 @@ public final class TeamclawService {
         let deadline = Date().addingTimeInterval(10)
         for await msg in stream {
             if Date() > deadline { break }
-            if msg.topic == MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId),
+            if msg.topic == resTopic,
                let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
                response.requestID == requestId {
                 if case let .fetchPeersResult(result)? = response.result {
@@ -742,20 +833,22 @@ public final class TeamclawService {
         return []
     }
 
-    /// Fetches the daemon's workspace set via FetchWorkspaces RPC.
+    /// Fetches a single daemon's workspace set via FetchWorkspaces RPC.
     /// Phase 2b replacement for the retained deviceWorkspaces topic subscription.
-    public func fetchWorkspaces() async -> [Amux_WorkspaceInfo] {
+    public func fetchWorkspaces(targetDeviceID: String) async -> [Amux_WorkspaceInfo] {
         guard let mqtt else { return [] }
+        guard !targetDeviceID.isEmpty else { return [] }
 
         let fetch = Teamclaw_FetchWorkspacesRequest()  // empty request
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = deviceId
+        rpcReq.senderDeviceID = targetDeviceID
         rpcReq.method = .fetchWorkspaces(fetch)
 
         let requestId = rpcReq.requestID
-        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
+        let resTopic = MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: targetDeviceID)
         let stream = mqtt.messages()
 
         guard let data = try? rpcReq.serializedData() else { return [] }
@@ -764,7 +857,7 @@ public final class TeamclawService {
         let deadline = Date().addingTimeInterval(10)
         for await msg in stream {
             if Date() > deadline { break }
-            if msg.topic == MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId),
+            if msg.topic == resTopic,
                let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
                response.requestID == requestId {
                 if case let .fetchWorkspacesResult(result)? = response.result {
@@ -776,23 +869,36 @@ public final class TeamclawService {
         return []
     }
 
+    /// Convenience: fans `fetchWorkspaces` across every subscribed daemon and
+    /// concatenates the results. Used by SessionListVM startup, which doesn't
+    /// know which daemon owns which workspace yet.
+    public func fetchWorkspaces() async -> [Amux_WorkspaceInfo] {
+        var combined: [Amux_WorkspaceInfo] = []
+        for id in subscribedDeviceIDs.sorted() {
+            combined.append(contentsOf: await fetchWorkspaces(targetDeviceID: id))
+        }
+        return combined
+    }
+
     /// Adds a workspace via daemon RPC. Returns a `(success, error)` pair —
     /// daemon responds with `success=true, error=""` on accept; `success=false`
     /// with a daemon-side reason on reject. Returns `(false, "timeout")` when no
     /// response arrives within 10s.
-    public func addWorkspaceRpc(path: String) async -> (Bool, String) {
+    public func addWorkspaceRpc(targetDeviceID: String, path: String) async -> (Bool, String) {
         guard let mqtt else { return (false, "mqtt not configured") }
+        guard !targetDeviceID.isEmpty else { return (false, "no target device id") }
 
         var add = Teamclaw_AddWorkspaceRequest()
         add.path = path
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = deviceId
+        rpcReq.senderDeviceID = targetDeviceID
         rpcReq.method = .addWorkspace(add)
 
         let requestId = rpcReq.requestID
-        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
+        let resTopic = MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: targetDeviceID)
         let stream = mqtt.messages()
 
         guard let data = try? rpcReq.serializedData() else {
@@ -807,7 +913,7 @@ public final class TeamclawService {
         let deadline = Date().addingTimeInterval(10)
         for await msg in stream {
             if Date() > deadline { break }
-            if msg.topic == MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId),
+            if msg.topic == resTopic,
                let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
                response.requestID == requestId {
                 return (response.success, response.error)
@@ -818,19 +924,21 @@ public final class TeamclawService {
 
     /// Removes a workspace via daemon RPC. Same `(success, error)` semantics as
     /// `addWorkspaceRpc`.
-    public func removeWorkspaceRpc(workspaceId: String) async -> (Bool, String) {
+    public func removeWorkspaceRpc(targetDeviceID: String, workspaceId: String) async -> (Bool, String) {
         guard let mqtt else { return (false, "mqtt not configured") }
+        guard !targetDeviceID.isEmpty else { return (false, "no target device id") }
 
         var remove = Teamclaw_RemoveWorkspaceRequest()
         remove.workspaceID = workspaceId
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = deviceId
+        rpcReq.senderDeviceID = targetDeviceID
         rpcReq.method = .removeWorkspace(remove)
 
         let requestId = rpcReq.requestID
-        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: deviceId)
+        let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
+        let resTopic = MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: targetDeviceID)
         let stream = mqtt.messages()
 
         guard let data = try? rpcReq.serializedData() else {
@@ -845,7 +953,7 @@ public final class TeamclawService {
         let deadline = Date().addingTimeInterval(10)
         for await msg in stream {
             if Date() > deadline { break }
-            if msg.topic == MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId),
+            if msg.topic == resTopic,
                let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload),
                response.requestID == requestId {
                 return (response.success, response.error)
@@ -866,23 +974,15 @@ public final class TeamclawService {
     /// Returns `.accepted(runtimeID, sessionID)` or `.rejected(reason)`.
     /// Times out at 15s with `.rejected("timeout")`.
     public func runtimeStartRpc(
+        targetDeviceID: String,
         agentType: Amux_AgentType,
         workspaceId: String,
         worktree: String,
         sessionId: String,
-        initialPrompt: String,
-        targetDeviceID: String? = nil
+        initialPrompt: String
     ) async -> RuntimeStartOutcome {
         guard let mqtt else { return .rejected("mqtt not configured") }
-
-        // Routing: UI may pick a daemon by primary-agent mapping that differs
-        // from the paired-at-startup deviceId (see NewSessionSheet.effectiveDeviceID).
-        // Honor caller's override; fall back to self.deviceId when absent/empty.
-        let target: String = {
-            if let t = targetDeviceID, !t.isEmpty { return t }
-            return deviceId
-        }()
-        guard !target.isEmpty else { return .rejected("no target device id") }
+        guard !targetDeviceID.isEmpty else { return .rejected("no target device id") }
 
         var start = Teamclaw_RuntimeStartRequest()
         start.agentType = agentType
@@ -893,18 +993,17 @@ public final class TeamclawService {
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
-        rpcReq.senderDeviceID = deviceId
+        rpcReq.senderDeviceID = targetDeviceID
         rpcReq.method = .runtimeStart(start)
 
         let requestId = rpcReq.requestID
-        let reqTopic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: target)
-        let resTopic = MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: target)
+        let reqTopic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
+        let resTopic = MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: targetDeviceID)
 
-        // If target daemon differs from the one we subscribed to at start(),
-        // we must temporarily subscribe to its rpc/res so this request's
-        // response isn't missed. Subscribe BEFORE starting the stream so the
-        // broker has the sub registered before the publish races back.
-        let needsTargetSubscribe = (target != deviceId)
+        // If target daemon hasn't been folded into the standing per-agent
+        // subscription set yet (e.g. ConnectedAgentsStore hasn't reloaded),
+        // subscribe ad-hoc so the response isn't dropped.
+        let needsTargetSubscribe = !subscribedDeviceIDs.contains(targetDeviceID)
         if needsTargetSubscribe {
             try? await mqtt.subscribe(resTopic)
         }
@@ -921,7 +1020,7 @@ public final class TeamclawService {
             return .rejected("publish failed: \(error.localizedDescription)")
         }
 
-        print("[runtimeStartRpc] published requestID=\(requestId) to \(reqTopic) (awaiting response on any rpc/res with matching requestID)")
+        print("[runtimeStartRpc] published requestID=\(requestId) to \(reqTopic) (awaiting response on \(resTopic))")
 
         let deadline = Date().addingTimeInterval(15)
         defer {
@@ -929,17 +1028,9 @@ public final class TeamclawService {
                 Task { try? await mqtt.unsubscribe(resTopic) }
             }
         }
-        // Accept the response on EITHER the target's rpc/res (if it differs
-        // from self.deviceId, we subscribed above) OR self.deviceId's rpc/res
-        // (subscribed once at start() — daemon routes via sender_device_id
-        // which equals self.deviceId on our requests). We do NOT broaden to
-        // arbitrary `/rpc/res` topics — that would match responses destined
-        // for other iOS devices paired with different daemons on the same
-        // broker. requestID match is the inner filter.
-        let ownResTopic = MQTTTopics.deviceRpcResponse(teamID: teamId, deviceID: deviceId)
         for await msg in stream {
             if Date() > deadline { break }
-            guard msg.topic == resTopic || msg.topic == ownResTopic else { continue }
+            guard msg.topic == resTopic else { continue }
             guard let response = try? Teamclaw_RpcResponse(serializedBytes: msg.payload) else {
                 print("[runtimeStartRpc] failed to decode response on \(msg.topic)")
                 continue
@@ -971,15 +1062,41 @@ public final class TeamclawService {
     private func configureRuntime(
         mqtt: MQTTService,
         teamId: String,
-        deviceId: String,
         peerId: String,
-        modelContainer: ModelContainer
+        modelContainer: ModelContainer,
+        connectedAgentsStore: ConnectedAgentsStore?
     ) {
         self.mqtt = mqtt
         self.teamId = teamId
-        self.deviceId = deviceId
         self.peerId = peerId
         self.modelContainer = modelContainer
+        self.connectedAgentsStore = connectedAgentsStore
+    }
+
+    /// Resolves `agents.device_id` for `primaryAgentId` against the in-memory
+    /// `ConnectedAgentsStore`. Cheap fast path used before falling back to a
+    /// fresh Supabase query (`rpcTargetDeviceID`).
+    private func resolveDeviceID(forPrimaryAgentID primaryAgentId: String?) -> String? {
+        guard let primaryAgentId, !primaryAgentId.isEmpty,
+              let store = connectedAgentsStore,
+              let agent = store.agents.first(where: { $0.id == primaryAgentId }),
+              let id = agent.deviceID, !id.isEmpty else {
+            return nil
+        }
+        return id
+    }
+
+    /// Returns the daemon device-id when `topic` matches
+    /// `amux/{team}/device/{deviceID}/notify`. Nil otherwise.
+    private func parseDeviceNotifyTopic(_ topic: String) -> String? {
+        let parts = topic.split(separator: "/")
+        guard parts.count == 5,
+              parts[0] == "amux",
+              parts[2] == "device",
+              parts[4] == "notify" else { return nil }
+        let normalizedTeam = MQTTTopics.normalizedTeamID(teamId)
+        guard parts[1] == Substring(normalizedTeam) else { return nil }
+        return String(parts[3])
     }
 
     private func rpcTargetDeviceID(for primaryAgentId: String?) async -> String? {
@@ -997,16 +1114,16 @@ public final class TeamclawService {
     internal func configureRuntimeForTesting(
         mqtt: MQTTService,
         teamId: String,
-        deviceId: String,
         peerId: String,
-        modelContainer: ModelContainer
+        modelContainer: ModelContainer,
+        connectedAgentsStore: ConnectedAgentsStore? = nil
     ) {
         configureRuntime(
             mqtt: mqtt,
             teamId: teamId,
-            deviceId: deviceId,
             peerId: peerId,
-            modelContainer: modelContainer
+            modelContainer: modelContainer,
+            connectedAgentsStore: connectedAgentsStore
         )
         isTestingForegroundLifecycle = true
     }

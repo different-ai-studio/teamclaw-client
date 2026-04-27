@@ -36,16 +36,20 @@ public final class RuntimeDetailViewModel {
     public var runtime: Runtime?
     public let session: Session?
     private let mqtt: MQTTService
-    private let deviceId: String
     private let teamID: String
     private let peerId: String
     private let teamclawService: TeamclawService?
+    private let connectedAgentsStore: ConnectedAgentsStore?
     private var task: Task<Void, Never>?
 
     // Expose for child views that need to pass these along
     public var mqttRef: MQTTService { mqtt }
-    public var deviceIdRef: String { deviceId }
     public var peerIdRef: String { peerId }
+    /// Daemon device-id resolved from session/runtime context. Empty when
+    /// no daemon mapping is available yet (e.g. ConnectedAgentsStore still
+    /// loading and runtime row hasn't received state). Callers that need it
+    /// for an MQTT publish should bail when empty.
+    public var daemonDeviceIdRef: String { resolveDaemonDeviceId() }
 
     public var sessionTitle: String {
         if let runtime, !runtime.sessionTitle.isEmpty { return runtime.sessionTitle }
@@ -77,9 +81,37 @@ public final class RuntimeDetailViewModel {
         return runtime?.runtimeId ?? ""
     }
 
-    public init(runtime: Runtime?, mqtt: MQTTService, teamID: String = "", deviceId: String, peerId: String, session: Session? = nil, teamclawService: TeamclawService? = nil) {
-        self.runtime = runtime; self.mqtt = mqtt; self.deviceId = deviceId; self.teamID = teamID; self.peerId = peerId
+    public init(runtime: Runtime?,
+                mqtt: MQTTService,
+                teamID: String = "",
+                peerId: String,
+                session: Session? = nil,
+                teamclawService: TeamclawService? = nil,
+                connectedAgentsStore: ConnectedAgentsStore? = nil) {
+        self.runtime = runtime; self.mqtt = mqtt; self.teamID = teamID; self.peerId = peerId
         self.session = session; self.teamclawService = teamclawService
+        self.connectedAgentsStore = connectedAgentsStore
+    }
+
+    /// Resolves the daemon's MQTT device-id for the current runtime/session.
+    /// Preference order:
+    ///   1. ConnectedAgentsStore lookup keyed by `session.primaryAgentId` —
+    ///      authoritative when the session is iOS-Supabase-created.
+    ///   2. The runtime row's stored `daemonDeviceId` (populated by
+    ///      SessionListVM from the topic path it received the state on).
+    /// Returns an empty string when no daemon mapping is known yet — callers
+    /// should treat that as "skip publish, retry later".
+    private func resolveDaemonDeviceId() -> String {
+        if let primary = session?.primaryAgentId,
+           !primary.isEmpty,
+           let agent = connectedAgentsStore?.agents.first(where: { $0.id == primary }),
+           let id = agent.deviceID, !id.isEmpty {
+            return id
+        }
+        if let runtime, !runtime.daemonDeviceId.isEmpty {
+            return runtime.daemonDeviceId
+        }
+        return ""
     }
 
     private func resolveRuntime(modelContext: ModelContext) -> Runtime? {
@@ -291,7 +323,8 @@ public final class RuntimeDetailViewModel {
         let sessionLiveTopic: String? = session.map {
             MQTTTopics.sessionLive(teamID: teamID, sessionID: $0.sessionId)
         }
-        let runtimeEventsTopic = MQTTTopics.runtimeEvents(teamID: teamID, deviceID: deviceId, runtimeID: runtimeId)
+        let resolvedDeviceId = resolveDaemonDeviceId()
+        let runtimeEventsTopic = MQTTTopics.runtimeEvents(teamID: teamID, deviceID: resolvedDeviceId, runtimeID: runtimeId)
         let subscribeTopic = sessionLiveTopic ?? runtimeEventsTopic
         task = Task {
             // Outer loop: each iteration represents a fresh MQTT connection lifecycle.
@@ -606,14 +639,19 @@ public final class RuntimeDetailViewModel {
 
     private func sendCommand(_ makeCommand: (inout Amux_AcpCommand) -> Void) async throws {
         guard let runtime else { return }
+        let daemonDeviceId = resolveDaemonDeviceId()
+        guard !daemonDeviceId.isEmpty else {
+            print("[RuntimeDetailVM] dropping command — daemon device-id not resolved (primaryAgentId=\(session?.primaryAgentId ?? "nil") runtimeId=\(runtime.runtimeId))")
+            return
+        }
         var cmd = Amux_RuntimeCommandEnvelope()
-        cmd.runtimeID = runtime.runtimeId; cmd.deviceID = deviceId; cmd.peerID = peerId
+        cmd.runtimeID = runtime.runtimeId; cmd.deviceID = daemonDeviceId; cmd.peerID = peerId
         cmd.commandID = UUID().uuidString; cmd.timestamp = Int64(Date().timeIntervalSince1970)
         var acpCmd = Amux_AcpCommand()
         makeCommand(&acpCmd)
         cmd.acpCommand = acpCmd
         let data = try ProtoMQTTCoder.encode(cmd)
-        try await mqtt.publish(topic: MQTTTopics.runtimeCommands(teamID: teamID, deviceID: deviceId, runtimeID: runtime.runtimeId), payload: data)
+        try await mqtt.publish(topic: MQTTTopics.runtimeCommands(teamID: teamID, deviceID: daemonDeviceId, runtimeID: runtime.runtimeId), payload: data)
     }
 
     public func sendPrompt(_ text: String, modelId: String? = nil, modelContext: ModelContext? = nil) async throws {

@@ -18,11 +18,11 @@ public struct TaskSheet: View {
     public var body: some View {
         NavigationStack {
             ContentUnavailableView(
-                "Tasks Live In The Tasks Tab",
-                systemImage: "checklist",
-                description: Text("Use the dedicated Tasks tab for Supabase-backed task management.")
+                "Ideas Live In The Ideas Tab",
+                systemImage: TaskUIPresentation.systemImage,
+                description: Text("Use the dedicated Ideas tab for Supabase-backed idea management.")
             )
-            .navigationTitle("Tasks")
+            .navigationTitle(TaskUIPresentation.pluralTitle)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -55,7 +55,7 @@ struct CreateTaskSheet: View {
         NavigationStack {
             Form {
                 Section("Title") {
-                    TextField("Ship task", text: $title, axis: .vertical)
+                    TextField("Capture an idea", text: $title, axis: .vertical)
                         .focused($titleFocused)
                         .lineLimit(2...5)
                 }
@@ -68,7 +68,7 @@ struct CreateTaskSheet: View {
                     }
                 }
             }
-            .navigationTitle("New Task")
+            .navigationTitle("New Idea")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -137,7 +137,7 @@ struct EditTaskSheet: View {
         NavigationStack {
             Form {
                 Section("Title") {
-                    TextField("Task title", text: $title, axis: .vertical)
+                    TextField("Idea title", text: $title, axis: .vertical)
                         .lineLimit(2...5)
                 }
 
@@ -163,7 +163,7 @@ struct EditTaskSheet: View {
                     }
                 }
             }
-            .navigationTitle("Edit Task")
+            .navigationTitle("Edit Idea")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -270,7 +270,7 @@ public struct TaskSheet: View {
     public init(pairing: PairingManager, teamclawService: TeamclawService? = nil) {}
 
     public var body: some View {
-        ContentUnavailableView("Tasks", systemImage: "checklist")
+        ContentUnavailableView("Ideas", systemImage: TaskUIPresentation.systemImage)
     }
 }
 
@@ -279,7 +279,7 @@ struct CreateTaskSheet: View {
     let onCreated: () -> Void
 
     var body: some View {
-        ContentUnavailableView("New Task", systemImage: "plus")
+        ContentUnavailableView("New Idea", systemImage: "plus")
     }
 }
 
@@ -288,7 +288,7 @@ struct EditTaskSheet: View {
     let task: TaskRecord
 
     var body: some View {
-        ContentUnavailableView("Edit Task", systemImage: "pencil")
+        ContentUnavailableView("Edit Idea", systemImage: "pencil")
     }
 }
 

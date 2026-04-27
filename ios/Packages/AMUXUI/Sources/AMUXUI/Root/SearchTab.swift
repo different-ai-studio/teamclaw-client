@@ -64,7 +64,7 @@ public struct SearchTab: View {
                 if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     ContentUnavailableView("Search",
                         systemImage: "magnifyingglass",
-                        description: Text("Search sessions, tasks, and members."))
+                        description: Text("Search sessions, ideas, and members."))
                 } else {
                     if !runtimeMatches.isEmpty {
                         Section("Sessions") {
@@ -84,7 +84,7 @@ public struct SearchTab: View {
                     }
 
                     if !taskMatches.isEmpty {
-                        Section("Tasks") {
+                        Section("Ideas") {
                             ForEach(taskMatches, id: \.taskId) { item in
                                 TaskRow(item: item)
                             }

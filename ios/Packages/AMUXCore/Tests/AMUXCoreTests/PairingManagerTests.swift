@@ -23,10 +23,9 @@ struct PairingManagerTests {
         #expect(manager.isPaired)
         #expect(manager.brokerHost == "broker.example.com")
         #expect(manager.brokerPort == 8883)
-        #expect(manager.deviceId == "mac-1")
         #expect(manager.authToken == "tok-abc")
         #expect(manager.useTLS == true)
-        #expect(store.saved?.deviceId == "mac-1")
+        #expect(store.saved?.authToken == "tok-abc")
     }
 
     @Test("defaults port 8883 for mqtts when not specified")
@@ -61,7 +60,7 @@ struct PairingManagerTests {
     @Test("rejects URLs missing required fields")
     func rejectsMissingFields() {
         let manager = PairingManager(store: InMemoryStore())
-        let url = URL(string: "amux://join?broker=mqtts://x&device=d")!  // no token
+        let url = URL(string: "amux://join?device=d&token=t")!  // no broker
         #expect(throws: PairingManager.PairingError.self) {
             try manager.pair(from: url)
         }
@@ -72,11 +71,12 @@ struct PairingManagerTests {
         let store = InMemoryStore()
         store.saved = PairingCredentials(
             brokerHost: "h", brokerPort: 8883, useTLS: true,
-            deviceId: "d", authToken: "t"
+            authToken: "t"
         )
         let manager = PairingManager(store: store)
         #expect(manager.isPaired)
-        #expect(manager.deviceId == "d")
+        #expect(manager.brokerHost == "h")
+        #expect(manager.authToken == "t")
     }
 
     @Test("unpair clears state and store")
@@ -87,7 +87,8 @@ struct PairingManagerTests {
         try manager.pair(from: url)
         try manager.unpair()
         #expect(!manager.isPaired)
-        #expect(manager.deviceId == "")
+        #expect(manager.brokerHost == "")
+        #expect(manager.authToken == "")
         #expect(store.saved == nil)
     }
 }
