@@ -525,6 +525,52 @@ impl SupabaseClient {
 
         Ok(SessionAndParticipants { session, participants })
     }
+
+    pub async fn insert_message(
+        &self,
+        team_id: &str,
+        session_id: &str,
+        sender_actor_id: &str,
+        kind: &str,
+        content: &str,
+        metadata_json: &str,
+    ) -> SupabaseResult<()> {
+        let token = self.access_token().await?;
+        let url = format!("{}/rest/v1/messages", self.cfg.url);
+
+        let metadata: serde_json::Value = if metadata_json.is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::from_str(metadata_json).unwrap_or_else(|_| serde_json::json!({}))
+        };
+        let body = serde_json::json!({
+            "team_id": team_id,
+            "session_id": session_id,
+            "sender_actor_id": sender_actor_id,
+            "kind": kind,
+            "content": content,
+            "metadata": metadata,
+        });
+
+        let resp = self
+            .http
+            .post(&url)
+            .header("apikey", &self.cfg.anon_key)
+            .header("Prefer", "return=minimal")
+            .bearer_auth(&token)
+            .json(&body)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(SupabaseError::Rpc {
+                code: Some(status.as_u16().to_string()),
+                message: format!("insert_message: {text}"),
+            });
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
