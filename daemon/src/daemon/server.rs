@@ -1637,6 +1637,35 @@ impl DaemonServer {
                 (wt, String::new(), None)
             };
         let supabase_ws_id = supabase_ws_id_owned.as_deref();
+
+        // If iOS handed us a Supabase session_id, pull the row + participants
+        // so we (a) populate the teamclaw cache that `agents_to_activate`
+        // reads, and (b) subscribe to `session/{sid}/live` so inbound
+        // `message.created` events from iOS actually reach us.
+        // iOS creates these sessions directly in Supabase, so this is the
+        // only place the daemon learns about them.
+        if !session_id.is_empty() {
+            match self.supabase.fetch_session_with_participants(session_id).await {
+                Ok(snap) => {
+                    if let Some(tc) = self.teamclaw.as_mut() {
+                        if let Err(e) = tc
+                            .insert_session_from_supabase(&snap.session, &snap.participants)
+                            .await
+                        {
+                            warn!(session_id, "insert_session_from_supabase failed: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        session_id,
+                        "fetch_session_with_participants failed; inbound session/live messages will be dropped: {}",
+                        e
+                    );
+                }
+            }
+        }
+
         let session_id_opt = (!session_id.is_empty()).then_some(session_id);
 
         // Spawn.
