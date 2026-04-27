@@ -417,33 +417,32 @@ impl DaemonServer {
         }
     }
 
-    /// Forward an agent event to MQTT as an Envelope on the agent's events topic
-    /// Returns the collab session_ids this agent should publish ACP events
-    /// to. Combines two sources because they each cover a different gap:
+    /// Returns the single collab session_id this runtime should publish
+    /// ACP events to. Each runtime is bound at spawn time to one session
+    /// via `RuntimeHandle.collab_session_id` (set from
+    /// `apply_start_runtime`'s supabase_session_id), so fanout has to be
+    /// scoped to that one session.
     ///
-    /// * `teamclaw.sessions_for_agent` — sessions the daemon has handled
-    ///   directly via its own RPC handlers (CreateSession / AddParticipant
-    ///   / etc). Authoritative for participant lookups when present.
-    /// * `SessionStore.find_by_id(agent_id).collab_session_id` — the
-    ///   session_id `apply_start_runtime` recorded when iOS handed it in.
-    ///   Required because iOS now creates collab sessions directly in
-    ///   Supabase, and nothing currently syncs those rows into the
-    ///   teamclaw cache. Without this augmentation, ACP events for
-    ///   iOS-Supabase-created sessions silently fall through to the
-    ///   legacy `runtime/{id}/events` topic that iOS no longer subscribes
-    ///   to (it's now on `session/{sid}/live`).
+    /// Earlier versions of this function unioned in
+    /// `teamclaw.sessions_for_agent(daemon_actor_id)` — the set of
+    /// sessions where the daemon (as agent participant) lives. That set
+    /// is "all collab sessions this daemon serves," not "the session
+    /// this turn belongs to," so every agent event got fanned out to
+    /// every session — bug observed 2026-04-27 where one user message
+    /// in session A produced agent reply copies in 8 unrelated sessions
+    /// (and 9× the broker traffic on every turn). The runtime's own
+    /// `collab_session_id` is the only correct destination.
+    ///
+    /// Returns an empty vec for ambient/bare-agent spawns where
+    /// `collab_session_id` was never set; callers fall back to the
+    /// legacy per-runtime events topic in that case.
     fn target_collab_sessions(&self, agent_id: &str) -> Vec<String> {
-        let actor_id = self.actor_id.as_str();
-        let teamclaw_sessions = self
-            .teamclaw
-            .as_ref()
-            .map(|tc| tc.sessions_for_agent(actor_id))
-            .unwrap_or_default();
-        let runtime_collab_sid = self
-            .sessions
+        self.sessions
             .find_by_id(agent_id)
-            .map(|s| s.collab_session_id.clone());
-        merge_publish_sessions(teamclaw_sessions, runtime_collab_sid)
+            .map(|s| s.collab_session_id.clone())
+            .filter(|s| !s.is_empty())
+            .map(|sid| vec![sid])
+            .unwrap_or_default()
     }
 
     async fn forward_agent_event(&mut self, agent_id: &str, mut acp_event: amux::AcpEvent) {
@@ -1971,63 +1970,3 @@ fn not_yet_implemented(
     }
 }
 
-/// Merge teamclaw participant sessions with the runtime's recorded
-/// `collab_session_id`, deduplicating. The teamclaw cache misses any
-/// session iOS created directly in Supabase, so the runtime store is
-/// the only source for those.
-fn merge_publish_sessions(
-    teamclaw_sessions: Vec<String>,
-    runtime_collab_sid: Option<String>,
-) -> Vec<String> {
-    let mut sessions = teamclaw_sessions;
-    if let Some(sid) = runtime_collab_sid.filter(|s| !s.is_empty()) {
-        if !sessions.contains(&sid) {
-            sessions.push(sid);
-        }
-    }
-    sessions
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn merges_runtime_sid_when_teamclaw_cache_misses_it() {
-        // The bug case: iOS created the session directly in Supabase, so
-        // teamclaw cache returns nothing. Without the runtime augmentation,
-        // ACP events would fall through to the legacy fallback topic.
-        let merged = merge_publish_sessions(vec![], Some("session-from-ios".into()));
-        assert_eq!(merged, vec!["session-from-ios"]);
-    }
-
-    #[test]
-    fn deduplicates_runtime_sid_when_teamclaw_cache_already_has_it() {
-        let merged = merge_publish_sessions(
-            vec!["s1".into(), "s2".into()],
-            Some("s1".into()),
-        );
-        assert_eq!(merged, vec!["s1", "s2"]);
-    }
-
-    #[test]
-    fn ignores_empty_runtime_sid() {
-        // collab_session_id is empty for runtimes that weren't started with
-        // a session_id (legacy bare-agent spawn). Don't pollute the list
-        // with the empty string.
-        let merged = merge_publish_sessions(vec!["s1".into()], Some(String::new()));
-        assert_eq!(merged, vec!["s1"]);
-    }
-
-    #[test]
-    fn returns_teamclaw_sessions_unchanged_when_no_runtime_sid() {
-        let merged = merge_publish_sessions(vec!["s1".into(), "s2".into()], None);
-        assert_eq!(merged, vec!["s1", "s2"]);
-    }
-
-    #[test]
-    fn empty_when_both_sources_empty() {
-        let merged = merge_publish_sessions(vec![], None);
-        assert!(merged.is_empty());
-    }
-}
