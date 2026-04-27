@@ -564,37 +564,6 @@ impl DaemonServer {
             }
         }
 
-        // Update session on complete output
-        if let Some(amux::acp_event::Event::Output(ref output)) = acp_event.event {
-            if output.is_complete {
-                let summary: String = output.text.chars().take(200).collect();
-                if let Some(handle) = self.agents.get_handle_mut(agent_id) {
-                    handle.last_output_summary = summary.clone();
-                }
-                if let Some(session) = self.sessions.find_by_id_mut(agent_id) {
-                    session.last_output_summary = summary;
-                    let _ = self.sessions.save(&self.sessions_path);
-                }
-                // Publish completed output to collab sessions this agent participates in.
-                // publish_agent_message wants the daemon's Supabase actor_id (UUID) — the
-                // per-spawn 8-char `agent_id` we use as the RuntimeManager key never appears
-                // in collab session participant rows. See `target_collab_sessions` for why
-                // we don't trust `tc.sessions_for_agent` alone.
-                let collab_sessions = self.target_collab_sessions(agent_id);
-                if let Some(tc) = &self.teamclaw {
-                    let actor_id = self.actor_id.clone();
-                    // Safe to read current_model here: the daemon event loop is single-threaded and
-                    // check_agent_busy prevents prompt overlap, so no SetModel can interleave between
-                    // the agent's reply and this lookup. If those invariants change, capture the model
-                    // at prompt arrival on the AcpEvent instead.
-                    let model = self.agents.current_model(agent_id).cloned().unwrap_or_default();
-                    for sid in &collab_sessions {
-                        tc.publish_agent_message(sid, &actor_id, &output.text, &model).await;
-                    }
-                }
-            }
-        }
-
         // Update session on tool use
         if let Some(amux::acp_event::Event::ToolUse(_)) = acp_event.event {
             if let Some(handle) = self.agents.get_handle_mut(agent_id) {
@@ -603,6 +572,50 @@ impl DaemonServer {
             if let Some(session) = self.sessions.find_by_id_mut(agent_id) {
                 session.tool_use_count += 1;
                 let _ = self.sessions.save(&self.sessions_path);
+            }
+        }
+
+        // Drive the per-agent TurnAggregator. Emitted logical messages are
+        // appended to local TOML, published to session/live as
+        // `message.created`, and (for AGENT_REPLY only) persisted to
+        // Supabase `messages`. ACP `acp.event` envelopes still flow through
+        // the unchanged publish path below for streaming UI.
+        let collab_sessions = self.target_collab_sessions(agent_id);
+        if !collab_sessions.is_empty() {
+            let emitted = self
+                .agents
+                .aggregator_mut(agent_id)
+                .map(|agg| agg.ingest(&acp_event))
+                .unwrap_or_default();
+
+            if !emitted.is_empty() {
+                if let Some(tc) = self.teamclaw.as_ref() {
+                    let actor_id = self.actor_id.clone();
+                    let model = self
+                        .agents
+                        .current_model(agent_id)
+                        .cloned()
+                        .unwrap_or_default();
+                    for msg in emitted {
+                        let persist = crate::runtime::turn_aggregator::TurnAggregator::supabase_persistent(&msg);
+                        let kind = msg.kind;
+                        let content = msg.content;
+                        let metadata_json = msg.metadata_json;
+                        for sid in &collab_sessions {
+                            tc.emit_agent_message(
+                                sid,
+                                &actor_id,
+                                kind,
+                                &content,
+                                &metadata_json,
+                                &model,
+                                persist,
+                                Some(&self.supabase),
+                            )
+                            .await;
+                        }
+                    }
+                }
             }
         }
 
