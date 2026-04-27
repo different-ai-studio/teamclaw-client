@@ -1144,6 +1144,84 @@ impl SessionManager {
             .await;
     }
 
+    /// Emit one logical agent message: append to local TOML, publish to
+    /// session/live as `message.created`, and (if `persist_supabase`) write
+    /// to Supabase `messages`. The Supabase write is fire-and-forget — local
+    /// TOML and session/live are the source of truth for iOS rendering.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn emit_agent_message(
+        &self,
+        session_id: &str,
+        sender_actor_id: &str,
+        kind: crate::proto::teamclaw::MessageKind,
+        content: &str,
+        metadata_json: &str,
+        model: &str,
+        persist_supabase: bool,
+        supabase: Option<&crate::supabase::SupabaseClient>,
+    ) {
+        let message_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
+        let now = chrono::Utc::now();
+
+        let proto_msg = crate::proto::teamclaw::Message {
+            message_id: message_id.clone(),
+            session_id: session_id.to_string(),
+            sender_actor_id: sender_actor_id.to_string(),
+            kind: kind as i32,
+            content: content.to_string(),
+            created_at: now.timestamp(),
+            model: model.to_string(),
+            metadata_json: metadata_json.to_string(),
+            ..Default::default()
+        };
+
+        // 1. Local TOML
+        if let Err(e) = self.persist_message(session_id, &proto_msg).await {
+            warn!(?e, session_id, "persist_message failed");
+        }
+
+        // 2. session/{sid}/live as `message.created`
+        let envelope = crate::proto::teamclaw::SessionMessageEnvelope {
+            message: Some(proto_msg.clone()),
+        };
+        if let Err(e) = self
+            .live_publisher
+            .publish_message(session_id, sender_actor_id, &envelope)
+            .await
+        {
+            warn!(?e, session_id, "publish_message failed");
+        }
+
+        // 3. Supabase (final replies only — see TurnAggregator::supabase_persistent)
+        if persist_supabase {
+            if let Some(sb) = supabase {
+                let team_id = self.team_id.clone();
+                // message_kind_to_string is the pub(crate) fn defined later in this file.
+                let kind_str = message_kind_to_string(kind as i32);
+                let session = session_id.to_string();
+                let sender = sender_actor_id.to_string();
+                let content_owned = content.to_string();
+                let meta_owned = metadata_json.to_string();
+                let sb_clone = sb.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = sb_clone
+                        .insert_message(
+                            &team_id,
+                            &session,
+                            &sender,
+                            &kind_str,
+                            &content_owned,
+                            &meta_owned,
+                        )
+                        .await
+                    {
+                        warn!(?e, "Supabase insert_message failed");
+                    }
+                });
+            }
+        }
+    }
+
     pub async fn publish_live_message(
         &self,
         session_id: &str,
