@@ -50,7 +50,8 @@ public final class TeamclawService {
         teamId: String,
         peerId: String,
         modelContext: ModelContext,
-        connectedAgentsStore: ConnectedAgentsStore?
+        connectedAgentsStore: ConnectedAgentsStore?,
+        currentActorID: String? = nil
     ) {
         listenerTask?.cancel()
         agentObserverTask?.cancel()
@@ -62,6 +63,14 @@ public final class TeamclawService {
             modelContainer: container,
             connectedAgentsStore: connectedAgentsStore
         )
+        // Seed the human actor_id from Supabase auth (passed in by
+        // ContentView via onboarding.currentContext.memberActorID).
+        // FetchPeers is a fallback that hydrates display_name + peer
+        // metadata; the actor_id itself is authoritative from auth and
+        // doesn't need a daemon round-trip.
+        if let currentActorID, !currentActorID.isEmpty {
+            localMemberId = currentActorID
+        }
         let ctx = ModelContext(container)
 
         // Load cached sessions immediately
@@ -445,40 +454,10 @@ public final class TeamclawService {
     ///   `send_prompt` when the model differs from the agent's current model.
     public func sendMessage(sessionId: String, content: String, modelId: String? = nil) {
         guard let mqtt else { return }
-        // The publish needs an actor_id but `localMemberId` may not have
-        // been resolved yet (the one-shot FetchPeers in `start()` raced
-        // with `connectedAgentsStore` populating). Push the resolution
-        // into an async retry so we don't drop the user's message.
-        Task {
-            let actorId: String
-            if let resolved = currentHumanActorId {
-                actorId = resolved
-            } else {
-                let peers = await fetchPeersAcrossDaemons()
-                syncPeers(peers)
-                guard let resolved = currentHumanActorId else {
-                    print("[TeamclawService] refusing to send session message before localMemberId resolves")
-                    return
-                }
-                actorId = resolved
-            }
-            await self.publishSessionMessage(
-                sessionId: sessionId,
-                content: content,
-                actorId: actorId,
-                modelId: modelId,
-                mqtt: mqtt
-            )
+        guard let actorId = currentHumanActorId else {
+            print("[TeamclawService] refusing to send session message before localMemberId resolves")
+            return
         }
-    }
-
-    private func publishSessionMessage(
-        sessionId: String,
-        content: String,
-        actorId: String,
-        modelId: String?,
-        mqtt: MQTTService
-    ) async {
         var message = Teamclaw_Message()
         message.messageID = UUID().uuidString
         message.sessionID = sessionId
@@ -515,7 +494,9 @@ public final class TeamclawService {
         }
 
         let topic = MQTTTopics.sessionLive(teamID: teamId, sessionID: sessionId)
-        try? await mqtt.publish(topic: topic, payload: data, retain: false)
+        Task {
+            try? await mqtt.publish(topic: topic, payload: data, retain: false)
+        }
     }
 
     public func makeCreateSessionRequest(

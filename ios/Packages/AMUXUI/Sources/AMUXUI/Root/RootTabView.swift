@@ -175,7 +175,8 @@ public struct RootTabView: View {
                 teamId: activeTeam.id,
                 peerId: "ios-\(pairing.authToken.prefix(6))",
                 modelContext: modelContext,
-                connectedAgentsStore: connectedAgentsStore
+                connectedAgentsStore: connectedAgentsStore,
+                currentActorID: currentActorID
             )
         }
         if agentAccessRepo == nil {
