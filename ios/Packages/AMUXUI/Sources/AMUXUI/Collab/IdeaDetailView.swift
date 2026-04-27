@@ -2,9 +2,9 @@ import SwiftUI
 import SwiftData
 import AMUXCore
 
-public struct TaskDetailView: View {
-    let taskID: String
-    @Bindable var taskStore: TaskStore
+public struct IdeaDetailView: View {
+    let ideaID: String
+    @Bindable var ideaStore: IdeaStore
     let sessionViewModel: SessionListViewModel
     let teamclawService: TeamclawService?
     let mqtt: MQTTService
@@ -28,16 +28,16 @@ public struct TaskDetailView: View {
     @FocusState private var descriptionFocused: Bool
 
     public init(
-        taskID: String,
-        taskStore: TaskStore,
+        ideaID: String,
+        ideaStore: IdeaStore,
         sessionViewModel: SessionListViewModel,
         teamclawService: TeamclawService?,
         mqtt: MQTTService,
         peerId: String,
         navigationPath: Binding<[String]>
     ) {
-        self.taskID = taskID
-        self.taskStore = taskStore
+        self.ideaID = ideaID
+        self.ideaStore = ideaStore
         self.sessionViewModel = sessionViewModel
         self.teamclawService = teamclawService
         self.mqtt = mqtt
@@ -45,8 +45,8 @@ public struct TaskDetailView: View {
         self._navigationPath = navigationPath
     }
 
-    private var item: TaskRecord? {
-        taskStore.task(id: taskID)
+    private var item: IdeaRecord? {
+        ideaStore.idea(id: ideaID)
     }
 
     private var creatorLabel: String {
@@ -59,7 +59,7 @@ public struct TaskDetailView: View {
     }
 
     private var relatedSessions: [Session] {
-        allSessions.filter { $0.taskId == taskID }
+        allSessions.filter { $0.ideaId == ideaID }
     }
 
     public var body: some View {
@@ -67,15 +67,15 @@ public struct TaskDetailView: View {
             if let item {
                 content(for: item)
             } else {
-                ContentUnavailableView("Idea Not Found", systemImage: TaskUIPresentation.systemImage)
+                ContentUnavailableView("Idea Not Found", systemImage: IdeaUIPresentation.systemImage)
             }
         }
         .onAppear { seedLocals() }
-        .onChange(of: taskID) { _, _ in didSeedLocals = false; seedLocals() }
+        .onChange(of: ideaID) { _, _ in didSeedLocals = false; seedLocals() }
     }
 
     @ViewBuilder
-    private func content(for item: TaskRecord) -> some View {
+    private func content(for item: IdeaRecord) -> some View {
         List {
             Section("Title") {
                 TextField("Title", text: $localTitle, axis: .vertical)
@@ -145,13 +145,13 @@ public struct TaskDetailView: View {
                 .disabled(isArchiving)
             }
 
-            if let err = taskStore.errorMessage {
+            if let err = ideaStore.errorMessage {
                 Section {
                     Text(err).font(.footnote).foregroundStyle(.red)
                 }
             }
         }
-        .navigationTitle(TaskUIPresentation.singularTitle)
+        .navigationTitle(IdeaUIPresentation.singularTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
@@ -175,7 +175,7 @@ public struct TaskDetailView: View {
                 peerId: peerId,
                 teamclawService: teamclawService,
                 viewModel: sessionViewModel,
-                preselectedTaskId: item.id,
+                preselectedIdeaId: item.id,
                 onSessionCreated: { sessionKey in
                     showNewSession = false
                     navigationPath.append(sessionKey)
@@ -206,15 +206,15 @@ public struct TaskDetailView: View {
         didSeedLocals = true
     }
 
-    private func commitTitle(for item: TaskRecord) {
+    private func commitTitle(for item: IdeaRecord) {
         let trimmed = localTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != item.title else {
             if trimmed.isEmpty { localTitle = item.title }
             return
         }
         Task {
-            await taskStore.updateTask(
-                taskID: item.id,
+            await ideaStore.updateIdea(
+                ideaID: item.id,
                 title: trimmed,
                 description: item.description,
                 status: item.status,
@@ -223,11 +223,11 @@ public struct TaskDetailView: View {
         }
     }
 
-    private func commitDescription(for item: TaskRecord) {
+    private func commitDescription(for item: IdeaRecord) {
         guard localDescription != item.description else { return }
         Task {
-            await taskStore.updateTask(
-                taskID: item.id,
+            await ideaStore.updateIdea(
+                ideaID: item.id,
                 title: item.title,
                 description: localDescription,
                 status: item.status,
@@ -236,11 +236,11 @@ public struct TaskDetailView: View {
         }
     }
 
-    private func performArchive(for item: TaskRecord) {
+    private func performArchive(for item: IdeaRecord) {
         guard !isArchiving else { return }
         isArchiving = true
         Task {
-            let ok = await taskStore.setArchived(taskID: item.id, archived: !item.archived)
+            let ok = await ideaStore.setArchived(ideaID: item.id, archived: !item.archived)
             await MainActor.run {
                 isArchiving = false
                 if ok, !item.archived {
@@ -250,12 +250,12 @@ public struct TaskDetailView: View {
         }
     }
 
-    private func statusPill(_ label: String, value: String, item: TaskRecord) -> some View {
+    private func statusPill(_ label: String, value: String, item: IdeaRecord) -> some View {
         let selected = item.status == value
         return Button {
             Task {
-                await taskStore.updateTask(
-                    taskID: item.id,
+                await ideaStore.updateIdea(
+                    ideaID: item.id,
                     title: item.title,
                     description: item.description,
                     status: value,

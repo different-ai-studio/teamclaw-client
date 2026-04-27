@@ -1,7 +1,7 @@
 import Foundation
 import Supabase
 
-public enum TaskRepositoryError: LocalizedError {
+public enum IdeaRepositoryError: LocalizedError {
     case missingTitle
     case emptyResponse(String)
 
@@ -15,7 +15,7 @@ public enum TaskRepositoryError: LocalizedError {
     }
 }
 
-public actor SupabaseTaskRepository: TaskRepository {
+public actor SupabaseIdeaRepository: IdeaRepository {
     private let client: SupabaseClient
 
     public init(configuration: SupabaseProjectConfiguration) {
@@ -33,9 +33,9 @@ public actor SupabaseTaskRepository: TaskRepository {
         )
     }
 
-    public func listTasks(teamID: String) async throws -> [TaskRecord] {
-        let rows: [TaskRow] = try await client
-            .from("tasks")
+    public func listIdeas(teamID: String) async throws -> [IdeaRecord] {
+        let rows: [IdeaRow] = try await client
+            .from("ideas")
             .select(
                 """
                 id,
@@ -58,18 +58,18 @@ public actor SupabaseTaskRepository: TaskRepository {
         return rows.map(\.record)
     }
 
-    public func createTask(teamID: String, input: TaskCreateInput) async throws -> TaskRecord {
+    public func createIdea(teamID: String, input: IdeaCreateInput) async throws -> IdeaRecord {
         let title = input.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let workspaceID = normalizedWorkspaceID(input.workspaceID)
 
         guard !title.isEmpty else {
-            throw TaskRepositoryError.missingTitle
+            throw IdeaRepositoryError.missingTitle
         }
 
-        let rows: [TaskRow] = try await client
+        let rows: [IdeaRow] = try await client
             .rpc(
-                "create_task",
-                params: CreateTaskParams(
+                "create_idea",
+                params: CreateIdeaParams(
                     teamID: teamID,
                     workspaceID: workspaceID,
                     title: title,
@@ -80,25 +80,25 @@ public actor SupabaseTaskRepository: TaskRepository {
             .value
 
         guard let row = rows.first else {
-            throw TaskRepositoryError.emptyResponse("create_task")
+            throw IdeaRepositoryError.emptyResponse("create_idea")
         }
 
         return row.record
     }
 
-    public func updateTask(taskID: String, input: TaskUpdateInput) async throws -> TaskRecord {
+    public func updateIdea(ideaID: String, input: IdeaUpdateInput) async throws -> IdeaRecord {
         let title = input.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let workspaceID = normalizedWorkspaceID(input.workspaceID)
 
         guard !title.isEmpty else {
-            throw TaskRepositoryError.missingTitle
+            throw IdeaRepositoryError.missingTitle
         }
 
-        let rows: [TaskRow] = try await client
+        let rows: [IdeaRow] = try await client
             .rpc(
-                "update_task",
-                params: UpdateTaskParams(
-                    taskID: taskID,
+                "update_idea",
+                params: UpdateIdeaParams(
+                    ideaID: ideaID,
                     workspaceID: workspaceID,
                     title: title,
                     description: input.description,
@@ -109,23 +109,23 @@ public actor SupabaseTaskRepository: TaskRepository {
             .value
 
         guard let row = rows.first else {
-            throw TaskRepositoryError.emptyResponse("update_task")
+            throw IdeaRepositoryError.emptyResponse("update_idea")
         }
 
         return row.record
     }
 
-    public func setArchived(taskID: String, archived: Bool) async throws -> TaskRecord {
-        let rows: [TaskRow] = try await client
+    public func setArchived(ideaID: String, archived: Bool) async throws -> IdeaRecord {
+        let rows: [IdeaRow] = try await client
             .rpc(
-                "archive_task",
-                params: ArchiveTaskParams(taskID: taskID, archived: archived)
+                "archive_idea",
+                params: ArchiveIdeaParams(ideaID: ideaID, archived: archived)
             )
             .execute()
             .value
 
         guard let row = rows.first else {
-            throw TaskRepositoryError.emptyResponse("archive_task")
+            throw IdeaRepositoryError.emptyResponse("archive_idea")
         }
 
         return row.record
@@ -137,7 +137,7 @@ public actor SupabaseTaskRepository: TaskRepository {
     }
 }
 
-private struct CreateTaskParams: Encodable {
+private struct CreateIdeaParams: Encodable {
     let teamID: String
     let workspaceID: String?
     let title: String
@@ -151,15 +151,15 @@ private struct CreateTaskParams: Encodable {
     }
 }
 
-private struct UpdateTaskParams: Encodable {
-    let taskID: String
+private struct UpdateIdeaParams: Encodable {
+    let ideaID: String
     let workspaceID: String?
     let title: String
     let description: String
     let status: String
 
     enum CodingKeys: String, CodingKey {
-        case taskID = "p_task_id"
+        case ideaID = "p_idea_id"
         case workspaceID = "p_workspace_id"
         case title = "p_title"
         case description = "p_description"
@@ -167,17 +167,17 @@ private struct UpdateTaskParams: Encodable {
     }
 }
 
-private struct ArchiveTaskParams: Encodable {
-    let taskID: String
+private struct ArchiveIdeaParams: Encodable {
+    let ideaID: String
     let archived: Bool
 
     enum CodingKeys: String, CodingKey {
-        case taskID = "p_task_id"
+        case ideaID = "p_idea_id"
         case archived = "p_archived"
     }
 }
 
-private struct TaskRow: Decodable, Sendable {
+private struct IdeaRow: Decodable, Sendable {
     let id: String
     let teamID: String
     let workspaceID: String?
@@ -202,8 +202,8 @@ private struct TaskRow: Decodable, Sendable {
         case updatedAt = "updated_at"
     }
 
-    var record: TaskRecord {
-        TaskRecord(
+    var record: IdeaRecord {
+        IdeaRecord(
             id: id,
             teamID: teamID,
             workspaceID: workspaceID ?? "",

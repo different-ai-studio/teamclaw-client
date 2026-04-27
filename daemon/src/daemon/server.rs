@@ -69,7 +69,7 @@ impl DaemonServer {
         let actor_id = supabase.config().actor_id.clone();
 
         // Fetch first token — fails fast if Supabase is unreachable at startup.
-        // Task 5's outer loop handles retries on every subsequent reconnect.
+        // Idea 5's outer loop handles retries on every subsequent reconnect.
         let token = supabase.access_token().await
             .map_err(|e| crate::error::AmuxError::Config(
                 format!("initial token fetch failed: {e}")
@@ -670,7 +670,7 @@ impl DaemonServer {
     }
 
     /// Server-level RPC dispatch. Decodes the wire payload, matches on Method,
-    /// delegates session/task methods to SessionManager, and handles non-session
+    /// delegates session/idea methods to SessionManager, and handles non-session
     /// methods locally. Publishes the response to the sender's rpc/res topic.
     async fn handle_rpc_request(&mut self, topic: &str, payload: &[u8]) {
         use crate::proto::teamclaw::{rpc_request::Method, RpcRequest, RpcResponse};
@@ -685,17 +685,17 @@ impl DaemonServer {
         };
 
         let response: RpcResponse = match &request.method {
-            // ─── Session/task methods — delegate to SessionManager ───
+            // ─── Session/idea methods — delegate to SessionManager ───
             Some(Method::CreateSession(_))
             | Some(Method::FetchSession(_))
             | Some(Method::FetchSessionMessages(_))
             | Some(Method::JoinSession(_))
             | Some(Method::AddParticipant(_))
             | Some(Method::RemoveParticipant(_))
-            | Some(Method::CreateTask(_))
-            | Some(Method::ClaimTask(_))
-            | Some(Method::SubmitTask(_))
-            | Some(Method::UpdateTask(_)) => {
+            | Some(Method::CreateIdea(_))
+            | Some(Method::ClaimIdea(_))
+            | Some(Method::SubmitIdea(_))
+            | Some(Method::UpdateIdea(_)) => {
                 // Pre-compute primary before the mutable borrow of self.teamclaw.
                 let primary = self.primary_agent_id();
                 if let Some(tc) = self.teamclaw.as_mut() {
@@ -705,7 +705,7 @@ impl DaemonServer {
                 }
             }
             // ─── Non-session methods — handle locally ───
-            // Phase 1b Tasks 3-9 replace these stubs with real handlers.
+            // Phase 1b Ideas 3-9 replace these stubs with real handlers.
             Some(Method::FetchPeers(_)) => self.handle_fetch_peers(&request).await,
             Some(Method::FetchWorkspaces(_)) => self.handle_fetch_workspaces(&request).await,
             Some(Method::AnnouncePeer(ann)) => self.handle_announce_peer(&request, ann).await,
@@ -800,21 +800,21 @@ impl DaemonServer {
                                 }
                             }
                         }
-                        "task.created" | "task.updated" => {
-                            if let Ok(event) = crate::proto::teamclaw::TaskEvent::decode(envelope.body.as_slice()) {
+                        "idea.created" | "idea.updated" => {
+                            if let Ok(event) = crate::proto::teamclaw::IdeaEvent::decode(envelope.body.as_slice()) {
                                 if let Some(tc) = &mut self.teamclaw {
-                                    if !tc.should_process_task_event(&session_id, &event) {
+                                    if !tc.should_process_idea_event(&session_id, &event) {
                                         return;
                                     }
                                 }
                                 if let Some(tc) = &self.teamclaw {
-                                    let activated = tc.agents_to_activate_for_work_item(&session_id, &event);
+                                    let activated = tc.agents_to_activate_for_idea(&session_id, &event);
                                     for agent_actor_id in activated {
                                         if self.agents.get_handle(&agent_actor_id).is_some() {
-                                            let prompt = format_task_prompt(&session_id, &event);
+                                            let prompt = format_idea_prompt(&session_id, &event);
                                             if !prompt.is_empty() {
                                                 if let Err(e) = self.agents.send_prompt(&agent_actor_id, &prompt).await {
-                                                    warn!("Failed to route live task to agent {}: {}", agent_actor_id, e);
+                                                    warn!("Failed to route live idea to agent {}: {}", agent_actor_id, e);
                                                 }
                                             }
                                         }
@@ -1656,7 +1656,7 @@ impl DaemonServer {
 
         // ACTIVE — publish_runtime_state_by_id reads the live RuntimeHandle and
         // dual-publishes to agent/{id}/state + runtime/{id}/state. The handle
-        // today encodes state=ACTIVE (Phase 1a Task 4).
+        // today encodes state=ACTIVE (Phase 1a Idea 4).
         self.publish_runtime_state_by_id(&new_id).await;
 
         Ok(StartRuntimeOutcome {
@@ -1825,13 +1825,13 @@ fn fit_available_commands_in_budget(ac: &mut crate::proto::amux::AcpAvailableCom
     }
 }
 
-fn format_task_prompt(session_id: &str, event: &crate::proto::teamclaw::TaskEvent) -> String {
-    use crate::proto::teamclaw::task_event::Event;
+fn format_idea_prompt(session_id: &str, event: &crate::proto::teamclaw::IdeaEvent) -> String {
+    use crate::proto::teamclaw::idea_event::Event;
     match &event.event {
-        Some(Event::Created(item)) => format!("[Collab session: {}] New task: {} - {}", session_id, item.title, item.description),
-        Some(Event::Updated(item)) => format!("[Collab session: {}] Task updated: {}", session_id, item.title),
-        Some(Event::Claimed(claim)) => format!("[Collab session: {}] Task {} claimed by {}", session_id, claim.task_id, claim.actor_id),
-        Some(Event::Submitted(sub)) => format!("[Collab session: {}] Submission for {}: {}", session_id, sub.task_id, sub.content),
+        Some(Event::Created(item)) => format!("[Collab session: {}] New idea: {} - {}", session_id, item.title, item.description),
+        Some(Event::Updated(item)) => format!("[Collab session: {}] Idea updated: {}", session_id, item.title),
+        Some(Event::Claimed(claim)) => format!("[Collab session: {}] Idea {} claimed by {}", session_id, claim.idea_id, claim.actor_id),
+        Some(Event::Submitted(sub)) => format!("[Collab session: {}] Submission for {}: {}", session_id, sub.idea_id, sub.content),
         None => String::new(),
     }
 }

@@ -25,8 +25,8 @@ enum MessageKind {
   WORK_EVENT = 3;
 }
 
-enum TaskStatus {
-  TASK_STATUS_UNKNOWN = 0;
+enum IdeaStatus {
+  IDEA_STATUS_UNKNOWN = 0;
   OPEN = 1;
   IN_PROGRESS = 2;
   DONE = 3;
@@ -51,7 +51,7 @@ message SessionInfo {
   repeated Participant participants = 7;
   string summary = 8;
   string primary_agent_id = 9;
-  string task_id = 10;
+  string idea_id = 10;
   string last_message_preview = 11;
   int64 last_message_at = 12;
 }
@@ -75,12 +75,12 @@ message Message {
   string model = 9;
 }
 
-message Task {
-  string task_id = 1;
+message Idea {
+  string idea_id = 1;
   string session_id = 2;
   string title = 3;
   string description = 4;
-  TaskStatus status = 5;
+  IdeaStatus status = 5;
   string parent_id = 6;
   string created_by = 7;
   int64 created_at = 8;
@@ -92,14 +92,14 @@ message Task {
 
 message Claim {
   string claim_id = 1;
-  string task_id = 2;
+  string idea_id = 2;
   string actor_id = 3;
   int64 claimed_at = 4;
 }
 
 message Submission {
   string submission_id = 1;
-  string task_id = 2;
+  string idea_id = 2;
   string actor_id = 3;
   string content = 4;
   int64 submitted_at = 5;
@@ -111,10 +111,10 @@ message SessionMessageEnvelope {
   Message message = 1;
 }
 
-message TaskEvent {
+message IdeaEvent {
   oneof event {
-    Task created = 1;
-    Task updated = 2;
+    Idea created = 1;
+    Idea updated = 2;
     Claim claimed = 3;
     Submission submitted = 4;
   }
@@ -145,10 +145,10 @@ message RpcRequest {
     FetchSessionRequest fetch_session = 12;
     AddParticipantRequest add_participant = 13;
     RemoveParticipantRequest remove_participant = 14;
-    CreateTaskRequest create_task = 15;
-    ClaimTaskRequest claim_task = 16;
-    SubmitTaskRequest submit_task = 17;
-    UpdateTaskRequest update_task = 18;
+    CreateIdeaRequest create_idea = 15;
+    ClaimIdeaRequest claim_idea = 16;
+    SubmitIdeaRequest submit_idea = 17;
+    UpdateIdeaRequest update_idea = 18;
     FetchSessionMessagesRequest fetch_session_messages = 20;
     RuntimeStartRequest runtime_start = 30;
     RuntimeStopRequest runtime_stop = 31;
@@ -173,7 +173,7 @@ message RpcResponse {
   string requester_device_id = 6;
   oneof result {
     SessionInfo session_info = 10;
-    Task task = 11;
+    Idea idea = 11;
     Claim claim = 12;
     Submission submission = 13;
     SessionMessagePage session_message_page = 14;
@@ -195,7 +195,7 @@ message CreateSessionRequest {
   string title = 3;
   string summary = 4;
   repeated string invite_actor_ids = 5;
-  string task_id = 6;
+  string idea_id = 6;
   // Canonical actor id of the creator. Prefer member_id for humans.
   // If empty, the daemon falls back to sender_device_id for backward compat.
   string sender_actor_id = 7;
@@ -233,38 +233,38 @@ message RemoveParticipantRequest {
   string actor_id = 2;
 }
 
-message CreateTaskRequest {
+message CreateIdeaRequest {
   string session_id = 1;
   string title = 2;
   string description = 3;
   string parent_id = 4;
-  // Member id of the actor creating this task. Used by the daemon as
+  // Member id of the actor creating this idea. Used by the daemon as
   // `created_by`; if empty, the daemon falls back to sender_device_id.
   string sender_actor_id = 5;
   string workspace_id = 6;
 }
 
-message ClaimTaskRequest {
+message ClaimIdeaRequest {
   string session_id = 1;
-  string task_id = 2;
+  string idea_id = 2;
   // Canonical actor id of the claimant. Prefer member_id for humans.
   // If empty, the daemon falls back to sender_device_id for backward compat.
   string sender_actor_id = 3;
 }
 
-message SubmitTaskRequest {
+message SubmitIdeaRequest {
   string session_id = 1;
-  string task_id = 2;
+  string idea_id = 2;
   string content = 3;
   // Canonical actor id of the submitter. Prefer member_id for humans.
   // If empty, the daemon falls back to sender_device_id for backward compat.
   string sender_actor_id = 4;
 }
 
-message UpdateTaskRequest {
+message UpdateIdeaRequest {
   string session_id = 1;
-  string task_id = 2;
-  TaskStatus status = 3;
+  string idea_id = 2;
+  IdeaStatus status = 3;
   string title = 4;
   string description = 5;
   optional bool archived = 6;

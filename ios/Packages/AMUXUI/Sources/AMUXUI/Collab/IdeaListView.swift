@@ -2,8 +2,8 @@ import SwiftUI
 import SwiftData
 import AMUXCore
 
-public struct TaskListView: View {
-    @Bindable var taskStore: TaskStore
+public struct IdeaListView: View {
+    @Bindable var ideaStore: IdeaStore
 
     @Query(filter: #Predicate<CachedActor> { $0.actorType == "member" },
            sort: \CachedActor.displayName)
@@ -16,37 +16,37 @@ public struct TaskListView: View {
     @Binding var showCreate: Bool
     @State private var showArchived = false
 
-    public init(taskStore: TaskStore, showCreate: Binding<Bool>) {
-        self.taskStore = taskStore
+    public init(ideaStore: IdeaStore, showCreate: Binding<Bool>) {
+        self.ideaStore = ideaStore
         self._showCreate = showCreate
     }
 
     public var body: some View {
         VStack(spacing: 0) {
-            if let errorMessage = taskStore.errorMessage, taskStore.tasks.isEmpty, !taskStore.isLoading {
+            if let errorMessage = ideaStore.errorMessage, ideaStore.ideas.isEmpty, !ideaStore.isLoading {
                 ContentUnavailableView(
                     "Couldn’t Load Ideas",
                     systemImage: "exclamationmark.triangle",
                     description: Text(errorMessage)
                 )
-            } else if taskStore.isLoading && taskStore.tasks.isEmpty {
+            } else if ideaStore.isLoading && ideaStore.ideas.isEmpty {
                 ProgressView("Loading ideas…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if taskStore.tasks.isEmpty {
+            } else if ideaStore.ideas.isEmpty {
                 ContentUnavailableView(
                     "No Ideas",
-                    systemImage: TaskUIPresentation.systemImage,
+                    systemImage: IdeaUIPresentation.systemImage,
                     description: Text("Tap + to create an idea")
                 )
             } else {
                 List {
-                    ForEach(taskStore.tasks) { item in
-                        NavigationLink(value: "task:\(item.id)") {
-                            TaskRow(item: item, creatorName: creatorLabel(for: item))
+                    ForEach(ideaStore.ideas) { item in
+                        NavigationLink(value: "idea:\(item.id)") {
+                            IdeaRow(item: item, creatorName: creatorLabel(for: item))
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button {
-                                Task { await taskStore.setArchived(taskID: item.id, archived: true) }
+                                Task { await ideaStore.setArchived(ideaID: item.id, archived: true) }
                             } label: {
                                 Label("Archive", systemImage: "archivebox.fill")
                             }
@@ -56,20 +56,20 @@ public struct TaskListView: View {
                 }
                 .listStyle(.plain)
                 .refreshable {
-                    await taskStore.reload()
+                    await ideaStore.reload()
                 }
             }
         }
-        .navigationTitle(TaskUIPresentation.pluralTitle)
+        .navigationTitle(IdeaUIPresentation.pluralTitle)
         .navigationBarTitleDisplayMode(.large)
         .safeAreaInset(edge: .bottom) {
-            if !taskStore.archivedTasks.isEmpty {
+            if !ideaStore.archivedIdeas.isEmpty {
                 Button {
                     showArchived = true
                 } label: {
                     HStack {
                         Image(systemName: "archivebox")
-                        Text("Archived (\(taskStore.archivedTasks.count))")
+                        Text("Archived (\(ideaStore.archivedIdeas.count))")
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.caption.weight(.semibold))
@@ -85,14 +85,14 @@ public struct TaskListView: View {
             }
         }
         .sheet(isPresented: $showCreate) {
-            CreateTaskSheet(taskStore: taskStore) { }
+            CreateIdeaSheet(ideaStore: ideaStore) { }
         }
         .sheet(isPresented: $showArchived) {
-            ArchivedTasksView(taskStore: taskStore)
+            ArchivedIdeasView(ideaStore: ideaStore)
         }
     }
 
-    private func creatorLabel(for item: TaskRecord) -> String? {
+    private func creatorLabel(for item: IdeaRecord) -> String? {
         guard !item.createdByActorID.isEmpty else { return nil }
         return memberNameById[item.createdByActorID]
     }

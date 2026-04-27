@@ -4,7 +4,7 @@ import AMUXCore
 
 #if os(iOS)
 
-public struct TaskSheet: View {
+public struct IdeaSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let pairing: PairingManager
@@ -19,10 +19,10 @@ public struct TaskSheet: View {
         NavigationStack {
             ContentUnavailableView(
                 "Ideas Live In The Ideas Tab",
-                systemImage: TaskUIPresentation.systemImage,
+                systemImage: IdeaUIPresentation.systemImage,
                 description: Text("Use the dedicated Ideas tab for Supabase-backed idea management.")
             )
-            .navigationTitle(TaskUIPresentation.pluralTitle)
+            .navigationTitle(IdeaUIPresentation.pluralTitle)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -36,10 +36,10 @@ public struct TaskSheet: View {
     }
 }
 
-struct CreateTaskSheet: View {
+struct CreateIdeaSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    @Bindable var taskStore: TaskStore
+    @Bindable var ideaStore: IdeaStore
     let onCreated: () -> Void
 
     @State private var title = ""
@@ -60,7 +60,7 @@ struct CreateTaskSheet: View {
                         .lineLimit(2...5)
                 }
 
-                if let errorMessage = taskStore.errorMessage {
+                if let errorMessage = ideaStore.errorMessage {
                     Section {
                         Text(errorMessage)
                             .font(.footnote)
@@ -95,7 +95,7 @@ struct CreateTaskSheet: View {
         guard !isSaving, canSave else { return }
         isSaving = true
         Task {
-            let ok = await taskStore.createTask(
+            let ok = await ideaStore.createIdea(
                 title: title,
                 description: "",
                 workspaceID: ""
@@ -109,23 +109,23 @@ struct CreateTaskSheet: View {
     }
 }
 
-struct EditTaskSheet: View {
+struct EditIdeaSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    @Bindable var taskStore: TaskStore
-    let task: TaskRecord
+    @Bindable var ideaStore: IdeaStore
+    let idea: IdeaRecord
 
     @State private var title: String
     @State private var description: String
     @State private var status: String
     @State private var isSaving = false
 
-    init(taskStore: TaskStore, task: TaskRecord) {
-        self.taskStore = taskStore
-        self.task = task
-        _title = State(initialValue: task.title)
-        _description = State(initialValue: task.description)
-        _status = State(initialValue: task.status)
+    init(ideaStore: IdeaStore, idea: IdeaRecord) {
+        self.ideaStore = ideaStore
+        self.idea = idea
+        _title = State(initialValue: idea.title)
+        _description = State(initialValue: idea.description)
+        _status = State(initialValue: idea.status)
     }
 
     private var canSave: Bool {
@@ -155,7 +155,7 @@ struct EditTaskSheet: View {
                     .pickerStyle(.segmented)
                 }
 
-                if let errorMessage = taskStore.errorMessage {
+                if let errorMessage = ideaStore.errorMessage {
                     Section {
                         Text(errorMessage)
                             .font(.footnote)
@@ -191,12 +191,12 @@ struct EditTaskSheet: View {
         guard !isSaving else { return }
         isSaving = true
         Task {
-            let ok = await taskStore.updateTask(
-                taskID: task.id,
+            let ok = await ideaStore.updateIdea(
+                ideaID: idea.id,
                 title: title,
                 description: description,
                 status: status,
-                workspaceID: task.workspaceID
+                workspaceID: idea.workspaceID
             )
             isSaving = false
             if ok {
@@ -206,23 +206,23 @@ struct EditTaskSheet: View {
     }
 }
 
-struct TaskRow: View {
-    let item: TaskRecord
+struct IdeaRow: View {
+    let item: IdeaRecord
     var creatorName: String? = nil
 
-    init(item: TaskRecord, creatorName: String? = nil) {
+    init(item: IdeaRecord, creatorName: String? = nil) {
         self.item = item
         self.creatorName = creatorName
     }
 
-    init(item: SessionTask, creatorName: String? = nil) {
-        self.item = TaskRecord(
-            id: item.taskId,
+    init(item: SessionIdea, creatorName: String? = nil) {
+        self.item = IdeaRecord(
+            id: item.ideaId,
             teamID: "",
             workspaceID: item.workspaceId,
             createdByActorID: item.createdBy,
             title: item.title,
-            description: item.taskDescription,
+            description: item.ideaDescription,
             status: item.status,
             archived: item.archived,
             createdAt: item.createdAt,
@@ -266,16 +266,16 @@ struct TaskRow: View {
     }
 }
 #else
-public struct TaskSheet: View {
+public struct IdeaSheet: View {
     public init(pairing: PairingManager, teamclawService: TeamclawService? = nil) {}
 
     public var body: some View {
-        ContentUnavailableView("Ideas", systemImage: TaskUIPresentation.systemImage)
+        ContentUnavailableView("Ideas", systemImage: IdeaUIPresentation.systemImage)
     }
 }
 
-struct CreateTaskSheet: View {
-    @Bindable var taskStore: TaskStore
+struct CreateIdeaSheet: View {
+    @Bindable var ideaStore: IdeaStore
     let onCreated: () -> Void
 
     var body: some View {
@@ -283,17 +283,17 @@ struct CreateTaskSheet: View {
     }
 }
 
-struct EditTaskSheet: View {
-    @Bindable var taskStore: TaskStore
-    let task: TaskRecord
+struct EditIdeaSheet: View {
+    @Bindable var ideaStore: IdeaStore
+    let idea: IdeaRecord
 
     var body: some View {
         ContentUnavailableView("Edit Idea", systemImage: "pencil")
     }
 }
 
-struct TaskRow: View {
-    let item: TaskRecord
+struct IdeaRow: View {
+    let item: IdeaRecord
     var creatorName: String? = nil
 
     var body: some View {

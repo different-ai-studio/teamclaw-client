@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 import AMUXCore
 
-public struct TasksTab: View {
+public struct IdeasTab: View {
     let pairing: PairingManager
     let teamclawService: TeamclawService?
     let activeTeam: TeamSummary?
@@ -17,9 +17,9 @@ public struct TasksTab: View {
     @State private var showSettings = false
     @State private var showCreate = false
     @State private var navigationPath: [String] = []
-    @State private var taskStore: TaskStore?
-    @State private var taskStoreTeamID: String?
-    @State private var taskSetupError: String?
+    @State private var ideaStore: IdeaStore?
+    @State private var ideaStoreTeamID: String?
+    @State private var ideaSetupError: String?
 
     public init(
         mqtt: MQTTService,
@@ -44,7 +44,7 @@ public struct TasksTab: View {
     public var body: some View {
         NavigationStack(path: $navigationPath) {
             content
-                .navigationTitle(TaskUIPresentation.pluralTitle)
+                .navigationTitle(IdeaUIPresentation.pluralTitle)
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
@@ -53,7 +53,7 @@ public struct TasksTab: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    if taskStore != nil {
+                    if ideaStore != nil {
                         ToolbarItem(placement: .navigationBarTrailing) {
                             Button { showCreate = true } label: {
                                 Image(systemName: "plus").font(.title3).foregroundStyle(.primary)
@@ -70,12 +70,12 @@ public struct TasksTab: View {
                                  onSignOut: onSignOut)
                 }
                 .navigationDestination(for: String.self) { id in
-                    if id.hasPrefix("task:") {
-                        let taskID = String(id.dropFirst("task:".count))
-                        if let taskStore {
-                            TaskDetailView(
-                                taskID: taskID,
-                                taskStore: taskStore,
+                    if id.hasPrefix("idea:") {
+                        let ideaID = String(id.dropFirst("idea:".count))
+                        if let ideaStore {
+                            IdeaDetailView(
+                                ideaID: ideaID,
+                                ideaStore: ideaStore,
                                 sessionViewModel: sessionViewModel,
                                 teamclawService: teamclawService,
                                 mqtt: mqtt,
@@ -121,7 +121,7 @@ public struct TasksTab: View {
                 }
         }
         .task(id: activeTeam?.id) {
-            await configureTaskStore()
+            await configureIdeaStore()
         }
     }
 
@@ -133,46 +133,46 @@ public struct TasksTab: View {
                 systemImage: "person.3",
                 description: Text("Create or join a team to manage ideas.")
             )
-        } else if let taskSetupError {
+        } else if let ideaSetupError {
             ContentUnavailableView(
                 "Couldn’t Set Up Ideas",
                 systemImage: "exclamationmark.triangle",
-                description: Text(taskSetupError)
+                description: Text(ideaSetupError)
             )
-        } else if let taskStore {
-            TaskListView(taskStore: taskStore, showCreate: $showCreate)
+        } else if let ideaStore {
+            IdeaListView(ideaStore: ideaStore, showCreate: $showCreate)
         } else {
             ProgressView("Loading ideas…")
         }
     }
 
     @MainActor
-    private func configureTaskStore() async {
+    private func configureIdeaStore() async {
         guard let activeTeam else {
-            taskStore = nil
-            taskStoreTeamID = nil
-            taskSetupError = nil
+            ideaStore = nil
+            ideaStoreTeamID = nil
+            ideaSetupError = nil
             return
         }
 
-        if taskStore == nil || taskStoreTeamID != activeTeam.id {
+        if ideaStore == nil || ideaStoreTeamID != activeTeam.id {
             do {
-                let repository = try SupabaseTaskRepository()
-                taskStore = TaskStore(
+                let repository = try SupabaseIdeaRepository()
+                ideaStore = IdeaStore(
                     teamID: activeTeam.id,
                     repository: repository,
                     modelContext: modelContext
                 )
-                taskStoreTeamID = activeTeam.id
-                taskSetupError = nil
+                ideaStoreTeamID = activeTeam.id
+                ideaSetupError = nil
             } catch {
-                taskStore = nil
-                taskStoreTeamID = nil
-                taskSetupError = error.localizedDescription
+                ideaStore = nil
+                ideaStoreTeamID = nil
+                ideaSetupError = error.localizedDescription
                 return
             }
         }
 
-        await taskStore?.reload()
+        await ideaStore?.reload()
     }
 }

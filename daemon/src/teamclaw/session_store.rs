@@ -21,7 +21,7 @@ pub struct StoredSession {
     pub created_at: DateTime<Utc>,
     pub summary: String,
     #[serde(default)]
-    pub task_id: String,
+    pub idea_id: String,
     #[serde(default)]
     pub participants: Vec<StoredParticipant>,
     /// The host's primary agent_id when this session was created. Used to
@@ -107,7 +107,7 @@ impl TeamclawSessionStore {
                 participants,
                 summary: s.summary.clone(),
                 primary_agent_id: s.primary_agent_id.clone(),
-                task_id: s.task_id.clone(),
+                idea_id: s.idea_id.clone(),
                 last_message_preview: String::new(),
                 last_message_at: 0,
             }
@@ -147,7 +147,7 @@ mod tests {
             created_by: "user1".to_string(),
             created_at: Utc::now(),
             summary: String::new(),
-            task_id: String::new(),
+            idea_id: String::new(),
             participants: vec![],
             primary_agent_id: String::new(),
         }

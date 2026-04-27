@@ -5,7 +5,7 @@ declare
   v_team uuid := gen_random_uuid();
   v_member uuid := gen_random_uuid();
   v_agent uuid := gen_random_uuid();
-  v_task uuid := gen_random_uuid();
+  v_idea uuid := gen_random_uuid();
   v_session uuid;
   v_ad_hoc_session uuid;
 begin
@@ -18,13 +18,13 @@ begin
   insert into public.agents (id, agent_kind, status) values (v_agent, 'claude', 'active');
   insert into public.team_members (team_id, member_id, role)
     values (v_team, v_member, 'owner');
-  insert into public.tasks (id, team_id, created_by_actor_id, title, status)
-    values (v_task, v_team, v_member, 'fix bug', 'open');
+  insert into public.ideas (id, team_id, created_by_actor_id, title, status)
+    values (v_idea, v_team, v_member, 'fix bug', 'open');
 
   perform set_config('request.jwt.claims',
     json_build_object('sub', v_member::text, 'role', 'authenticated')::text, true);
 
-  v_session := public.create_session(v_agent, v_task, 'solo', 'First try');
+  v_session := public.create_session(v_agent, v_idea, 'solo', 'First try');
 
   if v_session is null then
     raise exception 'create_session returned null';
@@ -34,7 +34,7 @@ begin
     select 1 from public.sessions
     where id = v_session
       and primary_agent_id = v_agent
-      and task_id = v_task
+      and idea_id = v_idea
       and created_by_actor_id = v_member
   ) then
     raise exception 'session row malformed';
@@ -54,20 +54,20 @@ begin
     raise exception 'agent not added as participant';
   end if;
 
-  v_ad_hoc_session := public.create_session(v_agent, null, 'collab', 'Untasked session');
+  v_ad_hoc_session := public.create_session(v_agent, null, 'collab', 'Session without idea');
 
   if v_ad_hoc_session is null then
-    raise exception 'create_session with null task returned null';
+    raise exception 'create_session with null idea returned null';
   end if;
 
   if not exists (
     select 1 from public.sessions
     where id = v_ad_hoc_session
       and primary_agent_id = v_agent
-      and task_id is null
+      and idea_id is null
       and created_by_actor_id = v_member
   ) then
-    raise exception 'null-task session row malformed';
+    raise exception 'null-idea session row malformed';
   end if;
 end;
 $$;

@@ -10,7 +10,7 @@ public struct MainWindowView: View {
     @SceneStorage("amux.mainWindow.sidebar") private var sidebarStorage: String = "function:sessions"
     @SceneStorage("amux.mainWindow.activeFunction") private var activeFunctionStorage: String = "sessions"
     @SceneStorage("amux.mainWindow.selectedSession") private var selectedSessionId: String?
-    @SceneStorage("amux.mainWindow.selectedTask") private var selectedTaskId: String?
+    @SceneStorage("amux.mainWindow.selectedIdea") private var selectedIdeaId: String?
     @SceneStorage("amux.mainWindow.archivedVisible") private var archivedVisible: Bool = false
     @State private var showNewSession = false
     @State private var searchText: String = ""
@@ -42,7 +42,7 @@ public struct MainWindowView: View {
 
     private static func parseSidebar(_ raw: String) -> SidebarItem? {
         if raw == "function:sessions" { return .function(.sessions) }
-        if raw == "function:tasks" { return .function(.tasks) }
+        if raw == "function:ideas" { return .function(.ideas) }
         if raw.hasPrefix("workspace:") {
             return .workspace(workspaceId: String(raw.dropFirst("workspace:".count)))
         }
@@ -55,14 +55,14 @@ public struct MainWindowView: View {
     private static func encodeSidebar(_ item: SidebarItem?) -> String {
         switch item {
         case .function(.sessions), .none: "function:sessions"
-        case .function(.tasks): "function:tasks"
+        case .function(.ideas): "function:ideas"
         case .member(let id): "member:\(id)"
         case .workspace(let id): "workspace:\(id)"
         }
     }
 
     private var activeFunction: SidebarFunction {
-        activeFunctionStorage == SidebarFunction.tasks.rawValue ? .tasks : .sessions
+        activeFunctionStorage == SidebarFunction.ideas.rawValue ? .ideas : .sessions
     }
 
     public var body: some View {
@@ -95,7 +95,7 @@ public struct MainWindowView: View {
                     deviceId: pairing.deviceId,
                     peerId: peerId,
                     workspaces: workspaces,
-                    preselectedTaskId: selectedTaskId,
+                    preselectedIdeaId: selectedIdeaId,
                     onSessionCreated: { agentId in
                         selectedSessionId = agentId
                     }
@@ -150,13 +150,13 @@ public struct MainWindowView: View {
                 UnifiedSearchResultsView(
                     query: searchText,
                     selectedSessionId: $selectedSessionId,
-                    selectedTaskId: $selectedTaskId
+                    selectedIdeaId: $selectedIdeaId
                 )
             } else {
                 switch sidebarSelection {
-                case .function(.tasks):
-                    TaskListColumn(
-                        selectedTaskId: $selectedTaskId,
+                case .function(.ideas):
+                    IdeaListColumn(
+                        selectedIdeaId: $selectedIdeaId,
                         teamclawService: teamclaw,
                         archivedVisible: archivedVisible,
                         workspaceFilter: nil,
@@ -172,9 +172,9 @@ public struct MainWindowView: View {
                         onNewSession: handleNewSession
                     )
                 case .workspace(let id):
-                    if activeFunction == .tasks {
-                        TaskListColumn(
-                            selectedTaskId: $selectedTaskId,
+                    if activeFunction == .ideas {
+                        IdeaListColumn(
+                            selectedIdeaId: $selectedIdeaId,
                             teamclawService: teamclaw,
                             archivedVisible: archivedVisible,
                             workspaceFilter: id,
@@ -214,7 +214,7 @@ public struct MainWindowView: View {
             teamclawService: teamclaw,
             actorId: pairing.deviceId,
             selectedSessionId: $selectedSessionId,
-            selectedTaskId: selectedTaskId,
+            selectedIdeaId: selectedIdeaId,
             mqtt: mqtt,
             deviceId: pairing.deviceId,
             peerId: peerId

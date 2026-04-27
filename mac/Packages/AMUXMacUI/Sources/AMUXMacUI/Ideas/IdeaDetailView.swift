@@ -2,11 +2,11 @@ import SwiftUI
 import SwiftData
 import AMUXCore
 
-/// Mac-native task detail pane. Mirrors iOS TaskDetailView functionality
+/// Mac-native idea detail pane. Mirrors iOS IdeaDetailView functionality
 /// (status change, description, linked session, creator info) in a
-/// mouse-first layout with an Edit button that opens TaskEditorWindow.
-struct TaskDetailView: View {
-    let item: SessionTask
+/// mouse-first layout with an Edit button that opens IdeaEditorWindow.
+struct IdeaDetailView: View {
+    let item: SessionIdea
     let teamclawService: TeamclawService
     let mqtt: MQTTService?
     let deviceId: String
@@ -40,7 +40,7 @@ struct TaskDetailView: View {
                 header
                 Divider()
                 statusSection
-                if !item.taskDescription.isEmpty { descriptionSection }
+                if !item.ideaDescription.isEmpty { descriptionSection }
                 if !item.sessionId.isEmpty { linkedSessionSection }
                 metadataSection
                 Spacer(minLength: 40)
@@ -53,8 +53,8 @@ struct TaskDetailView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     openWindow(
-                        id: "amux.taskEditor",
-                        value: TaskEditorInput(taskId: item.taskId)
+                        id: "amux.ideaEditor",
+                        value: IdeaEditorInput(ideaId: item.ideaId)
                     )
                 } label: {
                     Label("Edit", systemImage: "pencil")
@@ -65,7 +65,7 @@ struct TaskDetailView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: "checkmark.circle")
+            Image(systemName: "lightbulb")
                 .foregroundStyle(.secondary)
             Text(item.displayTitle)
                 .font(.title2.weight(.semibold))
@@ -88,7 +88,7 @@ struct TaskDetailView: View {
     private var descriptionSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Description").font(.headline)
-            Text(item.taskDescription)
+            Text(item.ideaDescription)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -164,8 +164,8 @@ struct TaskDetailView: View {
         guard item.status != newValue else { return }
         item.status = newValue
         try? modelContext.save()
-        let id = item.taskId
+        let id = item.ideaId
         let sid = item.sessionId
-        Task { await teamclawService.updateTaskStatus(taskId: id, sessionId: sid, status: newValue) }
+        Task { await teamclawService.updateIdeaStatus(ideaId: id, sessionId: sid, status: newValue) }
     }
 }

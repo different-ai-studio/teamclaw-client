@@ -4,7 +4,7 @@ import Foundation
 /// can be referenced from any tab view without pulling in RootTabView.
 public enum AppTab: String, Hashable, Codable, Sendable {
     case sessions
-    case tasks
+    case ideas
     case members
     case search
 }

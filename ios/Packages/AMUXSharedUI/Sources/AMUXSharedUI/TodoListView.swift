@@ -25,7 +25,7 @@ public struct TodoListView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "checklist").font(.caption).foregroundStyle(.secondary)
-                Text("Tasks").font(.caption).fontWeight(.medium).foregroundStyle(.secondary)
+                Text("Ideas").font(.caption).fontWeight(.medium).foregroundStyle(.secondary)
             }
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 HStack(spacing: 8) {

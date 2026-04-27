@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 import AMUXCore
 
-public struct TaskEditorWindowScene: Scene {
+public struct IdeaEditorWindowScene: Scene {
     let teamclawService: TeamclawService
 
     public init(teamclawService: TeamclawService) {
@@ -10,9 +10,9 @@ public struct TaskEditorWindowScene: Scene {
     }
 
     public var body: some Scene {
-        WindowGroup(id: "amux.taskEditor", for: TaskEditorInput.self) { $input in
+        WindowGroup(id: "amux.ideaEditor", for: IdeaEditorInput.self) { $input in
             if let input {
-                TaskEditorScene(input: input, teamclawService: teamclawService)
+                IdeaEditorScene(input: input, teamclawService: teamclawService)
             }
         }
         .windowResizability(.contentSize)
@@ -20,15 +20,15 @@ public struct TaskEditorWindowScene: Scene {
     }
 }
 
-private struct TaskEditorScene: View {
-    let input: TaskEditorInput
+private struct IdeaEditorScene: View {
+    let input: IdeaEditorInput
     let teamclawService: TeamclawService
 
     @Environment(\.dismissWindow) private var dismissWindow
 
     var body: some View {
-        TaskEditorView(input: input, teamclawService: teamclawService) {
-            dismissWindow(id: "amux.taskEditor")
+        IdeaEditorView(input: input, teamclawService: teamclawService) {
+            dismissWindow(id: "amux.ideaEditor")
         }
         .appAppearance()
     }

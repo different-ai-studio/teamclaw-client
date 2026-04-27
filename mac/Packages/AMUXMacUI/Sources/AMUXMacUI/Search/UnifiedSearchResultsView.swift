@@ -5,12 +5,12 @@ import AMUXCore
 struct UnifiedSearchResultsView: View {
     let query: String
     @Binding var selectedSessionId: String?
-    @Binding var selectedTaskId: String?
+    @Binding var selectedIdeaId: String?
 
     @Query private var sessions: [Session]
     @Query private var agents: [Agent]
     @Query private var messages: [SessionMessage]
-    @Query private var tasks: [SessionTask]
+    @Query private var ideas: [SessionIdea]
 
     private var sessionHits: [SessionHit] {
         let collab: [SessionHit] = sessions.compactMap { s in
@@ -32,10 +32,10 @@ struct UnifiedSearchResultsView: View {
         }
     }
 
-    private var taskHits: [SessionTask] {
-        tasks.filter {
+    private var ideaHits: [SessionIdea] {
+        ideas.filter {
             $0.displayTitle.localizedCaseInsensitiveContains(query) ||
-            $0.taskDescription.localizedCaseInsensitiveContains(query)
+            $0.ideaDescription.localizedCaseInsensitiveContains(query)
         }
     }
 
@@ -44,7 +44,7 @@ struct UnifiedSearchResultsView: View {
             if !sessionHits.isEmpty {
                 Section("Sessions") {
                     ForEach(sessionHits) { hit in
-                        Button { selectedSessionId = hit.id; selectedTaskId = nil } label: {
+                        Button { selectedSessionId = hit.id; selectedIdeaId = nil } label: {
                             VStack(alignment: .leading) {
                                 Text(hit.title)
                                 Text(hit.subtitle).font(.caption).foregroundStyle(.secondary)
@@ -57,7 +57,7 @@ struct UnifiedSearchResultsView: View {
             if !messageHits.isEmpty {
                 Section("Messages") {
                     ForEach(messageHits) { hit in
-                        Button { selectedSessionId = hit.sessionId; selectedTaskId = nil } label: {
+                        Button { selectedSessionId = hit.sessionId; selectedIdeaId = nil } label: {
                             VStack(alignment: .leading) {
                                 Text(hit.preview).lineLimit(2)
                                 Text(hit.sessionId).font(.caption).foregroundStyle(.secondary)
@@ -67,20 +67,20 @@ struct UnifiedSearchResultsView: View {
                     }
                 }
             }
-            if !taskHits.isEmpty {
-                Section("Tasks") {
-                    ForEach(taskHits, id: \.taskId) { task in
-                        Button { selectedTaskId = task.taskId; selectedSessionId = nil } label: {
+            if !ideaHits.isEmpty {
+                Section("Ideas") {
+                    ForEach(ideaHits, id: \.ideaId) { idea in
+                        Button { selectedIdeaId = idea.ideaId; selectedSessionId = nil } label: {
                             VStack(alignment: .leading) {
-                                Text(task.displayTitle)
-                                Text(task.statusLabel).font(.caption).foregroundStyle(.secondary)
+                                Text(idea.displayTitle)
+                                Text(idea.statusLabel).font(.caption).foregroundStyle(.secondary)
                             }
                         }
                         .buttonStyle(.plain)
                     }
                 }
             }
-            if sessionHits.isEmpty && messageHits.isEmpty && taskHits.isEmpty {
+            if sessionHits.isEmpty && messageHits.isEmpty && ideaHits.isEmpty {
                 ContentUnavailableView.search(text: query)
             }
         }

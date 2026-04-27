@@ -259,7 +259,7 @@ public final class TeamclawService {
                 lastMessageAt: proto.lastMessageAt > 0
                     ? Date(timeIntervalSince1970: TimeInterval(proto.lastMessageAt))
                     : nil,
-                taskId: proto.taskID
+                ideaId: proto.ideaID
             )
             created.primaryAgentId = proto.primaryAgentID.isEmpty ? nil : proto.primaryAgentID
             modelContext.insert(created)
@@ -276,7 +276,7 @@ public final class TeamclawService {
         existing.participantCount = proto.participants.count
         if !proto.title.isEmpty { existing.title = proto.title }
         if !proto.summary.isEmpty { existing.summary = proto.summary }
-        if !proto.taskID.isEmpty { existing.taskId = proto.taskID }
+        if !proto.ideaID.isEmpty { existing.ideaId = proto.ideaID }
         if !proto.lastMessagePreview.isEmpty { existing.lastMessagePreview = proto.lastMessagePreview }
         if proto.lastMessageAt > 0 {
             existing.lastMessageAt = Date(timeIntervalSince1970: TimeInterval(proto.lastMessageAt))
@@ -342,26 +342,26 @@ public final class TeamclawService {
             return
         }
 
-        if envelope.eventType.hasPrefix("task.") {
-            guard let taskEvent = try? Teamclaw_TaskEvent(serializedBytes: envelope.body) else {
-                print("[TeamclawService] failed to decode TaskEvent from live event: \(envelope.eventType)")
+        if envelope.eventType.hasPrefix("idea.") {
+            guard let ideaEvent = try? Teamclaw_IdeaEvent(serializedBytes: envelope.body) else {
+                print("[TeamclawService] failed to decode IdeaEvent from live event: \(envelope.eventType)")
                 return
             }
-            syncTaskEvent(taskEvent, modelContext: modelContext)
+            syncIdeaEvent(ideaEvent, modelContext: modelContext)
         }
     }
 
-    private func syncTaskEvent(_ event: Teamclaw_TaskEvent, modelContext: ModelContext) {
-        let task: Teamclaw_Task
+    private func syncIdeaEvent(_ event: Teamclaw_IdeaEvent, modelContext: ModelContext) {
+        let idea: Teamclaw_Idea
         switch event.event {
         case .created(let item):
-            task = item
+            idea = item
         case .updated(let item):
-            task = item
+            idea = item
         case .claimed(let claim):
-            let claimItemId = claim.taskID
-            let claimDesc = FetchDescriptor<SessionTask>(
-                predicate: #Predicate { $0.taskId == claimItemId }
+            let claimItemId = claim.ideaID
+            let claimDesc = FetchDescriptor<SessionIdea>(
+                predicate: #Predicate { $0.ideaId == claimItemId }
             )
             if let existing = (try? modelContext.fetch(claimDesc))?.first {
                 if existing.status == "open" {
@@ -371,9 +371,9 @@ public final class TeamclawService {
             }
             return
         case .submitted(let sub):
-            let subItemId = sub.taskID
-            let subDesc = FetchDescriptor<SessionTask>(
-                predicate: #Predicate { $0.taskId == subItemId }
+            let subItemId = sub.ideaID
+            let subDesc = FetchDescriptor<SessionIdea>(
+                predicate: #Predicate { $0.ideaId == subItemId }
             )
             if let existing = (try? modelContext.fetch(subDesc))?.first {
                 existing.status = "done"
@@ -384,13 +384,13 @@ public final class TeamclawService {
             return
         }
 
-        let itemId = task.taskID
-        let descriptor = FetchDescriptor<SessionTask>(
-            predicate: #Predicate { $0.taskId == itemId }
+        let itemId = idea.ideaID
+        let descriptor = FetchDescriptor<SessionIdea>(
+            predicate: #Predicate { $0.ideaId == itemId }
         )
 
         let statusStr: String
-        switch task.status {
+        switch idea.status {
         case .open: statusStr = "open"
         case .inProgress: statusStr = "in_progress"
         case .done: statusStr = "done"
@@ -398,26 +398,26 @@ public final class TeamclawService {
         }
 
         if let existing = (try? modelContext.fetch(descriptor))?.first {
-            existing.title = task.title
-            existing.taskDescription = task.description_p
+            existing.title = idea.title
+            existing.ideaDescription = idea.description_p
             existing.status = statusStr
-            existing.parentTaskId = task.parentID
-            existing.archived = task.archived
-            existing.workspaceId = task.workspaceID
+            existing.parentIdeaId = idea.parentID
+            existing.archived = idea.archived
+            existing.workspaceId = idea.workspaceID
         } else {
-            let item = SessionTask(
-                taskId: task.taskID,
-                sessionId: task.sessionID,
-                workspaceId: task.workspaceID,
-                title: task.title,
-                taskDescription: task.description_p,
+            let item = SessionIdea(
+                ideaId: idea.ideaID,
+                sessionId: idea.sessionID,
+                workspaceId: idea.workspaceID,
+                title: idea.title,
+                ideaDescription: idea.description_p,
                 status: statusStr,
-                parentTaskId: task.parentID,
-                createdBy: task.createdBy,
-                createdAt: task.createdAt > 0
-                    ? Date(timeIntervalSince1970: TimeInterval(task.createdAt))
+                parentIdeaId: idea.parentID,
+                createdBy: idea.createdBy,
+                createdAt: idea.createdAt > 0
+                    ? Date(timeIntervalSince1970: TimeInterval(idea.createdAt))
                     : .now,
-                archived: task.archived
+                archived: idea.archived
             )
             modelContext.insert(item)
         }
@@ -484,7 +484,7 @@ public final class TeamclawService {
         title: String,
         summary: String,
         inviteActorIds: [String] = [],
-        taskId: String = ""
+        ideaId: String = ""
     ) -> Teamclaw_CreateSessionRequest {
         var createReq = Teamclaw_CreateSessionRequest()
         createReq.sessionType = .collab
@@ -492,8 +492,8 @@ public final class TeamclawService {
         createReq.title = title
         createReq.summary = summary
         createReq.inviteActorIds = inviteActorIds
-        if !taskId.isEmpty {
-            createReq.taskID = taskId
+        if !ideaId.isEmpty {
+            createReq.ideaID = ideaId
         }
         if let actorId = currentHumanActorId {
             createReq.senderActorID = actorId
@@ -501,7 +501,7 @@ public final class TeamclawService {
         return createReq
     }
 
-    public func createTask(targetDeviceID: String, description: String, workspaceId: String = "") async -> Bool {
+    public func createIdea(targetDeviceID: String, description: String, workspaceId: String = "") async -> Bool {
         guard let mqtt else { return false }
         guard !targetDeviceID.isEmpty else { return false }
 
@@ -517,7 +517,7 @@ public final class TeamclawService {
             }
         }
 
-        var createReq = Teamclaw_CreateTaskRequest()
+        var createReq = Teamclaw_CreateIdeaRequest()
         createReq.sessionID = ""
         createReq.title = title
         createReq.description_p = description
@@ -531,7 +531,7 @@ public final class TeamclawService {
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
         rpcReq.senderDeviceID = targetDeviceID
-        rpcReq.method = .createTask(createReq)
+        rpcReq.method = .createIdea(createReq)
 
         let requestId = rpcReq.requestID
         let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
@@ -554,68 +554,68 @@ public final class TeamclawService {
         return false
     }
 
-    /// Toggles the archived flag on a task. Sends an `UpdateTask` RPC
+    /// Toggles the archived flag on an idea. Sends an `UpdateIdea` RPC
     /// with only `archived` set (other fields left empty / sentinel).
     /// Does not wait for the RPC response — the authoritative state arrives
-    /// via the `TaskEvent.updated` broadcast and flows through
-    /// `syncTaskEvent`. The call site typically flips `archived` on the
+    /// via the `IdeaEvent.updated` broadcast and flows through
+    /// `syncIdeaEvent`. The call site typically flips `archived` on the
     /// SwiftData model first for optimistic UI; if the RPC fails, the next
     /// broadcast will reinstate the prior value.
-    public func archiveTask(targetDeviceID: String, taskId: String, sessionId: String, archived: Bool) async {
+    public func archiveIdea(targetDeviceID: String, ideaId: String, sessionId: String, archived: Bool) async {
         guard let mqtt else { return }
         guard !targetDeviceID.isEmpty else { return }
 
-        var update = Teamclaw_UpdateTaskRequest()
+        var update = Teamclaw_UpdateIdeaRequest()
         update.sessionID = sessionId
-        update.taskID = taskId
+        update.ideaID = ideaId
         update.archived = archived   // SwiftProtobuf: setting also flips hasArchived=true
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
         rpcReq.senderDeviceID = targetDeviceID
-        rpcReq.method = .updateTask(update)
+        rpcReq.method = .updateIdea(update)
 
         let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
 
-    /// Updates a task's status via `UpdateTask` RPC. Mirrors
-    /// `archiveTask` — fire-and-forget; authoritative state arrives
-    /// via `TaskEvent.updated` broadcast and flows through
-    /// `syncTaskEvent`. The call site typically flips `status` on the
+    /// Updates an idea's status via `UpdateIdea` RPC. Mirrors
+    /// `archiveIdea` — fire-and-forget; authoritative state arrives
+    /// via `IdeaEvent.updated` broadcast and flows through
+    /// `syncIdeaEvent`. The call site typically flips `status` on the
     /// SwiftData model first for optimistic UI; if the RPC fails, the next
     /// broadcast will reinstate the prior value.
     ///
     /// - Parameter status: one of `"open"`, `"in_progress"`, `"done"`.
     ///   Any other value is sent as `.unknown` (which SwiftProtobuf skips,
     ///   producing a no-op update on the daemon side).
-    public func updateTaskStatus(targetDeviceID: String, taskId: String, sessionId: String, status: String) async {
+    public func updateIdeaStatus(targetDeviceID: String, ideaId: String, sessionId: String, status: String) async {
         guard let mqtt else { return }
         guard !targetDeviceID.isEmpty else { return }
 
-        var update = Teamclaw_UpdateTaskRequest()
+        var update = Teamclaw_UpdateIdeaRequest()
         update.sessionID = sessionId
-        update.taskID = taskId
+        update.ideaID = ideaId
         update.status = protoStatus(from: status)
 
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
         rpcReq.senderDeviceID = targetDeviceID
-        rpcReq.method = .updateTask(update)
+        rpcReq.method = .updateIdea(update)
 
         let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
 
-    /// Patches any combination of title, description, and status on a task.
-    /// item. Title / description are sent as empty strings when `nil` is
+    /// Patches any combination of title, description, and status on an idea.
+    /// Title / description are sent as empty strings when `nil` is
     /// passed (SwiftProtobuf treats empty strings as "unset" on the
     /// daemon side). Status omitted when `nil`. Fire-and-forget.
-    public func updateTask(
+    public func updateIdea(
         targetDeviceID: String,
-        taskId: String,
+        ideaId: String,
         sessionId: String,
         title: String? = nil,
         description: String? = nil,
@@ -624,9 +624,9 @@ public final class TeamclawService {
         guard let mqtt else { return }
         guard !targetDeviceID.isEmpty else { return }
 
-        var update = Teamclaw_UpdateTaskRequest()
+        var update = Teamclaw_UpdateIdeaRequest()
         update.sessionID = sessionId
-        update.taskID = taskId
+        update.ideaID = ideaId
         if let title { update.title = title }
         if let description { update.description_p = description }
         if let status { update.status = protoStatus(from: status) }
@@ -634,18 +634,18 @@ public final class TeamclawService {
         var rpcReq = Teamclaw_RpcRequest()
         rpcReq.requestID = String(UUID().uuidString.prefix(8)).lowercased()
         rpcReq.senderDeviceID = targetDeviceID
-        rpcReq.method = .updateTask(update)
+        rpcReq.method = .updateIdea(update)
 
         let topic = MQTTTopics.deviceRpcRequest(teamID: teamId, deviceID: targetDeviceID)
         guard let data = try? rpcReq.serializedData() else { return }
         try? await mqtt.publish(topic: topic, payload: data, retain: false)
     }
 
-    /// Maps the SwiftData `Task.status` string domain to the protobuf
-    /// `TaskStatus` enum. Unknown inputs map to `.unknown` — defensive
+    /// Maps the SwiftData `Idea.status` string domain to the protobuf
+    /// `IdeaStatus` enum. Unknown inputs map to `.unknown` — defensive
     /// against future status values landing in the model before this mapper
     /// is updated.
-    private func protoStatus(from status: String) -> Teamclaw_TaskStatus {
+    private func protoStatus(from status: String) -> Teamclaw_IdeaStatus {
         switch status {
         case "open": return .open
         case "in_progress": return .inProgress

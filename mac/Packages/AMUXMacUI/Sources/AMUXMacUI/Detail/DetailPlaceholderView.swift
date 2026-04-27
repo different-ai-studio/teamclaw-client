@@ -6,14 +6,14 @@ struct DetailPlaceholderView: View {
     let teamclawService: TeamclawService
     let actorId: String
     @Binding var selectedSessionId: String?
-    let selectedTaskId: String?
+    let selectedIdeaId: String?
     let mqtt: MQTTService?
     let deviceId: String
     let peerId: String
 
     @Query private var sessions: [Session]
     @Query private var agents: [Agent]
-    @Query private var tasks: [SessionTask]
+    @Query private var ideas: [SessionIdea]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,9 +27,9 @@ struct DetailPlaceholderView: View {
                         deviceId: deviceId,
                         peerId: peerId
                     )
-                } else if let task = selectedTask {
-                    TaskDetailView(
-                        item: task,
+                } else if let idea = selectedIdea {
+                    IdeaDetailView(
+                        item: idea,
                         teamclawService: teamclawService,
                         mqtt: mqtt,
                         deviceId: deviceId,
@@ -38,7 +38,7 @@ struct DetailPlaceholderView: View {
                     )
                 } else {
                     ContentUnavailableView(
-                        "Select a session or task",
+                        "Select a session or idea",
                         systemImage: "sidebar.right",
                         description: Text("Detail view, message stream, and composer arrive in the next plan.")
                     )
@@ -84,9 +84,9 @@ struct DetailPlaceholderView: View {
         return rawId
     }
 
-    private var selectedTask: SessionTask? {
-        guard let id = selectedTaskId else { return nil }
-        return tasks.first(where: { $0.taskId == id })
+    private var selectedIdea: SessionIdea? {
+        guard let id = selectedIdeaId else { return nil }
+        return ideas.first(where: { $0.ideaId == id })
     }
 
 }

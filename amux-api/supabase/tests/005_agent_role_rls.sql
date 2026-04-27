@@ -15,7 +15,7 @@ declare
   v_other uuid := gen_random_uuid();
   v_member uuid := gen_random_uuid();
   v_agent uuid := gen_random_uuid();
-  v_task uuid := gen_random_uuid();
+  v_idea uuid := gen_random_uuid();
   v_session uuid;
 begin
   insert into auth.users (id) values (v_member);
@@ -29,11 +29,11 @@ begin
   insert into public.agents (id, agent_kind, status) values (v_agent, 'claude', 'active');
   insert into public.team_members (team_id, member_id, role)
     values (v_team, v_member, 'owner');
-  insert into public.tasks (id, team_id, created_by_actor_id, title, status)
-    values (v_task, v_team, v_member, 't', 'open');
-  insert into public.sessions (id, team_id, task_id, created_by_actor_id,
+  insert into public.ideas (id, team_id, created_by_actor_id, title, status)
+    values (v_idea, v_team, v_member, 't', 'open');
+  insert into public.sessions (id, team_id, idea_id, created_by_actor_id,
                                primary_agent_id, mode, title)
-    values (gen_random_uuid(), v_team, v_task, v_member, v_agent, 'solo', 's')
+    values (gen_random_uuid(), v_team, v_idea, v_member, v_agent, 'solo', 's')
     returning id into v_session;
   insert into public.session_participants (session_id, actor_id) values
     (v_session, v_member), (v_session, v_agent);

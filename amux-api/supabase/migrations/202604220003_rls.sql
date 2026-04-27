@@ -152,8 +152,8 @@ alter table public.team_members enable row level security;
 alter table public.workspaces enable row level security;
 alter table public.agents enable row level security;
 alter table public.agent_member_access enable row level security;
-alter table public.tasks enable row level security;
-alter table public.task_external_refs enable row level security;
+alter table public.ideas enable row level security;
+alter table public.idea_external_refs enable row level security;
 alter table public.sessions enable row level security;
 alter table public.session_participants enable row level security;
 alter table public.messages enable row level security;
@@ -244,43 +244,43 @@ with check (
   )
 );
 
-create policy tasks_select_if_team_member on public.tasks
+create policy ideas_select_if_team_member on public.ideas
 for select to authenticated using (app.is_team_member(team_id));
 
-create policy tasks_insert_if_team_member on public.tasks
+create policy ideas_insert_if_team_member on public.ideas
 for insert to authenticated with check (
   app.is_team_member(team_id)
   and created_by_actor_id = app.current_actor_id()
 );
 
-create policy tasks_update_if_team_member on public.tasks
+create policy ideas_update_if_team_member on public.ideas
 for update to authenticated using (app.is_team_member(team_id))
 with check (
   app.is_team_member(team_id)
   and app.uuid_column_matches_existing(
-    'public.tasks'::regclass,
+    'public.ideas'::regclass,
     id,
     'created_by_actor_id',
     created_by_actor_id
   )
 );
 
-create policy task_external_refs_select_if_team_member on public.task_external_refs
+create policy idea_external_refs_select_if_team_member on public.idea_external_refs
 for select to authenticated using (
   exists (
     select 1
-    from public.tasks t
-    where t.id = task_external_refs.task_id
+    from public.ideas t
+    where t.id = idea_external_refs.idea_id
       and app.is_team_member(t.team_id)
   )
 );
 
-create policy task_external_refs_insert_if_team_member on public.task_external_refs
+create policy idea_external_refs_insert_if_team_member on public.idea_external_refs
 for insert to authenticated with check (
   exists (
     select 1
-    from public.tasks t
-    where t.id = task_external_refs.task_id
+    from public.ideas t
+    where t.id = idea_external_refs.idea_id
       and app.is_team_member(t.team_id)
   )
   and linked_by_actor_id = app.current_actor_id()

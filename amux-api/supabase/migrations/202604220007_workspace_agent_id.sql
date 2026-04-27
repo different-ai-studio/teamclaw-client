@@ -33,8 +33,8 @@ begin
         or exists (select 1 from public.team_members where member_id = new.id)
         or exists (select 1 from public.workspaces where created_by_member_id = new.id or agent_id = new.id)
         or exists (select 1 from public.agent_member_access where member_id = new.id or granted_by_member_id = new.id or agent_id = new.id)
-        or exists (select 1 from public.tasks where created_by_actor_id = new.id)
-        or exists (select 1 from public.task_external_refs where linked_by_actor_id = new.id)
+        or exists (select 1 from public.ideas where created_by_actor_id = new.id)
+        or exists (select 1 from public.idea_external_refs where linked_by_actor_id = new.id)
         or exists (select 1 from public.sessions where created_by_actor_id = new.id or primary_agent_id = new.id)
         or exists (select 1 from public.session_participants where actor_id = new.id)
         or exists (select 1 from public.messages where sender_actor_id = new.id)
@@ -47,19 +47,19 @@ begin
       and (
         exists (select 1 from public.agents where default_workspace_id = new.id)
         or old.agent_id is not null
-        or exists (select 1 from public.tasks where workspace_id = new.id)
+        or exists (select 1 from public.ideas where workspace_id = new.id)
         or exists (select 1 from public.agent_runtimes where workspace_id = new.id)
       ) then
       perform app.reject_team_reassignment('workspaces.team_id');
     end if;
-  elsif tg_table_name = 'tasks' then
+  elsif tg_table_name = 'ideas' then
     if new.team_id is distinct from old.team_id
       and (
-        exists (select 1 from public.tasks where parent_task_id = new.id)
-        or exists (select 1 from public.task_external_refs where task_id = new.id)
-        or exists (select 1 from public.sessions where task_id = new.id)
+        exists (select 1 from public.ideas where parent_idea_id = new.id)
+        or exists (select 1 from public.idea_external_refs where idea_id = new.id)
+        or exists (select 1 from public.sessions where idea_id = new.id)
       ) then
-      perform app.reject_team_reassignment('tasks.team_id');
+      perform app.reject_team_reassignment('ideas.team_id');
     end if;
   elsif tg_table_name = 'sessions' then
     if new.team_id is distinct from old.team_id
@@ -122,33 +122,33 @@ begin
       app.actor_team_id(new.granted_by_member_id),
       'agent_member_access.granted_by_member_id'
     );
-  elsif tg_table_name = 'tasks' then
+  elsif tg_table_name = 'ideas' then
     perform app.require_same_team(
       new.team_id,
       app.table_team_id('public.workspaces'::regclass, new.workspace_id),
-      'tasks.workspace_id'
+      'ideas.workspace_id'
     );
     perform app.require_same_team(
       new.team_id,
-      app.table_team_id('public.tasks'::regclass, new.parent_task_id),
-      'tasks.parent_task_id'
+      app.table_team_id('public.ideas'::regclass, new.parent_idea_id),
+      'ideas.parent_idea_id'
     );
     perform app.require_same_team(
       new.team_id,
       app.actor_team_id(new.created_by_actor_id),
-      'tasks.created_by_actor_id'
+      'ideas.created_by_actor_id'
     );
-  elsif tg_table_name = 'task_external_refs' then
+  elsif tg_table_name = 'idea_external_refs' then
     perform app.require_same_team(
-      app.table_team_id('public.tasks'::regclass, new.task_id),
+      app.table_team_id('public.ideas'::regclass, new.idea_id),
       app.actor_team_id(new.linked_by_actor_id),
-      'task_external_refs.linked_by_actor_id'
+      'idea_external_refs.linked_by_actor_id'
     );
   elsif tg_table_name = 'sessions' then
     perform app.require_same_team(
       new.team_id,
-      app.table_team_id('public.tasks'::regclass, new.task_id),
-      'sessions.task_id'
+      app.table_team_id('public.ideas'::regclass, new.idea_id),
+      'sessions.idea_id'
     );
     perform app.require_same_team(
       new.team_id,

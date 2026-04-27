@@ -20,7 +20,7 @@ public enum AMUXSchemaV1: VersionedSchema {
             Workspace.self,
             Session.self,
             SessionMessage.self,
-            SessionTask.self,
+            SessionIdea.self,
         ]
     }
 }

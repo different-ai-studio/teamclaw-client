@@ -14,7 +14,7 @@ public struct SessionParticipantInput: Equatable, Sendable {
 public struct SessionCreateInput: Equatable, Sendable {
     public let id: String
     public let teamID: String
-    public let taskID: String?
+    public let ideaID: String?
     public let createdByActorID: String
     public let primaryAgentID: String?
     public let mode: String
@@ -25,7 +25,7 @@ public struct SessionCreateInput: Equatable, Sendable {
     public init(
         id: String,
         teamID: String,
-        taskID: String? = nil,
+        ideaID: String? = nil,
         createdByActorID: String,
         primaryAgentID: String? = nil,
         mode: String = "collab",
@@ -35,7 +35,7 @@ public struct SessionCreateInput: Equatable, Sendable {
     ) {
         self.id = id
         self.teamID = teamID
-        self.taskID = taskID
+        self.ideaID = ideaID
         self.createdByActorID = createdByActorID
         self.primaryAgentID = primaryAgentID
         self.mode = mode
@@ -97,7 +97,7 @@ public actor SupabaseSessionRepository: SessionRepository {
                 SessionInsertRow(
                     id: input.id,
                     teamID: input.teamID,
-                    taskID: normalized(input.taskID),
+                    ideaID: normalized(input.ideaID),
                     createdByActorID: input.createdByActorID,
                     primaryAgentID: normalized(input.primaryAgentID),
                     mode: input.mode,
@@ -153,7 +153,7 @@ public actor SupabaseSessionRepository: SessionRepository {
 private struct SessionInsertRow: Encodable, Sendable {
     let id: String
     let teamID: String
-    let taskID: String?
+    let ideaID: String?
     let createdByActorID: String
     let primaryAgentID: String?
     let mode: String
@@ -163,7 +163,7 @@ private struct SessionInsertRow: Encodable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id
         case teamID = "team_id"
-        case taskID = "task_id"
+        case ideaID = "idea_id"
         case createdByActorID = "created_by_actor_id"
         case primaryAgentID = "primary_agent_id"
         case mode

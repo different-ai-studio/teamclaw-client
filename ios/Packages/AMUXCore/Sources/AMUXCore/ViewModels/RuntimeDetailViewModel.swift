@@ -318,7 +318,7 @@ public final class RuntimeDetailViewModel {
         //     resolution dance that the legacy runtime/{r}/events path needed.
         //   - Runtime-only (legacy fallback): subscribe to
         //     `runtime/{r}/events` directly and decode raw envelopes. This
-        //     path stays for now because TasksTab/SessionsTab still create
+        //     path stays for now because IdeasTab/SessionsTab still create
         //     RuntimeDetailView from a Runtime row without a Session.
         let sessionLiveTopic: String? = session.map {
             MQTTTopics.sessionLive(teamID: teamID, sessionID: $0.sessionId)

@@ -13,7 +13,7 @@ public final class Session {
     public var participantCount: Int
     public var lastMessagePreview: String
     public var lastMessageAt: Date?
-    public var taskId: String
+    public var ideaId: String
     public var primaryAgentId: String?
 
     public init(
@@ -27,7 +27,7 @@ public final class Session {
         participantCount: Int = 0,
         lastMessagePreview: String = "",
         lastMessageAt: Date? = nil,
-        taskId: String = ""
+        ideaId: String = ""
     ) {
         self.sessionId = sessionId
         self.mode = mode
@@ -39,7 +39,7 @@ public final class Session {
         self.participantCount = participantCount
         self.lastMessagePreview = lastMessagePreview
         self.lastMessageAt = lastMessageAt
-        self.taskId = taskId
+        self.ideaId = ideaId
     }
 
     public var isCollab: Bool { mode == "collab" }

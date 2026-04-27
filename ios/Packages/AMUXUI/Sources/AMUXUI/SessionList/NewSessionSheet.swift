@@ -20,7 +20,7 @@ public struct NewSessionSheet: View {
     let connectedAgentsStore: ConnectedAgentsStore?
 
     let viewModel: SessionListViewModel
-    let preselectedTaskId: String?
+    let preselectedIdeaId: String?
     let preselectedCollaborators: [CachedActor]
     @State private var selectedWorkspaceId: String?
     @State private var selectedAgentType: Amux_AgentType = .claudeCode
@@ -28,7 +28,7 @@ public struct NewSessionSheet: View {
 
     @State private var collaborators: [CachedActor] = []
     @State private var primaryAgentID: String?
-    @State private var selectedTaskId: String?
+    @State private var selectedIdeaId: String?
     @State private var messageText: String = ""
     @State private var showMemberPicker = false
     @State private var primaryAgentCandidates: [CachedActor] = []
@@ -38,9 +38,9 @@ public struct NewSessionSheet: View {
     @State private var debugTransportMessage: String?
     @FocusState private var isInputFocused: Bool
 
-    @Query(filter: #Predicate<SessionTask> { !$0.archived },
-           sort: \SessionTask.createdAt, order: .reverse)
-    private var tasks: [SessionTask]
+    @Query(filter: #Predicate<SessionIdea> { !$0.archived },
+           sort: \SessionIdea.createdAt, order: .reverse)
+    private var ideas: [SessionIdea]
 
     private var workspaces: [WorkspaceRecord] { workspaceStore?.workspaces ?? [] }
     private var selectedWorkspaceRecord: WorkspaceRecord? {
@@ -48,10 +48,10 @@ public struct NewSessionSheet: View {
               let selectedWorkspaceId else { return nil }
         return workspaces.first(where: { $0.id == selectedWorkspaceId })
     }
-    private var availableTasks: [SessionTask] {
-        guard let selectedWorkspaceId, !selectedWorkspaceId.isEmpty else { return tasks }
-        let scopedTasks = tasks.filter { $0.workspaceId == selectedWorkspaceId }
-        return scopedTasks.isEmpty ? tasks : scopedTasks
+    private var availableIdeas: [SessionIdea] {
+        guard let selectedWorkspaceId, !selectedWorkspaceId.isEmpty else { return ideas }
+        let scopedIdeas = ideas.filter { $0.workspaceId == selectedWorkspaceId }
+        return scopedIdeas.isEmpty ? ideas : scopedIdeas
     }
     private var shouldShowWorkspaceRow: Bool { primaryAgentID != nil }
 
@@ -62,7 +62,7 @@ public struct NewSessionSheet: View {
                 teamID: String = "", currentActorID: String? = nil, isAgentAvailable: Bool = true,
                 connectedAgentsStore: ConnectedAgentsStore? = nil,
                 viewModel: SessionListViewModel,
-                preselectedTaskId: String? = nil,
+                preselectedIdeaId: String? = nil,
                 preselectedCollaborators: [CachedActor] = [],
                 onSessionCreated: ((String) -> Void)? = nil) {
         self.mqtt = mqtt
@@ -73,7 +73,7 @@ public struct NewSessionSheet: View {
         self.isAgentAvailable = isAgentAvailable
         self.connectedAgentsStore = connectedAgentsStore
         self.viewModel = viewModel
-        self.preselectedTaskId = preselectedTaskId
+        self.preselectedIdeaId = preselectedIdeaId
         self.preselectedCollaborators = preselectedCollaborators
         self.onSessionCreated = onSessionCreated
     }
@@ -91,7 +91,7 @@ public struct NewSessionSheet: View {
                     Divider()
                     workspaceAndTypeRow
                     Divider()
-                    taskRow
+                    ideaRow
                     Divider()
                     Spacer()
                     if let errorMessage {
@@ -182,35 +182,35 @@ public struct NewSessionSheet: View {
         }
         .onAppear {
             isInputFocused = true
-            if selectedTaskId == nil, let preselectedTaskId {
-                selectedTaskId = preselectedTaskId
+            if selectedIdeaId == nil, let preselectedIdeaId {
+                selectedIdeaId = preselectedIdeaId
                 if shouldShowWorkspaceRow,
-                   let task = tasks.first(where: { $0.taskId == preselectedTaskId }),
-                   !task.workspaceId.isEmpty {
-                    selectedWorkspaceId = task.workspaceId
+                   let idea = ideas.first(where: { $0.ideaId == preselectedIdeaId }),
+                   !idea.workspaceId.isEmpty {
+                    selectedWorkspaceId = idea.workspaceId
                 }
             }
             if collaborators.isEmpty, !preselectedCollaborators.isEmpty {
                 collaborators = preselectedCollaborators
             }
         }
-        .onChange(of: selectedTaskId) { _, newTaskId in
-            guard let newTaskId,
+        .onChange(of: selectedIdeaId) { _, newIdeaId in
+            guard let newIdeaId,
                   shouldShowWorkspaceRow,
-                  let task = tasks.first(where: { $0.taskId == newTaskId }),
-                  !task.workspaceId.isEmpty else {
+                  let idea = ideas.first(where: { $0.ideaId == newIdeaId }),
+                  !idea.workspaceId.isEmpty else {
                 return
             }
-            selectedWorkspaceId = task.workspaceId
+            selectedWorkspaceId = idea.workspaceId
         }
         .onChange(of: selectedWorkspaceId) { _, newWorkspaceId in
-            guard let selectedTaskId,
-                  let task = tasks.first(where: { $0.taskId == selectedTaskId }) else {
+            guard let selectedIdeaId,
+                  let idea = ideas.first(where: { $0.ideaId == selectedIdeaId }) else {
                 return
             }
             guard let newWorkspaceId, !newWorkspaceId.isEmpty else { return }
-            if !task.workspaceId.isEmpty && task.workspaceId != newWorkspaceId {
-                self.selectedTaskId = nil
+            if !idea.workspaceId.isEmpty && idea.workspaceId != newWorkspaceId {
+                self.selectedIdeaId = nil
             }
         }
         .task {
@@ -344,53 +344,53 @@ public struct NewSessionSheet: View {
         .padding(.vertical, 14)
     }
 
-    // MARK: - Task row
+    // MARK: - Idea row
 
-    private var taskRow: some View {
+    private var ideaRow: some View {
         HStack(alignment: .center, spacing: 8) {
-            Text(TaskUIPresentation.singularTitle)
+            Text(IdeaUIPresentation.singularTitle)
                 .foregroundStyle(.secondary)
             Spacer()
             Menu {
                 Button {
-                    selectedTaskId = nil
+                    selectedIdeaId = nil
                 } label: {
-                    Label("None", systemImage: selectedTaskId == nil ? "checkmark" : "circle")
+                    Label("None", systemImage: selectedIdeaId == nil ? "checkmark" : "circle")
                 }
-                if !availableTasks.isEmpty {
+                if !availableIdeas.isEmpty {
                     Divider()
-                    ForEach(availableTasks, id: \.taskId) { item in
+                    ForEach(availableIdeas, id: \.ideaId) { item in
                         Button {
-                            selectedTaskId = item.taskId
+                            selectedIdeaId = item.ideaId
                         } label: {
                             Label(item.displayTitle,
-                                  systemImage: selectedTaskId == item.taskId ? "checkmark" : "circle")
+                                  systemImage: selectedIdeaId == item.ideaId ? "checkmark" : "circle")
                         }
                     }
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(selectedTaskLabel)
+                    Text(selectedIdeaLabel)
                         .font(.body)
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.caption)
                 }
-                .foregroundStyle(selectedTaskId == nil ? .secondary : .primary)
+                .foregroundStyle(selectedIdeaId == nil ? .secondary : .primary)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
     }
 
-    private var selectedTaskLabel: String {
-        if let id = selectedTaskId,
-           let item = tasks.first(where: { $0.taskId == id }) {
+    private var selectedIdeaLabel: String {
+        if let id = selectedIdeaId,
+           let item = ideas.first(where: { $0.ideaId == id }) {
             return item.displayTitle
         }
         if let selectedWorkspaceId,
-           tasks.contains(where: { $0.workspaceId == selectedWorkspaceId }) {
+           ideas.contains(where: { $0.workspaceId == selectedWorkspaceId }) {
             return "Select…"
         }
         return "None"
@@ -433,26 +433,26 @@ public struct NewSessionSheet: View {
     // MARK: - Helpers
 
     /// Builds the text that will be sent as the session's first user message.
-    /// If a task is selected, its title/description prefaces the user's prompt
+    /// If an idea is selected, its title/description prefaces the user's prompt
     /// so the agent has that context upfront.
     private func firstMessageText(userText: String) -> String {
-        guard let id = selectedTaskId,
-              let item = tasks.first(where: { $0.taskId == id }) else {
+        guard let id = selectedIdeaId,
+              let item = ideas.first(where: { $0.ideaId == id }) else {
             return userText
         }
-        let description = item.taskDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let description = item.ideaDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let taskBlock: String
+        let ideaBlock: String
         if !description.isEmpty && !title.isEmpty && description != title {
-            taskBlock = "Idea: \(title)\n\n\(description)"
+            ideaBlock = "Idea: \(title)\n\n\(description)"
         } else if !description.isEmpty {
-            taskBlock = "Idea: \(description)"
+            ideaBlock = "Idea: \(description)"
         } else if !title.isEmpty {
-            taskBlock = "Idea: \(title)"
+            ideaBlock = "Idea: \(title)"
         } else {
             return userText
         }
-        return "\(taskBlock)\n\n\(userText)"
+        return "\(ideaBlock)\n\n\(userText)"
     }
 
     /// Removes a collaborator chip. If the removed actor was the primary
@@ -475,8 +475,8 @@ public struct NewSessionSheet: View {
         let userText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !userText.isEmpty else { return }
 
-        // When a task is picked, prepend its context so the session's first
-        // user message carries the task description + the typed prompt.
+        // When an idea is picked, prepend its context so the session's first
+        // user message carries the idea description + the typed prompt.
         let text = firstMessageText(userText: userText)
 
         isInputFocused = false
@@ -488,10 +488,10 @@ public struct NewSessionSheet: View {
             return
         }
 
-        // Shared-session path also handles the case where a task was picked but no
-        // collaborators were added — ACP startAgent has no taskId field,
-        // so task linking must flow through CreateSessionRequest.
-        if !collaborators.isEmpty || selectedTaskId != nil {
+        // Shared-session path also handles the case where an idea was picked but no
+        // collaborators were added — ACP startAgent has no ideaId field,
+        // so idea linking must flow through CreateSessionRequest.
+        if !collaborators.isEmpty || selectedIdeaId != nil {
             createSharedSession(text: text, title: userText)
             return
         }
@@ -619,7 +619,7 @@ public struct NewSessionSheet: View {
                     SessionCreateInput(
                         id: sessionID,
                         teamID: effectiveTeamID,
-                        taskID: selectedTaskId,
+                        ideaID: selectedIdeaId,
                         createdByActorID: currentActorID,
                         primaryAgentID: primaryAgentID,
                         title: trimmedTitle,
@@ -680,7 +680,7 @@ public struct NewSessionSheet: View {
             participantCount: max(collaborators.count + 1, 1),
             lastMessagePreview: text,
             lastMessageAt: createdAt,
-            taskId: selectedTaskId ?? ""
+            ideaId: selectedIdeaId ?? ""
         )
 
         let message = SessionMessage(
@@ -720,7 +720,7 @@ public struct NewSessionSheet: View {
                 lastMessageAt: info.lastMessageAt > 0
                     ? Date(timeIntervalSince1970: TimeInterval(info.lastMessageAt))
                     : nil,
-                taskId: info.taskID
+                ideaId: info.ideaID
             )
             modelContext.insert(newSession)
             return newSession
@@ -737,7 +737,7 @@ public struct NewSessionSheet: View {
         session.lastMessageAt = info.lastMessageAt > 0
             ? Date(timeIntervalSince1970: TimeInterval(info.lastMessageAt))
             : nil
-        session.taskId = info.taskID
+        session.ideaId = info.ideaID
         session.primaryAgentId = info.primaryAgentID.isEmpty ? nil : info.primaryAgentID
         try? modelContext.save()
         return session
@@ -908,7 +908,7 @@ public struct NewSessionSheet: View {
         info.participants = participants
         info.summary = summary
         info.primaryAgentID = primaryAgentID ?? ""
-        info.taskID = selectedTaskId ?? ""
+        info.ideaID = selectedIdeaId ?? ""
         return info
     }
 }

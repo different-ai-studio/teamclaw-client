@@ -1,4 +1,4 @@
-create or replace function public.create_task(
+create or replace function public.create_idea(
   p_team_id uuid,
   p_workspace_id uuid,
   p_title text,
@@ -25,12 +25,12 @@ declare
   v_workspace_team_id uuid;
 begin
   if v_actor_id is null then
-    raise exception 'create_task requires an authenticated member'
+    raise exception 'create_idea requires an authenticated member'
       using errcode = '42501';
   end if;
 
   if p_team_id is null or not app.is_team_member(p_team_id) then
-    raise exception 'create_task requires team membership'
+    raise exception 'create_idea requires team membership'
       using errcode = '42501';
   end if;
 
@@ -58,7 +58,7 @@ begin
   end if;
 
   return query
-  insert into public.tasks (
+  insert into public.ideas (
     team_id,
     workspace_id,
     created_by_actor_id,
@@ -77,21 +77,21 @@ begin
     false
   )
   returning
-    tasks.id,
-    tasks.team_id,
-    tasks.workspace_id,
-    tasks.created_by_actor_id,
-    tasks.title,
-    tasks.description,
-    tasks.status,
-    tasks.archived,
-    tasks.created_at,
-    tasks.updated_at;
+    ideas.id,
+    ideas.team_id,
+    ideas.workspace_id,
+    ideas.created_by_actor_id,
+    ideas.title,
+    ideas.description,
+    ideas.status,
+    ideas.archived,
+    ideas.created_at,
+    ideas.updated_at;
 end;
 $$;
 
-create or replace function public.update_task(
-  p_task_id uuid,
+create or replace function public.update_idea(
+  p_idea_id uuid,
   p_workspace_id uuid,
   p_title text,
   p_description text,
@@ -114,16 +114,16 @@ security definer
 set search_path = public, auth
 as $$
 declare
-  v_task_team_id uuid;
+  v_idea_team_id uuid;
   v_workspace_team_id uuid;
 begin
   if app.current_actor_id() is null then
-    raise exception 'update_task requires an authenticated member'
+    raise exception 'update_idea requires an authenticated member'
       using errcode = '42501';
   end if;
 
-  if p_task_id is null then
-    raise exception 'task id is required'
+  if p_idea_id is null then
+    raise exception 'idea id is required'
       using errcode = '22023';
   end if;
 
@@ -133,17 +133,17 @@ begin
   end if;
 
   select t.team_id
-  into v_task_team_id
-  from public.tasks t
-  where t.id = p_task_id;
+  into v_idea_team_id
+  from public.ideas t
+  where t.id = p_idea_id;
 
-  if v_task_team_id is null then
-    raise exception 'task not found'
+  if v_idea_team_id is null then
+    raise exception 'idea not found'
       using errcode = '23503';
   end if;
 
-  if not app.is_team_member(v_task_team_id) then
-    raise exception 'update_task requires team membership'
+  if not app.is_team_member(v_idea_team_id) then
+    raise exception 'update_idea requires team membership'
       using errcode = '42501';
   end if;
 
@@ -159,36 +159,36 @@ begin
         using errcode = '23503';
     end if;
 
-    if v_workspace_team_id <> v_task_team_id then
-      raise exception 'workspace does not belong to the task team'
+    if v_workspace_team_id <> v_idea_team_id then
+      raise exception 'workspace does not belong to the idea team'
         using errcode = '23514';
     end if;
   end if;
 
   return query
-  update public.tasks
+  update public.ideas
   set
     workspace_id = p_workspace_id,
     title = btrim(p_title),
     description = coalesce(p_description, ''),
     status = p_status
-  where tasks.id = p_task_id
+  where ideas.id = p_idea_id
   returning
-    tasks.id,
-    tasks.team_id,
-    tasks.workspace_id,
-    tasks.created_by_actor_id,
-    tasks.title,
-    tasks.description,
-    tasks.status,
-    tasks.archived,
-    tasks.created_at,
-    tasks.updated_at;
+    ideas.id,
+    ideas.team_id,
+    ideas.workspace_id,
+    ideas.created_by_actor_id,
+    ideas.title,
+    ideas.description,
+    ideas.status,
+    ideas.archived,
+    ideas.created_at,
+    ideas.updated_at;
 end;
 $$;
 
-create or replace function public.archive_task(
-  p_task_id uuid,
+create or replace function public.archive_idea(
+  p_idea_id uuid,
   p_archived boolean default true
 )
 returns table (
@@ -208,55 +208,55 @@ security definer
 set search_path = public, auth
 as $$
 declare
-  v_task_team_id uuid;
+  v_idea_team_id uuid;
 begin
   if app.current_actor_id() is null then
-    raise exception 'archive_task requires an authenticated member'
+    raise exception 'archive_idea requires an authenticated member'
       using errcode = '42501';
   end if;
 
-  if p_task_id is null then
-    raise exception 'task id is required'
+  if p_idea_id is null then
+    raise exception 'idea id is required'
       using errcode = '22023';
   end if;
 
   select t.team_id
-  into v_task_team_id
-  from public.tasks t
-  where t.id = p_task_id;
+  into v_idea_team_id
+  from public.ideas t
+  where t.id = p_idea_id;
 
-  if v_task_team_id is null then
-    raise exception 'task not found'
+  if v_idea_team_id is null then
+    raise exception 'idea not found'
       using errcode = '23503';
   end if;
 
-  if not app.is_team_member(v_task_team_id) then
-    raise exception 'archive_task requires team membership'
+  if not app.is_team_member(v_idea_team_id) then
+    raise exception 'archive_idea requires team membership'
       using errcode = '42501';
   end if;
 
   return query
-  update public.tasks
+  update public.ideas
   set archived = coalesce(p_archived, true)
-  where tasks.id = p_task_id
+  where ideas.id = p_idea_id
   returning
-    tasks.id,
-    tasks.team_id,
-    tasks.workspace_id,
-    tasks.created_by_actor_id,
-    tasks.title,
-    tasks.description,
-    tasks.status,
-    tasks.archived,
-    tasks.created_at,
-    tasks.updated_at;
+    ideas.id,
+    ideas.team_id,
+    ideas.workspace_id,
+    ideas.created_by_actor_id,
+    ideas.title,
+    ideas.description,
+    ideas.status,
+    ideas.archived,
+    ideas.created_at,
+    ideas.updated_at;
 end;
 $$;
 
-revoke all on function public.create_task(uuid, uuid, text, text) from public;
-revoke all on function public.update_task(uuid, uuid, text, text, text) from public;
-revoke all on function public.archive_task(uuid, boolean) from public;
+revoke all on function public.create_idea(uuid, uuid, text, text) from public;
+revoke all on function public.update_idea(uuid, uuid, text, text, text) from public;
+revoke all on function public.archive_idea(uuid, boolean) from public;
 
-grant execute on function public.create_task(uuid, uuid, text, text) to authenticated;
-grant execute on function public.update_task(uuid, uuid, text, text, text) to authenticated;
-grant execute on function public.archive_task(uuid, boolean) to authenticated;
+grant execute on function public.create_idea(uuid, uuid, text, text) to authenticated;
+grant execute on function public.update_idea(uuid, uuid, text, text, text) to authenticated;
+grant execute on function public.archive_idea(uuid, boolean) to authenticated;

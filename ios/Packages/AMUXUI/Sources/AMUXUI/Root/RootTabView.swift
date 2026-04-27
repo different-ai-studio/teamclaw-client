@@ -63,8 +63,8 @@ public struct RootTabView: View {
                             onReconnect: onReconnect,
                             onSignOut: onSignOut)
             }
-            Tab(TaskUIPresentation.pluralTitle, systemImage: TaskUIPresentation.systemImage, value: AppTab.tasks) {
-                TasksTab(mqtt: mqtt,
+            Tab(IdeaUIPresentation.pluralTitle, systemImage: IdeaUIPresentation.systemImage, value: AppTab.ideas) {
+                IdeasTab(mqtt: mqtt,
                          pairing: pairing,
                          teamclawService: teamclawService,
                          activeTeam: activeTeam,

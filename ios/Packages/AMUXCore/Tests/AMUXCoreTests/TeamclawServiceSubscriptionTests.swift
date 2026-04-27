@@ -333,7 +333,7 @@ final class TeamclawServiceSubscriptionTests: XCTestCase {
         let schema = Schema([
             Session.self,
             SessionMessage.self,
-            SessionTask.self,
+            SessionIdea.self,
         ])
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         return try ModelContainer(for: schema, configurations: configuration)

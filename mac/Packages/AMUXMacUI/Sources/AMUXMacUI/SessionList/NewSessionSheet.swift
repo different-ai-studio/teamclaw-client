@@ -26,22 +26,22 @@ struct NewSessionSheet: View {
     // to the sheet triggered a window-scene rebuild that wiped column 2's
     // toolbar items. Taking the rows as a plain parameter avoids both issues.
     let workspaces: [Workspace]
-    let preselectedTaskId: String?
+    let preselectedIdeaId: String?
     var onSessionCreated: ((String) -> Void)?
 
     @State private var selectedWorkspaceId: String?
     @State private var selectedAgentType: Amux_AgentType = .claudeCode
     @State private var collaborators: [Member] = []
-    @State private var selectedTaskId: String?
+    @State private var selectedIdeaId: String?
     @State private var showMemberPicker = false
     @State private var messageText: String = ""
     @State private var isSending = false
     @State private var errorMessage: String?
     @State private var voice = VoiceRecorder()
     @FocusState private var isInputFocused: Bool
-    @Query(filter: #Predicate<SessionTask> { !$0.archived },
-           sort: \SessionTask.createdAt, order: .reverse)
-    private var tasks: [SessionTask]
+    @Query(filter: #Predicate<SessionIdea> { !$0.archived },
+           sort: \SessionIdea.createdAt, order: .reverse)
+    private var ideas: [SessionIdea]
 
     /// Matches daemon.toml `team_id`. Must be kept in sync with the daemon config.
     private static let teamId = "teamclaw"
@@ -64,7 +64,7 @@ struct NewSessionSheet: View {
                 Divider()
                 collaboratorsRow
                 Divider()
-                taskRow
+                ideaRow
                 Divider()
                 Spacer(minLength: 8)
                 if let errorMessage {
@@ -100,21 +100,21 @@ struct NewSessionSheet: View {
             if workspaces.count == 1 {
                 selectedWorkspaceId = workspaces.first?.workspaceId
             }
-            if selectedTaskId == nil, let preselectedTaskId {
-                selectedTaskId = preselectedTaskId
-                if let task = tasks.first(where: { $0.taskId == preselectedTaskId }),
-                   !task.workspaceId.isEmpty {
-                    selectedWorkspaceId = task.workspaceId
+            if selectedIdeaId == nil, let preselectedIdeaId {
+                selectedIdeaId = preselectedIdeaId
+                if let idea = ideas.first(where: { $0.ideaId == preselectedIdeaId }),
+                   !idea.workspaceId.isEmpty {
+                    selectedWorkspaceId = idea.workspaceId
                 }
             }
         }
-        .onChange(of: selectedTaskId) { _, newTaskId in
-            guard let newTaskId,
-                  let task = tasks.first(where: { $0.taskId == newTaskId }),
-                  !task.workspaceId.isEmpty else {
+        .onChange(of: selectedIdeaId) { _, newIdeaId in
+            guard let newIdeaId,
+                  let idea = ideas.first(where: { $0.ideaId == newIdeaId }),
+                  !idea.workspaceId.isEmpty else {
                 return
             }
-            selectedWorkspaceId = task.workspaceId
+            selectedWorkspaceId = idea.workspaceId
         }
         .onChange(of: voice.transcript) { _, newValue in
             if voice.state == .recording, !newValue.isEmpty {
@@ -233,42 +233,42 @@ struct NewSessionSheet: View {
         .padding(.vertical, 12)
     }
 
-    // MARK: - Task
+    // MARK: - Idea
 
-    private var taskRow: some View {
+    private var ideaRow: some View {
         HStack(alignment: .center, spacing: 8) {
-            Text("Task")
+            Text("Idea")
                 .foregroundStyle(.secondary)
             Spacer()
             Menu {
                 Button {
-                    selectedTaskId = nil
+                    selectedIdeaId = nil
                 } label: {
-                    Label("None", systemImage: selectedTaskId == nil ? "checkmark" : "circle")
+                    Label("None", systemImage: selectedIdeaId == nil ? "checkmark" : "circle")
                 }
-                if !tasks.isEmpty {
+                if !ideas.isEmpty {
                     Divider()
-                    ForEach(tasks, id: \.taskId) { item in
+                    ForEach(ideas, id: \.ideaId) { item in
                         Button {
-                            selectedTaskId = item.taskId
+                            selectedIdeaId = item.ideaId
                         } label: {
                             Label(
                                 item.displayTitle,
-                                systemImage: selectedTaskId == item.taskId ? "checkmark" : "circle"
+                                systemImage: selectedIdeaId == item.ideaId ? "checkmark" : "circle"
                             )
                         }
                     }
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(selectedTaskLabel)
+                    Text(selectedIdeaLabel)
                         .font(.body)
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.caption)
                 }
-                .foregroundStyle(selectedTaskId == nil ? .secondary : .primary)
+                .foregroundStyle(selectedIdeaId == nil ? .secondary : .primary)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -277,9 +277,9 @@ struct NewSessionSheet: View {
         .padding(.vertical, 12)
     }
 
-    private var selectedTaskLabel: String {
-        if let id = selectedTaskId,
-           let item = tasks.first(where: { $0.taskId == id }) {
+    private var selectedIdeaLabel: String {
+        if let id = selectedIdeaId,
+           let item = ideas.first(where: { $0.ideaId == id }) {
             return item.displayTitle
         }
         return "None"
@@ -322,26 +322,26 @@ struct NewSessionSheet: View {
 
     // MARK: - Send
 
-    /// If a task is selected, prefix its context into the first message so the
-    /// new session starts with the chosen task's title/description.
+    /// If an idea is selected, prefix its context into the first message so the
+    /// new session starts with the chosen idea's title/description.
     private func firstMessageText(userText: String) -> String {
-        guard let id = selectedTaskId,
-              let item = tasks.first(where: { $0.taskId == id }) else {
+        guard let id = selectedIdeaId,
+              let item = ideas.first(where: { $0.ideaId == id }) else {
             return userText
         }
-        let description = item.taskDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let description = item.ideaDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let taskBlock: String
+        let ideaBlock: String
         if !description.isEmpty && !title.isEmpty && description != title {
-            taskBlock = "Task: \(title)\n\n\(description)"
+            ideaBlock = "Idea: \(title)\n\n\(description)"
         } else if !description.isEmpty {
-            taskBlock = "Task: \(description)"
+            ideaBlock = "Idea: \(description)"
         } else if !title.isEmpty {
-            taskBlock = "Task: \(title)"
+            ideaBlock = "Idea: \(title)"
         } else {
             return userText
         }
-        return "\(taskBlock)\n\n\(userText)"
+        return "\(ideaBlock)\n\n\(userText)"
     }
 
     private func sendAndCreate() {
@@ -352,7 +352,7 @@ struct NewSessionSheet: View {
         isInputFocused = false
         errorMessage = nil
 
-        if !collaborators.isEmpty || selectedTaskId != nil {
+        if !collaborators.isEmpty || selectedIdeaId != nil {
             createSharedSession(text: text)
             return
         }
@@ -552,8 +552,8 @@ struct NewSessionSheet: View {
         createReq.title = String(text.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
         createReq.summary = text
         createReq.inviteActorIds = collaborators.map(\.memberId)
-        if let taskId = selectedTaskId, !taskId.isEmpty {
-            createReq.taskID = taskId
+        if let ideaId = selectedIdeaId, !ideaId.isEmpty {
+            createReq.ideaID = ideaId
         }
 
         var rpcReq = Teamclaw_RpcRequest()

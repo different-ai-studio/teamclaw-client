@@ -6,8 +6,8 @@
 alter table public.team_invites alter column invited_by_actor_id drop not null;
 alter table public.messages alter column sender_actor_id drop not null;
 alter table public.sessions alter column created_by_actor_id drop not null;
-alter table public.tasks alter column created_by_actor_id drop not null;
-alter table public.task_external_refs alter column linked_by_actor_id drop not null;
+alter table public.ideas alter column created_by_actor_id drop not null;
+alter table public.idea_external_refs alter column linked_by_actor_id drop not null;
 
 alter table public.team_invites
   drop constraint team_invites_consumed_by_actor_id_fkey;
@@ -37,16 +37,16 @@ alter table public.sessions
     foreign key (created_by_actor_id) references public.actors(id)
     on delete set null;
 
-alter table public.tasks
-  drop constraint tasks_created_by_actor_id_fkey;
-alter table public.tasks
-  add constraint tasks_created_by_actor_id_fkey
+alter table public.ideas
+  drop constraint ideas_created_by_actor_id_fkey;
+alter table public.ideas
+  add constraint ideas_created_by_actor_id_fkey
     foreign key (created_by_actor_id) references public.actors(id)
     on delete set null;
 
-alter table public.task_external_refs
-  drop constraint task_external_refs_linked_by_actor_id_fkey;
-alter table public.task_external_refs
-  add constraint task_external_refs_linked_by_actor_id_fkey
+alter table public.idea_external_refs
+  drop constraint idea_external_refs_linked_by_actor_id_fkey;
+alter table public.idea_external_refs
+  add constraint idea_external_refs_linked_by_actor_id_fkey
     foreign key (linked_by_actor_id) references public.actors(id)
     on delete set null;

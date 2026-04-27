@@ -4,7 +4,7 @@ use rumqttc::{AsyncClient, QoS};
 use uuid::Uuid;
 
 use crate::proto::amux::Envelope as AmuxEnvelope;
-use crate::proto::teamclaw::{LiveEventEnvelope, Participant, SessionMessageEnvelope, TaskEvent};
+use crate::proto::teamclaw::{LiveEventEnvelope, Participant, SessionMessageEnvelope, IdeaEvent};
 use crate::mqtt::Topics;
 
 pub struct LivePublisher {
@@ -35,12 +35,12 @@ impl LivePublisher {
         .await
     }
 
-    pub async fn publish_task_event(
+    pub async fn publish_idea_event(
         &self,
         event_type: &str,
         session_id: &str,
         actor_id: &str,
-        event: &TaskEvent,
+        event: &IdeaEvent,
     ) -> crate::error::Result<()> {
         self.publish(event_type, session_id, actor_id, event.encode_to_vec())
             .await

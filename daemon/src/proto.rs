@@ -35,7 +35,7 @@ pub mod teamclaw {
 
 impl_encode!(
     teamclaw::SessionMessageEnvelope,
-    teamclaw::TaskEvent,
+    teamclaw::IdeaEvent,
     teamclaw::RpcRequest,
     teamclaw::RpcResponse,
     teamclaw::Notify

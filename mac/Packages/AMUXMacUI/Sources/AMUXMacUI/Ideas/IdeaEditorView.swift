@@ -2,15 +2,15 @@ import SwiftUI
 import SwiftData
 import AMUXCore
 
-/// Editor sheet hosted by `TaskEditorWindowScene`. Handles both "new task"
-/// (`input.taskId == nil`) and "edit existing" modes.
-struct TaskEditorView: View {
-    let input: TaskEditorInput
+/// Editor sheet hosted by `IdeaEditorWindowScene`. Handles both "new idea"
+/// (`input.ideaId == nil`) and "edit existing" modes.
+struct IdeaEditorView: View {
+    let input: IdeaEditorInput
     let teamclawService: TeamclawService
     let onDone: () -> Void
 
     @Environment(\.modelContext) private var modelContext
-    @Query private var allItems: [SessionTask]
+    @Query private var allItems: [SessionIdea]
     @Query(sort: \Workspace.displayName) private var workspaces: [Workspace]
 
     @State private var title: String = ""
@@ -22,16 +22,16 @@ struct TaskEditorView: View {
     @State private var isDirty = false
     @State private var showDiscardAlert = false
 
-    private var isNew: Bool { input.taskId == nil }
+    private var isNew: Bool { input.ideaId == nil }
 
-    private var editingItem: SessionTask? {
-        guard let id = input.taskId else { return nil }
-        return allItems.first(where: { $0.taskId == id })
+    private var editingItem: SessionIdea? {
+        guard let id = input.ideaId else { return nil }
+        return allItems.first(where: { $0.ideaId == id })
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(isNew ? "New Task" : "Edit Task").font(.title3.weight(.semibold))
+            Text(isNew ? "New Idea" : "Edit Idea").font(.title3.weight(.semibold))
             Form {
                 TextField("Title", text: $title)
                     .onChange(of: title) { _, _ in isDirty = true }
@@ -80,7 +80,7 @@ struct TaskEditorView: View {
     private func hydrate() {
         if let item = editingItem {
             title = item.title
-            descriptionText = item.taskDescription
+            descriptionText = item.ideaDescription
             status = item.status.isEmpty ? "open" : item.status
             selectedWorkspaceId = item.workspaceId
             isDirty = false
@@ -100,17 +100,17 @@ struct TaskEditorView: View {
 
         if let existing = editingItem {
             existing.title = trimmedTitle
-            existing.taskDescription = descriptionText
+            existing.ideaDescription = descriptionText
             existing.status = status
             try? modelContext.save()
-            let id = existing.taskId
+            let id = existing.ideaId
             let sid = existing.sessionId
             let newTitle = trimmedTitle
             let newDescription = descriptionText
             let desiredStatus = status
             Task {
-                await teamclawService.updateTask(
-                    taskId: id,
+                await teamclawService.updateIdea(
+                    ideaId: id,
                     sessionId: sid,
                     title: newTitle,
                     description: newDescription,
@@ -121,13 +121,13 @@ struct TaskEditorView: View {
         } else {
             let payload = descriptionText.isEmpty ? trimmedTitle : "\(trimmedTitle)\n\n\(descriptionText)"
             Task {
-                let ok = await teamclawService.createTask(
+                let ok = await teamclawService.createIdea(
                     description: payload,
                     workspaceId: selectedWorkspaceId
                 )
                 await MainActor.run {
                     isBusy = false
-                    if ok { onDone() } else { errorMessage = "Failed to create task. Check daemon connection." }
+                    if ok { onDone() } else { errorMessage = "Failed to create idea. Check daemon connection." }
                 }
             }
         }

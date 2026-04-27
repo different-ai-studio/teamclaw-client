@@ -72,7 +72,7 @@ values
   ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'admin', '10000000-0000-0000-0000-000000000001'),
   ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 'view', '10000000-0000-0000-0000-000000000001');
 
-insert into public.tasks (id, team_id, workspace_id, created_by_actor_id, title, description, status)
+insert into public.ideas (id, team_id, workspace_id, created_by_actor_id, title, description, status)
 values
   (
     '40000000-0000-0000-0000-000000000001',
@@ -84,7 +84,7 @@ values
     'open'
   );
 
-insert into public.task_external_refs (task_id, provider, external_id, external_key, external_url, linked_by_actor_id)
+insert into public.idea_external_refs (idea_id, provider, external_id, external_key, external_url, linked_by_actor_id)
 values
   (
     '40000000-0000-0000-0000-000000000001',
@@ -95,7 +95,7 @@ values
     '10000000-0000-0000-0000-000000000001'
   );
 
-insert into public.sessions (id, team_id, task_id, created_by_actor_id, primary_agent_id, mode, title, summary, last_message_preview, last_message_at)
+insert into public.sessions (id, team_id, idea_id, created_by_actor_id, primary_agent_id, mode, title, summary, last_message_preview, last_message_at)
 values
   (
     '50000000-0000-0000-0000-000000000001',

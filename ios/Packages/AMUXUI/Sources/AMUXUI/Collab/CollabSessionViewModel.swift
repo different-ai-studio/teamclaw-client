@@ -6,7 +6,7 @@ import AMUXCore
 @MainActor
 public final class SessionViewModel {
     public var messages: [SessionMessage] = []
-    public var workItems: [SessionTask] = []
+    public var ideas: [SessionIdea] = []
     public var session: Session
 
     private var teamclawService: TeamclawService?
@@ -35,11 +35,11 @@ public final class SessionViewModel {
                 )
                 self.messages = (try? modelContext.fetch(msgDescriptor)) ?? []
 
-                let wiDescriptor = FetchDescriptor<SessionTask>(
+                let ideaDescriptor = FetchDescriptor<SessionIdea>(
                     predicate: #Predicate { $0.sessionId == sid },
                     sortBy: [SortDescriptor(\.createdAt)]
                 )
-                self.workItems = (try? modelContext.fetch(wiDescriptor)) ?? []
+                self.ideas = (try? modelContext.fetch(ideaDescriptor)) ?? []
 
                 try? await Task.sleep(for: .milliseconds(500))
             }

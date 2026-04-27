@@ -1,6 +1,6 @@
 import Foundation
 
-public struct TaskRecord: Codable, Equatable, Hashable, Identifiable, Sendable {
+public struct IdeaRecord: Codable, Equatable, Hashable, Identifiable, Sendable {
     public let id: String
     public let teamID: String
     public var workspaceID: String
@@ -71,7 +71,7 @@ public struct TaskRecord: Codable, Equatable, Hashable, Identifiable, Sendable {
     }
 }
 
-public struct TaskCreateInput: Equatable, Sendable {
+public struct IdeaCreateInput: Equatable, Sendable {
     public let title: String
     public let description: String
     public let workspaceID: String
@@ -83,7 +83,7 @@ public struct TaskCreateInput: Equatable, Sendable {
     }
 }
 
-public struct TaskUpdateInput: Equatable, Sendable {
+public struct IdeaUpdateInput: Equatable, Sendable {
     public let title: String
     public let description: String
     public let status: String

@@ -15,8 +15,8 @@ struct SidebarView: View {
     @Query(sort: \Session.lastMessageAt, order: .reverse)
     private var sessions: [Session]
 
-    @Query(filter: #Predicate<SessionTask> { $0.status != "done" })
-    private var openTasks: [SessionTask]
+    @Query(filter: #Predicate<SessionIdea> { $0.status != "done" })
+    private var openIdeas: [SessionIdea]
 
     @Query private var allMessages: [SessionMessage]
 
@@ -32,8 +32,8 @@ struct SidebarView: View {
                 FunctionRow(function: .sessions, count: sessions.count)
                     .tag(SidebarItem.function(.sessions))
 
-                FunctionRow(function: .tasks, count: openTasks.count)
-                    .tag(SidebarItem.function(.tasks))
+                FunctionRow(function: .ideas, count: openIdeas.count)
+                    .tag(SidebarItem.function(.ideas))
                     .contextMenu {
                         Button(archivedVisible ? "Hide Archived" : "Show Archived") {
                             archivedVisible.toggle()
@@ -196,7 +196,7 @@ private struct WorkspaceRow: View {
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
-        .help("Filter sessions and tasks for \(workspace.displayName)")
+        .help("Filter sessions and ideas for \(workspace.displayName)")
     }
 }
 

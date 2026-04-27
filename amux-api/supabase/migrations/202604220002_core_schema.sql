@@ -70,11 +70,11 @@ create table public.agent_member_access (
   unique (agent_id, member_id)
 );
 
-create table public.tasks (
+create table public.ideas (
   id uuid primary key default gen_random_uuid(),
   team_id uuid not null references public.teams(id) on delete cascade,
   workspace_id uuid null references public.workspaces(id) on delete set null,
-  parent_task_id uuid null references public.tasks(id) on delete set null,
+  parent_idea_id uuid null references public.ideas(id) on delete set null,
   created_by_actor_id uuid not null references public.actors(id) on delete restrict,
   title text not null,
   description text not null default '',
@@ -84,9 +84,9 @@ create table public.tasks (
   updated_at timestamptz not null default now()
 );
 
-create table public.task_external_refs (
+create table public.idea_external_refs (
   id uuid primary key default gen_random_uuid(),
-  task_id uuid not null references public.tasks(id) on delete cascade,
+  idea_id uuid not null references public.ideas(id) on delete cascade,
   provider text not null check (provider in ('github', 'linear', 'jira')),
   external_id text not null,
   external_key text null,
@@ -100,7 +100,7 @@ create table public.task_external_refs (
 create table public.sessions (
   id uuid primary key default gen_random_uuid(),
   team_id uuid not null references public.teams(id) on delete cascade,
-  task_id uuid not null references public.tasks(id) on delete cascade,
+  idea_id uuid not null references public.ideas(id) on delete cascade,
   created_by_actor_id uuid not null references public.actors(id) on delete restrict,
   primary_agent_id uuid null references public.agents(id) on delete set null,
   mode text not null check (mode in ('solo', 'collab', 'control')),
@@ -129,7 +129,7 @@ create table public.messages (
   session_id uuid not null references public.sessions(id) on delete cascade,
   sender_actor_id uuid not null references public.actors(id) on delete restrict,
   reply_to_message_id uuid null references public.messages(id) on delete set null,
-  kind text not null check (kind in ('text', 'system', 'task_event')),
+  kind text not null check (kind in ('text', 'system', 'idea_event')),
   content text not null,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
@@ -295,8 +295,8 @@ begin
         or exists (select 1 from public.team_members where member_id = new.id)
         or exists (select 1 from public.workspaces where created_by_member_id = new.id)
         or exists (select 1 from public.agent_member_access where member_id = new.id or granted_by_member_id = new.id or agent_id = new.id)
-        or exists (select 1 from public.tasks where created_by_actor_id = new.id)
-        or exists (select 1 from public.task_external_refs where linked_by_actor_id = new.id)
+        or exists (select 1 from public.ideas where created_by_actor_id = new.id)
+        or exists (select 1 from public.idea_external_refs where linked_by_actor_id = new.id)
         or exists (select 1 from public.sessions where created_by_actor_id = new.id or primary_agent_id = new.id)
         or exists (select 1 from public.session_participants where actor_id = new.id)
         or exists (select 1 from public.messages where sender_actor_id = new.id)
@@ -308,19 +308,19 @@ begin
     if new.team_id is distinct from old.team_id
       and (
         exists (select 1 from public.agents where default_workspace_id = new.id)
-        or exists (select 1 from public.tasks where workspace_id = new.id)
+        or exists (select 1 from public.ideas where workspace_id = new.id)
         or exists (select 1 from public.agent_runtimes where workspace_id = new.id)
       ) then
       perform app.reject_team_reassignment('workspaces.team_id');
     end if;
-  elsif tg_table_name = 'tasks' then
+  elsif tg_table_name = 'ideas' then
     if new.team_id is distinct from old.team_id
       and (
-        exists (select 1 from public.tasks where parent_task_id = new.id)
-        or exists (select 1 from public.task_external_refs where task_id = new.id)
-        or exists (select 1 from public.sessions where task_id = new.id)
+        exists (select 1 from public.ideas where parent_idea_id = new.id)
+        or exists (select 1 from public.idea_external_refs where idea_id = new.id)
+        or exists (select 1 from public.sessions where idea_id = new.id)
       ) then
-      perform app.reject_team_reassignment('tasks.team_id');
+      perform app.reject_team_reassignment('ideas.team_id');
     end if;
   elsif tg_table_name = 'sessions' then
     if new.team_id is distinct from old.team_id
@@ -378,33 +378,33 @@ begin
       app.actor_team_id(new.granted_by_member_id),
       'agent_member_access.granted_by_member_id'
     );
-  elsif tg_table_name = 'tasks' then
+  elsif tg_table_name = 'ideas' then
     perform app.require_same_team(
       new.team_id,
       app.table_team_id('public.workspaces'::regclass, new.workspace_id),
-      'tasks.workspace_id'
+      'ideas.workspace_id'
     );
     perform app.require_same_team(
       new.team_id,
-      app.table_team_id('public.tasks'::regclass, new.parent_task_id),
-      'tasks.parent_task_id'
+      app.table_team_id('public.ideas'::regclass, new.parent_idea_id),
+      'ideas.parent_idea_id'
     );
     perform app.require_same_team(
       new.team_id,
       app.actor_team_id(new.created_by_actor_id),
-      'tasks.created_by_actor_id'
+      'ideas.created_by_actor_id'
     );
-  elsif tg_table_name = 'task_external_refs' then
+  elsif tg_table_name = 'idea_external_refs' then
     perform app.require_same_team(
-      app.table_team_id('public.tasks'::regclass, new.task_id),
+      app.table_team_id('public.ideas'::regclass, new.idea_id),
       app.actor_team_id(new.linked_by_actor_id),
-      'task_external_refs.linked_by_actor_id'
+      'idea_external_refs.linked_by_actor_id'
     );
   elsif tg_table_name = 'sessions' then
     perform app.require_same_team(
       new.team_id,
-      app.table_team_id('public.tasks'::regclass, new.task_id),
-      'sessions.task_id'
+      app.table_team_id('public.ideas'::regclass, new.idea_id),
+      'sessions.idea_id'
     );
     perform app.require_same_team(
       new.team_id,
@@ -465,10 +465,10 @@ $$;
 create index idx_actors_team_id on public.actors(team_id);
 create index idx_team_members_member_id on public.team_members(member_id);
 create index idx_workspaces_team_id on public.workspaces(team_id);
-create index idx_tasks_team_id on public.tasks(team_id);
-create index idx_tasks_workspace_id on public.tasks(workspace_id);
+create index idx_ideas_team_id on public.ideas(team_id);
+create index idx_ideas_workspace_id on public.ideas(workspace_id);
 create index idx_sessions_team_id on public.sessions(team_id);
-create index idx_sessions_task_id on public.sessions(task_id);
+create index idx_sessions_idea_id on public.sessions(idea_id);
 create index idx_messages_team_id on public.messages(team_id);
 create index idx_messages_session_created_at on public.messages(session_id, created_at desc);
 create index idx_session_participants_actor_id on public.session_participants(actor_id);
@@ -491,11 +491,11 @@ create trigger enforce_agents_same_team before insert or update on public.agents
 for each row execute function app.enforce_core_team_integrity();
 create trigger enforce_agent_member_access_same_team before insert or update on public.agent_member_access
 for each row execute function app.enforce_core_team_integrity();
-create trigger enforce_tasks_same_team before insert or update on public.tasks
+create trigger enforce_ideas_same_team before insert or update on public.ideas
 for each row execute function app.enforce_core_team_integrity();
-create trigger enforce_tasks_parent_integrity before update on public.tasks
+create trigger enforce_ideas_parent_integrity before update on public.ideas
 for each row execute function app.enforce_parent_integrity();
-create trigger enforce_task_external_refs_same_team before insert or update on public.task_external_refs
+create trigger enforce_idea_external_refs_same_team before insert or update on public.idea_external_refs
 for each row execute function app.enforce_core_team_integrity();
 create trigger enforce_sessions_same_team before insert or update on public.sessions
 for each row execute function app.enforce_core_team_integrity();
@@ -522,9 +522,9 @@ create trigger set_agents_updated_at before update on public.agents
 for each row execute function app.bump_updated_at();
 create trigger set_agent_member_access_updated_at before update on public.agent_member_access
 for each row execute function app.bump_updated_at();
-create trigger set_tasks_updated_at before update on public.tasks
+create trigger set_ideas_updated_at before update on public.ideas
 for each row execute function app.bump_updated_at();
-create trigger set_task_external_refs_updated_at before update on public.task_external_refs
+create trigger set_idea_external_refs_updated_at before update on public.idea_external_refs
 for each row execute function app.bump_updated_at();
 create trigger set_sessions_updated_at before update on public.sessions
 for each row execute function app.bump_updated_at();

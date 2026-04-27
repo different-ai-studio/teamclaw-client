@@ -119,17 +119,17 @@ values (
   'active'
 );
 
-insert into public.tasks (id, team_id, workspace_id, created_by_actor_id, title, status)
+insert into public.ideas (id, team_id, workspace_id, created_by_actor_id, title, status)
 values (
   '40000000-0000-0000-0000-000000000001',
   '00000000-0000-0000-0000-000000000001',
   '30000000-0000-0000-0000-000000000001',
   '10000000-0000-0000-0000-000000000001',
-  'Task One',
+  'Idea One',
   'open'
 );
 
-insert into public.sessions (id, team_id, task_id, created_by_actor_id, primary_agent_id, mode, title)
+insert into public.sessions (id, team_id, idea_id, created_by_actor_id, primary_agent_id, mode, title)
 values (
   '50000000-0000-0000-0000-000000000001',
   '00000000-0000-0000-0000-000000000001',
@@ -504,13 +504,13 @@ select ok(
 select ok(
   pg_temp.raises_sqlstate(
     $sql$
-      update public.tasks
+      update public.ideas
       set created_by_actor_id = '10000000-0000-0000-0000-000000000002'
       where id = '40000000-0000-0000-0000-000000000001'
     $sql$,
     '42501'
   ),
-  'task creator spoofing on update is rejected'
+  'idea creator spoofing on update is rejected'
 );
 
 select ok(
@@ -519,7 +519,7 @@ select ok(
       insert into public.sessions (
         id,
         team_id,
-        task_id,
+        idea_id,
         created_by_actor_id,
         mode,
         title
@@ -541,9 +541,9 @@ select ok(
 select ok(
   pg_temp.raises_sqlstate(
     $sql$
-      insert into public.task_external_refs (
+      insert into public.idea_external_refs (
         id,
-        task_id,
+        idea_id,
         provider,
         external_id,
         external_url,

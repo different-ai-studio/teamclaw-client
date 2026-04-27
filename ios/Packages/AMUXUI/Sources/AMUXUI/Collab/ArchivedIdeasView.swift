@@ -1,15 +1,15 @@
 import SwiftUI
 import AMUXCore
 
-struct ArchivedTasksView: View {
+struct ArchivedIdeasView: View {
     @Environment(\.dismiss) private var dismiss
 
-    @Bindable var taskStore: TaskStore
+    @Bindable var ideaStore: IdeaStore
 
     var body: some View {
         NavigationStack {
             Group {
-                if taskStore.archivedTasks.isEmpty {
+                if ideaStore.archivedIdeas.isEmpty {
                     ContentUnavailableView(
                         "Nothing Archived",
                         systemImage: "archivebox",
@@ -17,11 +17,11 @@ struct ArchivedTasksView: View {
                     )
                 } else {
                     List {
-                        ForEach(taskStore.archivedTasks) { item in
-                            TaskRow(item: item)
+                        ForEach(ideaStore.archivedIdeas) { item in
+                            IdeaRow(item: item)
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button {
-                                        Task { await taskStore.setArchived(taskID: item.id, archived: false) }
+                                        Task { await ideaStore.setArchived(ideaID: item.id, archived: false) }
                                     } label: {
                                         Label("Unarchive", systemImage: "tray.and.arrow.up")
                                     }

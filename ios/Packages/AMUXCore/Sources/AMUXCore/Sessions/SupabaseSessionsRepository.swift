@@ -4,7 +4,7 @@ import Supabase
 public struct SessionRecord: Equatable, Sendable {
     public let id: String
     public let teamID: String
-    public let taskID: String?
+    public let ideaID: String?
     public let createdByActorID: String
     public let primaryAgentID: String?
     public let mode: String
@@ -45,7 +45,7 @@ public actor SupabaseSessionsRepository: SessionsRepository {
                 """
                 id,
                 team_id,
-                task_id,
+                idea_id,
                 created_by_actor_id,
                 primary_agent_id,
                 mode,
@@ -79,7 +79,7 @@ public actor SupabaseSessionsRepository: SessionsRepository {
             SessionRecord(
                 id: row.id,
                 teamID: row.teamID,
-                taskID: row.taskID,
+                ideaID: row.ideaID,
                 createdByActorID: row.createdByActorID,
                 primaryAgentID: row.primaryAgentID,
                 mode: row.mode,
@@ -97,7 +97,7 @@ public actor SupabaseSessionsRepository: SessionsRepository {
 private struct SessionRow: Decodable, Sendable {
     let id: String
     let teamID: String
-    let taskID: String?
+    let ideaID: String?
     let createdByActorID: String
     let primaryAgentID: String?
     let mode: String
@@ -110,7 +110,7 @@ private struct SessionRow: Decodable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id
         case teamID = "team_id"
-        case taskID = "task_id"
+        case ideaID = "idea_id"
         case createdByActorID = "created_by_actor_id"
         case primaryAgentID = "primary_agent_id"
         case mode

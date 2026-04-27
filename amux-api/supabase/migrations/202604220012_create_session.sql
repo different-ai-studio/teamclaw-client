@@ -1,6 +1,6 @@
 create or replace function public.create_session(
   p_primary_agent_id uuid,
-  p_task_id uuid,
+  p_idea_id uuid,
   p_mode text,
   p_title text
 )
@@ -18,9 +18,9 @@ begin
     raise exception 'not authenticated' using errcode = '28000';
   end if;
 
-  select team_id into v_team from public.tasks where id = p_task_id;
+  select team_id into v_team from public.ideas where id = p_idea_id;
   if v_team is null then
-    raise exception 'task not found' using errcode = 'P0001';
+    raise exception 'idea not found' using errcode = 'P0001';
   end if;
 
   if not exists (
@@ -35,8 +35,8 @@ begin
   end if;
 
   insert into public.sessions
-    (team_id, task_id, created_by_actor_id, primary_agent_id, mode, title)
-    values (v_team, p_task_id, v_caller_member, p_primary_agent_id, p_mode, p_title)
+    (team_id, idea_id, created_by_actor_id, primary_agent_id, mode, title)
+    values (v_team, p_idea_id, v_caller_member, p_primary_agent_id, p_mode, p_title)
     returning id into v_session;
 
   insert into public.session_participants (session_id, actor_id) values

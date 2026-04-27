@@ -10,8 +10,8 @@ Phase 1 includes:
 - actors, members, and agents
 - team membership
 - workspaces
-- tasks
-- task external refs
+- ideas
+- idea external refs
 - sessions
 - session participants
 - messages
@@ -41,8 +41,8 @@ supabase test db
 - team tenancy and membership
 - shared-key actors with member/agent subtypes
 - team-scoped workspaces
-- tasks and external issue links
-- task-owned sessions
+- ideas and external issue links
+- idea-owned sessions
 - session participants
 - durable collaboration messages
 - agent member permissions (`view`, `prompt`, `admin`)

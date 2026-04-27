@@ -46,8 +46,8 @@ async fn parse_session_live_and_device_notify_topics() {
 
 #[test]
 fn reject_legacy_teamclaw_topics_after_rearchitecture() {
-    let global_tasks = rumqttc::Publish::new(
-        "amux/team1/tasks",
+    let global_ideas = rumqttc::Publish::new(
+        "amux/team1/ideas",
         rumqttc::QoS::AtLeastOnce,
         vec![7, 8, 9],
     );
@@ -56,8 +56,8 @@ fn reject_legacy_teamclaw_topics_after_rearchitecture() {
         rumqttc::QoS::AtLeastOnce,
         vec![],
     );
-    let legacy_task = rumqttc::Publish::new(
-        "amux/team1/session/sess-1/tasks",
+    let legacy_idea = rumqttc::Publish::new(
+        "amux/team1/session/sess-1/ideas",
         rumqttc::QoS::AtLeastOnce,
         vec![],
     );
@@ -67,8 +67,8 @@ fn reject_legacy_teamclaw_topics_after_rearchitecture() {
         vec![],
     );
 
-    assert!(subscriber::parse_incoming(&global_tasks).is_none());
+    assert!(subscriber::parse_incoming(&global_ideas).is_none());
     assert!(subscriber::parse_incoming(&legacy_message).is_none());
-    assert!(subscriber::parse_incoming(&legacy_task).is_none());
+    assert!(subscriber::parse_incoming(&legacy_idea).is_none());
     assert!(subscriber::parse_incoming(&legacy_meta).is_none());
 }

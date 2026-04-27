@@ -5,9 +5,9 @@ use std::path::Path;
 use crate::proto::teamclaw;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
-pub struct TaskStore {
+pub struct IdeaStore {
     #[serde(default)]
-    pub items: Vec<StoredTask>,
+    pub items: Vec<StoredIdea>,
     #[serde(default)]
     pub claims: Vec<StoredClaim>,
     #[serde(default)]
@@ -15,8 +15,8 @@ pub struct TaskStore {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoredTask {
-    pub task_id: String,
+pub struct StoredIdea {
+    pub idea_id: String,
     pub session_id: String,
     #[serde(default)]
     pub workspace_id: String,
@@ -34,7 +34,7 @@ pub struct StoredTask {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredClaim {
     pub claim_id: String,
-    pub task_id: String,
+    pub idea_id: String,
     pub actor_id: String,
     pub claimed_at: DateTime<Utc>,
 }
@@ -42,19 +42,19 @@ pub struct StoredClaim {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredSubmission {
     pub submission_id: String,
-    pub task_id: String,
+    pub idea_id: String,
     pub actor_id: String,
     pub content: String,
     pub submitted_at: DateTime<Utc>,
 }
 
-impl TaskStore {
+impl IdeaStore {
     fn path_for(base_dir: &Path, session_id: &str) -> std::path::PathBuf {
         base_dir
             .join("teamclaw")
             .join("sessions")
             .join(session_id)
-            .join("tasks.toml")
+            .join("ideas.toml")
     }
 
     pub fn load(base_dir: &Path, session_id: &str) -> crate::error::Result<Self> {
@@ -79,21 +79,21 @@ impl TaskStore {
         Ok(())
     }
 
-    pub fn add_item(&mut self, item: StoredTask) {
+    pub fn add_item(&mut self, item: StoredIdea) {
         self.items.push(item);
     }
 
-    pub fn find_item(&self, task_id: &str) -> Option<&StoredTask> {
-        self.items.iter().find(|i| i.task_id == task_id)
+    pub fn find_item(&self, idea_id: &str) -> Option<&StoredIdea> {
+        self.items.iter().find(|i| i.idea_id == idea_id)
     }
 
-    pub fn find_item_mut(&mut self, task_id: &str) -> Option<&mut StoredTask> {
-        self.items.iter_mut().find(|i| i.task_id == task_id)
+    pub fn find_item_mut(&mut self, idea_id: &str) -> Option<&mut StoredIdea> {
+        self.items.iter_mut().find(|i| i.idea_id == idea_id)
     }
 
-    /// Adds a claim and automatically updates the task status to "in_progress".
+    /// Adds a claim and automatically updates the idea status to "in_progress".
     pub fn add_claim(&mut self, claim: StoredClaim) {
-        if let Some(item) = self.find_item_mut(&claim.task_id) {
+        if let Some(item) = self.find_item_mut(&claim.idea_id) {
             item.status = "in_progress".to_string();
         }
         self.claims.push(claim);
@@ -103,51 +103,51 @@ impl TaskStore {
         self.submissions.push(submission);
     }
 
-    pub fn claims_for_task(&self, task_id: &str) -> Vec<&StoredClaim> {
-        self.claims.iter().filter(|c| c.task_id == task_id).collect()
+    pub fn claims_for_idea(&self, idea_id: &str) -> Vec<&StoredClaim> {
+        self.claims.iter().filter(|c| c.idea_id == idea_id).collect()
     }
 
-    pub fn submissions_for_task(&self, task_id: &str) -> Vec<&StoredSubmission> {
-        self.submissions.iter().filter(|s| s.task_id == task_id).collect()
+    pub fn submissions_for_idea(&self, idea_id: &str) -> Vec<&StoredSubmission> {
+        self.submissions.iter().filter(|s| s.idea_id == idea_id).collect()
     }
 
-    pub fn tasks_claimed_by(&self, actor_id: &str) -> Vec<&StoredTask> {
+    pub fn ideas_claimed_by(&self, actor_id: &str) -> Vec<&StoredIdea> {
         let claimed_ids: std::collections::HashSet<&str> = self.claims
             .iter()
             .filter(|c| c.actor_id == actor_id)
-            .map(|c| c.task_id.as_str())
+            .map(|c| c.idea_id.as_str())
             .collect();
-        self.items.iter().filter(|i| claimed_ids.contains(i.task_id.as_str())).collect()
+        self.items.iter().filter(|i| claimed_ids.contains(i.idea_id.as_str())).collect()
     }
 
-    pub fn to_proto_task(&self, item: &StoredTask) -> teamclaw::Task {
-        let claims = self.claims_for_task(&item.task_id)
+    pub fn to_proto_idea(&self, item: &StoredIdea) -> teamclaw::Idea {
+        let claims = self.claims_for_idea(&item.idea_id)
             .into_iter()
             .map(|c| teamclaw::Claim {
                 claim_id: c.claim_id.clone(),
-                task_id: c.task_id.clone(),
+                idea_id: c.idea_id.clone(),
                 actor_id: c.actor_id.clone(),
                 claimed_at: c.claimed_at.timestamp(),
             })
             .collect();
 
-        let submissions = self.submissions_for_task(&item.task_id)
+        let submissions = self.submissions_for_idea(&item.idea_id)
             .into_iter()
             .map(|s| teamclaw::Submission {
                 submission_id: s.submission_id.clone(),
-                task_id: s.task_id.clone(),
+                idea_id: s.idea_id.clone(),
                 actor_id: s.actor_id.clone(),
                 content: s.content.clone(),
                 submitted_at: s.submitted_at.timestamp(),
             })
             .collect();
 
-        teamclaw::Task {
-            task_id: item.task_id.clone(),
+        teamclaw::Idea {
+            idea_id: item.idea_id.clone(),
             session_id: item.session_id.clone(),
             title: item.title.clone(),
             description: item.description.clone(),
-            status: task_status_to_proto(&item.status) as i32,
+            status: idea_status_to_proto(&item.status) as i32,
             parent_id: item.parent_id.clone(),
             created_by: item.created_by.clone(),
             created_at: item.created_at.timestamp(),
@@ -159,12 +159,12 @@ impl TaskStore {
     }
 }
 
-fn task_status_to_proto(s: &str) -> teamclaw::TaskStatus {
+fn idea_status_to_proto(s: &str) -> teamclaw::IdeaStatus {
     match s {
-        "open" => teamclaw::TaskStatus::Open,
-        "in_progress" => teamclaw::TaskStatus::InProgress,
-        "done" => teamclaw::TaskStatus::Done,
-        _ => teamclaw::TaskStatus::Unknown,
+        "open" => teamclaw::IdeaStatus::Open,
+        "in_progress" => teamclaw::IdeaStatus::InProgress,
+        "done" => teamclaw::IdeaStatus::Done,
+        _ => teamclaw::IdeaStatus::Unknown,
     }
 }
 
@@ -174,9 +174,9 @@ mod tests {
     use chrono::Utc;
     use tempfile::TempDir;
 
-    fn make_task(id: &str, session_id: &str) -> StoredTask {
-        StoredTask {
-            task_id: id.to_string(),
+    fn make_idea(id: &str, session_id: &str) -> StoredIdea {
+        StoredIdea {
+            idea_id: id.to_string(),
             session_id: session_id.to_string(),
             workspace_id: String::new(),
             title: format!("Item {}", id),
@@ -189,19 +189,19 @@ mod tests {
         }
     }
 
-    fn make_claim(id: &str, task_id: &str, actor_id: &str) -> StoredClaim {
+    fn make_claim(id: &str, idea_id: &str, actor_id: &str) -> StoredClaim {
         StoredClaim {
             claim_id: id.to_string(),
-            task_id: task_id.to_string(),
+            idea_id: idea_id.to_string(),
             actor_id: actor_id.to_string(),
             claimed_at: Utc::now(),
         }
     }
 
-    fn make_submission(id: &str, task_id: &str, actor_id: &str) -> StoredSubmission {
+    fn make_submission(id: &str, idea_id: &str, actor_id: &str) -> StoredSubmission {
         StoredSubmission {
             submission_id: id.to_string(),
-            task_id: task_id.to_string(),
+            idea_id: idea_id.to_string(),
             actor_id: actor_id.to_string(),
             content: "result".to_string(),
             submitted_at: Utc::now(),
@@ -210,16 +210,16 @@ mod tests {
 
     #[test]
     fn test_add_and_find_item() {
-        let mut store = TaskStore::default();
-        store.add_item(make_task("w1", "s1"));
+        let mut store = IdeaStore::default();
+        store.add_item(make_idea("w1", "s1"));
         assert!(store.find_item("w1").is_some());
         assert!(store.find_item("w2").is_none());
     }
 
     #[test]
     fn test_add_claim_updates_status() {
-        let mut store = TaskStore::default();
-        store.add_item(make_task("w1", "s1"));
+        let mut store = IdeaStore::default();
+        store.add_item(make_idea("w1", "s1"));
         assert_eq!(store.find_item("w1").unwrap().status, "open");
 
         store.add_claim(make_claim("c1", "w1", "agent1"));
@@ -229,59 +229,59 @@ mod tests {
 
     #[test]
     fn test_add_claim_no_matching_item() {
-        let mut store = TaskStore::default();
+        let mut store = IdeaStore::default();
         // Claim for nonexistent item should still be stored
         store.add_claim(make_claim("c1", "w999", "agent1"));
         assert_eq!(store.claims.len(), 1);
     }
 
     #[test]
-    fn test_claims_for_task() {
-        let mut store = TaskStore::default();
-        store.add_item(make_task("w1", "s1"));
+    fn test_claims_for_idea() {
+        let mut store = IdeaStore::default();
+        store.add_item(make_idea("w1", "s1"));
         store.add_claim(make_claim("c1", "w1", "agent1"));
         store.add_claim(make_claim("c2", "w1", "agent2"));
         store.add_claim(make_claim("c3", "w2", "agent1")); // different item
 
-        let claims = store.claims_for_task("w1");
+        let claims = store.claims_for_idea("w1");
         assert_eq!(claims.len(), 2);
     }
 
     #[test]
-    fn test_submissions_for_task() {
-        let mut store = TaskStore::default();
+    fn test_submissions_for_idea() {
+        let mut store = IdeaStore::default();
         store.add_submission(make_submission("s1", "w1", "agent1"));
         store.add_submission(make_submission("s2", "w1", "agent2"));
         store.add_submission(make_submission("s3", "w2", "agent1"));
 
-        let subs = store.submissions_for_task("w1");
+        let subs = store.submissions_for_idea("w1");
         assert_eq!(subs.len(), 2);
     }
 
     #[test]
-    fn test_tasks_claimed_by() {
-        let mut store = TaskStore::default();
-        store.add_item(make_task("w1", "s1"));
-        store.add_item(make_task("w2", "s1"));
-        store.add_item(make_task("w3", "s1"));
+    fn test_ideas_claimed_by() {
+        let mut store = IdeaStore::default();
+        store.add_item(make_idea("w1", "s1"));
+        store.add_item(make_idea("w2", "s1"));
+        store.add_item(make_idea("w3", "s1"));
         store.add_claim(make_claim("c1", "w1", "agent1"));
         store.add_claim(make_claim("c2", "w3", "agent1"));
         store.add_claim(make_claim("c3", "w2", "agent2"));
 
-        let tasks = store.tasks_claimed_by("agent1");
-        assert_eq!(tasks.len(), 2);
+        let ideas = store.ideas_claimed_by("agent1");
+        assert_eq!(ideas.len(), 2);
     }
 
     #[test]
     fn test_save_and_load() {
         let tmp = TempDir::new().unwrap();
-        let mut store = TaskStore::default();
-        store.add_item(make_task("w1", "s1"));
+        let mut store = IdeaStore::default();
+        store.add_item(make_idea("w1", "s1"));
         store.add_claim(make_claim("c1", "w1", "agent1"));
         store.add_submission(make_submission("sub1", "w1", "agent1"));
         store.save(tmp.path(), "s1").unwrap();
 
-        let loaded = TaskStore::load(tmp.path(), "s1").unwrap();
+        let loaded = IdeaStore::load(tmp.path(), "s1").unwrap();
         assert_eq!(loaded.items.len(), 1);
         assert_eq!(loaded.claims.len(), 1);
         assert_eq!(loaded.submissions.len(), 1);
@@ -290,15 +290,15 @@ mod tests {
     }
 
     #[test]
-    fn test_to_proto_task() {
-        let mut store = TaskStore::default();
-        store.add_item(make_task("w1", "s1"));
+    fn test_to_proto_idea() {
+        let mut store = IdeaStore::default();
+        store.add_item(make_idea("w1", "s1"));
         store.add_claim(make_claim("c1", "w1", "agent1"));
         store.add_submission(make_submission("sub1", "w1", "agent1"));
 
-        let proto = store.to_proto_task(store.find_item("w1").unwrap());
-        assert_eq!(proto.task_id, "w1");
-        assert_eq!(proto.status, teamclaw::TaskStatus::InProgress as i32);
+        let proto = store.to_proto_idea(store.find_item("w1").unwrap());
+        assert_eq!(proto.idea_id, "w1");
+        assert_eq!(proto.status, teamclaw::IdeaStatus::InProgress as i32);
         assert_eq!(proto.claims.len(), 1);
         assert_eq!(proto.submissions.len(), 1);
     }
@@ -308,8 +308,8 @@ mod tests {
         let tmp = TempDir::new().unwrap();
 
         // New items default to archived=false
-        let mut store = TaskStore::default();
-        let item = make_task("w1", "s1");
+        let mut store = IdeaStore::default();
+        let item = make_idea("w1", "s1");
         assert_eq!(item.archived, false);
         store.add_item(item);
 
@@ -318,11 +318,11 @@ mod tests {
         store.save(tmp.path(), "s1").unwrap();
 
         // Reload and confirm persisted
-        let loaded = TaskStore::load(tmp.path(), "s1").unwrap();
+        let loaded = IdeaStore::load(tmp.path(), "s1").unwrap();
         assert_eq!(loaded.find_item("w1").unwrap().archived, true);
 
-        // to_proto_task mirrors the field
-        let proto = loaded.to_proto_task(loaded.find_item("w1").unwrap());
+        // to_proto_idea mirrors the field
+        let proto = loaded.to_proto_idea(loaded.find_item("w1").unwrap());
         assert_eq!(proto.archived, true);
     }
 
@@ -335,7 +335,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let toml_body = r#"
 [[items]]
-task_id = "w1"
+idea_id = "w1"
 session_id = "legacy"
 title = "Legacy"
 description = ""
@@ -343,9 +343,9 @@ status = "open"
 created_by = "user1"
 created_at = "2026-04-18T00:00:00Z"
 "#;
-        std::fs::write(dir.join("tasks.toml"), toml_body).unwrap();
+        std::fs::write(dir.join("ideas.toml"), toml_body).unwrap();
 
-        let store = TaskStore::load(tmp.path(), "legacy").unwrap();
+        let store = IdeaStore::load(tmp.path(), "legacy").unwrap();
         assert_eq!(store.items.len(), 1);
         assert_eq!(store.items[0].archived, false);
     }

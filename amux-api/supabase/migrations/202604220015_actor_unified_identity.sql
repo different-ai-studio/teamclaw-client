@@ -178,33 +178,33 @@ begin
       app.actor_team_id(new.granted_by_member_id),
       'agent_member_access.granted_by_member_id'
     );
-  elsif tg_table_name = 'tasks' then
+  elsif tg_table_name = 'ideas' then
     perform app.require_same_team(
       new.team_id,
       app.table_team_id('public.workspaces'::regclass, new.workspace_id),
-      'tasks.workspace_id'
+      'ideas.workspace_id'
     );
     perform app.require_same_team(
       new.team_id,
-      app.table_team_id('public.tasks'::regclass, new.parent_task_id),
-      'tasks.parent_task_id'
+      app.table_team_id('public.ideas'::regclass, new.parent_idea_id),
+      'ideas.parent_idea_id'
     );
     perform app.require_same_team(
       new.team_id,
       app.actor_team_id(new.created_by_actor_id),
-      'tasks.created_by_actor_id'
+      'ideas.created_by_actor_id'
     );
-  elsif tg_table_name = 'task_external_refs' then
+  elsif tg_table_name = 'idea_external_refs' then
     perform app.require_same_team(
-      app.table_team_id('public.tasks'::regclass, new.task_id),
+      app.table_team_id('public.ideas'::regclass, new.idea_id),
       app.actor_team_id(new.linked_by_actor_id),
-      'task_external_refs.linked_by_actor_id'
+      'idea_external_refs.linked_by_actor_id'
     );
   elsif tg_table_name = 'sessions' then
     perform app.require_same_team(
       new.team_id,
-      app.table_team_id('public.tasks'::regclass, new.task_id),
-      'sessions.task_id'
+      app.table_team_id('public.ideas'::regclass, new.idea_id),
+      'sessions.idea_id'
     );
     perform app.require_same_team(
       new.team_id,

@@ -2,37 +2,37 @@ import Foundation
 import SwiftData
 
 @Model
-public final class SessionTask {
-    @Attribute(.unique) public var taskId: String
+public final class SessionIdea {
+    @Attribute(.unique) public var ideaId: String
     public var sessionId: String
     public var workspaceId: String
     public var title: String
-    public var taskDescription: String
+    public var ideaDescription: String
     public var status: String           // "open", "in_progress", "done"
-    public var parentTaskId: String
+    public var parentIdeaId: String
     public var createdBy: String
     public var createdAt: Date
     public var archived: Bool
 
     public init(
-        taskId: String,
+        ideaId: String,
         sessionId: String = "",
         workspaceId: String = "",
         title: String = "",
-        taskDescription: String = "",
+        ideaDescription: String = "",
         status: String = "open",
-        parentTaskId: String = "",
+        parentIdeaId: String = "",
         createdBy: String = "",
         createdAt: Date = .now,
         archived: Bool = false
     ) {
-        self.taskId = taskId
+        self.ideaId = ideaId
         self.sessionId = sessionId
         self.workspaceId = workspaceId
         self.title = title
-        self.taskDescription = taskDescription
+        self.ideaDescription = ideaDescription
         self.status = status
-        self.parentTaskId = parentTaskId
+        self.parentIdeaId = parentIdeaId
         self.createdBy = createdBy
         self.createdAt = createdAt
         self.archived = archived
@@ -40,7 +40,7 @@ public final class SessionTask {
 
     public var displayTitle: String {
         if !title.isEmpty { return title }
-        let desc = taskDescription
+        let desc = ideaDescription
         if desc.count <= 50 { return desc }
         let prefix = desc.prefix(50)
         if let lastSpace = prefix.lastIndex(of: " ") {

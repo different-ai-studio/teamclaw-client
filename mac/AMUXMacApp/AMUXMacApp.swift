@@ -43,7 +43,7 @@ struct AMUXMacApp: App {
             .environment(shared)
             .modelContainer(modelContainer)
 
-        TaskEditorWindowScene(teamclawService: detailTeamclaw)
+        IdeaEditorWindowScene(teamclawService: detailTeamclaw)
             .modelContainer(modelContainer)
 
         MembersWindowScene(pairing: pairing)

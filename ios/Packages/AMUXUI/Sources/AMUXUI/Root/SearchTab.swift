@@ -13,8 +13,8 @@ public struct SearchTab: View {
     @Environment(\.modelContext) private var modelContext
     @State private var query: String = ""
 
-    @Query(filter: #Predicate<SessionTask> { !$0.archived })
-    private var allTasks: [SessionTask]
+    @Query(filter: #Predicate<SessionIdea> { !$0.archived })
+    private var allIdeas: [SessionIdea]
 
     @Query(filter: #Predicate<CachedActor> { $0.actorType == "member" },
            sort: \CachedActor.displayName)
@@ -43,10 +43,10 @@ public struct SearchTab: View {
         }
     }
 
-    private var taskMatches: [SessionTask] {
-        allTasks.filter {
+    private var ideaMatches: [SessionIdea] {
+        allIdeas.filter {
             SearchMatcher.matchesAny(
-                fields: [$0.title, $0.taskDescription],
+                fields: [$0.title, $0.ideaDescription],
                 query: query
             )
         }
@@ -83,10 +83,10 @@ public struct SearchTab: View {
                         }
                     }
 
-                    if !taskMatches.isEmpty {
+                    if !ideaMatches.isEmpty {
                         Section("Ideas") {
-                            ForEach(taskMatches, id: \.taskId) { item in
-                                TaskRow(item: item)
+                            ForEach(ideaMatches, id: \.ideaId) { item in
+                                IdeaRow(item: item)
                             }
                         }
                     }
@@ -106,7 +106,7 @@ public struct SearchTab: View {
                         }
                     }
 
-                    if runtimeMatches.isEmpty && taskMatches.isEmpty && memberMatches.isEmpty {
+                    if runtimeMatches.isEmpty && ideaMatches.isEmpty && memberMatches.isEmpty {
                         ContentUnavailableView.search(text: query)
                     }
                 }

@@ -26,8 +26,8 @@ select has_table('public', 'team_members');
 select has_table('public', 'workspaces');
 select has_table('public', 'agents');
 select has_table('public', 'agent_member_access');
-select has_table('public', 'tasks');
-select has_table('public', 'task_external_refs');
+select has_table('public', 'ideas');
+select has_table('public', 'idea_external_refs');
 select has_table('public', 'sessions');
 select has_table('public', 'session_participants');
 select has_table('public', 'messages');
@@ -41,7 +41,7 @@ select col_type_is('public', 'workspaces', 'agent_id', 'uuid');
 select fk_ok('public', 'members', 'id', 'public', 'actors', 'id');
 select fk_ok('public', 'agents', 'id', 'public', 'actors', 'id');
 select fk_ok('public', 'workspaces', 'agent_id', 'public', 'agents', 'id');
-select fk_ok('public', 'sessions', 'task_id', 'public', 'tasks', 'id');
+select fk_ok('public', 'sessions', 'idea_id', 'public', 'ideas', 'id');
 select fk_ok('public', 'messages', 'session_id', 'public', 'sessions', 'id');
 select fk_ok('public', 'agent_runtimes', 'agent_id', 'public', 'agents', 'id');
 
@@ -52,11 +52,11 @@ select has_trigger('public', 'workspaces', 'enforce_workspaces_same_team');
 select has_trigger('public', 'actors', 'enforce_actors_parent_integrity');
 select has_trigger('public', 'agents', 'enforce_agents_same_team');
 select has_trigger('public', 'agent_member_access', 'enforce_agent_member_access_same_team');
-select has_trigger('public', 'tasks', 'enforce_tasks_same_team');
+select has_trigger('public', 'ideas', 'enforce_ideas_same_team');
 select has_trigger('public', 'workspaces', 'enforce_workspaces_parent_integrity');
-select has_trigger('public', 'task_external_refs', 'enforce_task_external_refs_same_team');
+select has_trigger('public', 'idea_external_refs', 'enforce_idea_external_refs_same_team');
 select has_trigger('public', 'sessions', 'enforce_sessions_same_team');
-select has_trigger('public', 'tasks', 'enforce_tasks_parent_integrity');
+select has_trigger('public', 'ideas', 'enforce_ideas_parent_integrity');
 select has_trigger('public', 'session_participants', 'enforce_session_participants_same_team');
 select has_trigger('public', 'messages', 'enforce_messages_same_team');
 select has_trigger('public', 'sessions', 'enforce_sessions_parent_integrity');
@@ -108,17 +108,17 @@ values (
   'active'
 );
 
-insert into public.tasks (id, team_id, workspace_id, created_by_actor_id, title, status)
+insert into public.ideas (id, team_id, workspace_id, created_by_actor_id, title, status)
 values (
   '40000000-0000-0000-0000-000000000001',
   '00000000-0000-0000-0000-000000000001',
   '30000000-0000-0000-0000-000000000001',
   '10000000-0000-0000-0000-000000000002',
-  'Task One',
+  'Idea One',
   'open'
 );
 
-insert into public.sessions (id, team_id, task_id, created_by_actor_id, mode, title)
+insert into public.sessions (id, team_id, idea_id, created_by_actor_id, mode, title)
 values (
   '50000000-0000-0000-0000-000000000001',
   '00000000-0000-0000-0000-000000000001',
@@ -128,14 +128,14 @@ values (
   'Session One'
 );
 
-insert into public.sessions (id, team_id, task_id, created_by_actor_id, mode, title)
+insert into public.sessions (id, team_id, idea_id, created_by_actor_id, mode, title)
 values (
   '50000000-0000-0000-0000-000000000002',
   '00000000-0000-0000-0000-000000000001',
   null,
   '10000000-0000-0000-0000-000000000002',
   'collab',
-  'Session Without Task'
+  'Session Without Idea'
 );
 
 insert into public.messages (id, team_id, session_id, sender_actor_id, kind, content)
@@ -172,9 +172,9 @@ select ok(
     select 1
     from public.sessions
     where id = '50000000-0000-0000-0000-000000000002'
-      and task_id is null
+      and idea_id is null
   ),
-  'sessions.task_id may be null'
+  'sessions.idea_id may be null'
 );
 
 select ok(
@@ -204,7 +204,7 @@ select ok(
           where id = '30000000-0000-0000-0000-000000000001'$sql$,
     '23514'
   ),
-  'workspaces.team_id update is rejected when dependent tasks exist'
+  'workspaces.team_id update is rejected when dependent ideas exist'
 );
 
 select ok(
@@ -219,12 +219,12 @@ select ok(
 
 select ok(
   pg_temp.raises_sqlstate(
-    $sql$update public.tasks
+    $sql$update public.ideas
           set team_id = '00000000-0000-0000-0000-000000000002'
           where id = '40000000-0000-0000-0000-000000000001'$sql$,
     '23514'
   ),
-  'tasks.team_id update is rejected when dependent sessions exist'
+  'ideas.team_id update is rejected when dependent sessions exist'
 );
 
 select ok(

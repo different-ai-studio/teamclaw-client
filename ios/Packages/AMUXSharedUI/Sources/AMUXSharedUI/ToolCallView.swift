@@ -12,7 +12,7 @@ public enum ToolIcons {
         if n.contains("read") { return "doc" }
         if n.contains("bash") || n.contains("shell") || n.contains("terminal") { return "terminal" }
         if n.contains("search") || n.contains("grep") || n.contains("glob") { return "magnifyingglass" }
-        if n.contains("task") { return "person.2" }
+        if n.contains("idea") || n.contains("task") { return "lightbulb" }
         if n.contains("web") { return "globe" }
         return "wrench"
     }

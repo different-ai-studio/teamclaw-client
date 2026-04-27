@@ -341,7 +341,7 @@ public final class SessionListViewModel {
             session.participantCount = record.participantCount
             session.lastMessagePreview = record.lastMessagePreview
             session.lastMessageAt = record.lastMessageAt
-            session.taskId = record.taskID ?? ""
+            session.ideaId = record.ideaID ?? ""
             session.primaryAgentId = record.primaryAgentID
         }
 

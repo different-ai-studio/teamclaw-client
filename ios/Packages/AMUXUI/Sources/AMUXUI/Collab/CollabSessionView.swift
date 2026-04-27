@@ -42,9 +42,9 @@ public struct SessionView: View {
                 }
             }
 
-            // Task bar (if any)
-            if !viewModel.workItems.isEmpty {
-                workItemBar
+            // Idea bar (if any)
+            if !viewModel.ideas.isEmpty {
+                ideaBar
             }
 
             // Input bar
@@ -57,10 +57,10 @@ public struct SessionView: View {
         .onDisappear { viewModel.stop() }
     }
 
-    private var workItemBar: some View {
+    private var ideaBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(viewModel.workItems, id: \.taskId) { item in
+                ForEach(viewModel.ideas, id: \.ideaId) { item in
                     HStack(spacing: 4) {
                         Circle()
                             .fill(item.isDone ? .green : item.isInProgress ? .orange : .blue)
