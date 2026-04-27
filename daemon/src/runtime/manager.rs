@@ -246,6 +246,25 @@ impl RuntimeManager {
             .map(|(id, _)| id.clone())
     }
 
+    pub fn running_agent_id_for_collab_session(
+        &self,
+        collab_session_id: &str,
+    ) -> Option<String> {
+        if collab_session_id.is_empty() {
+            return None;
+        }
+        self.agents
+            .iter()
+            .find(|(_, h)| {
+                h.collab_session_id == collab_session_id
+                    && matches!(
+                        h.status,
+                        amux::AgentStatus::Active | amux::AgentStatus::Idle
+                    )
+            })
+            .map(|(id, _)| id.clone())
+    }
+
     /// Cancel the current turn for an agent.
     pub async fn cancel_agent(&mut self, agent_id: &str) -> crate::error::Result<()> {
         let handle = self.agents.get(agent_id).ok_or_else(|| {
@@ -342,5 +361,36 @@ mod tests {
     fn current_model_returns_none_for_unknown_agent() {
         let mgr = RuntimeManager::new("claude".to_string(), vec![], None);
         assert_eq!(mgr.current_model("agent-1"), None);
+    }
+
+    #[test]
+    fn running_agent_id_for_collab_session_ignores_stopped_agents() {
+        let mut mgr = RuntimeManager::new("claude".to_string(), vec![], None);
+        let mut stopped = RuntimeHandle::new(
+            "stopped-1".to_string(),
+            amux::AgentType::ClaudeCode,
+            ".".to_string(),
+            "workspace-1".to_string(),
+        );
+        stopped.collab_session_id = "session-1".to_string();
+        stopped.status = amux::AgentStatus::Stopped;
+
+        let mut running = RuntimeHandle::new(
+            "running-1".to_string(),
+            amux::AgentType::ClaudeCode,
+            ".".to_string(),
+            "workspace-1".to_string(),
+        );
+        running.collab_session_id = "session-1".to_string();
+        running.status = amux::AgentStatus::Idle;
+
+        mgr.agents.insert(stopped.agent_id.clone(), stopped);
+        mgr.agents.insert(running.agent_id.clone(), running);
+
+        assert_eq!(
+            mgr.running_agent_id_for_collab_session("session-1").as_deref(),
+            Some("running-1")
+        );
+        assert_eq!(mgr.running_agent_id_for_collab_session("missing"), None);
     }
 }

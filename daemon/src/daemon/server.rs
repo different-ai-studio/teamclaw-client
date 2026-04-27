@@ -669,6 +669,20 @@ impl DaemonServer {
         self.agents.first_running_agent_id()
     }
 
+    fn runtime_id_for_agent_actor_in_session(
+        &self,
+        agent_actor_id: &str,
+        session_id: &str,
+    ) -> Option<String> {
+        if self.agents.get_handle(agent_actor_id).is_some() {
+            return Some(agent_actor_id.to_string());
+        }
+        if agent_actor_id == self.supabase.config().actor_id {
+            return self.agents.running_agent_id_for_collab_session(session_id);
+        }
+        None
+    }
+
     /// Server-level RPC dispatch. Decodes the wire payload, matches on Method,
     /// delegates session/idea methods to SessionManager, and handles non-session
     /// methods locally. Publishes the response to the sender's rpc/res topic.
@@ -774,16 +788,34 @@ impl DaemonServer {
                                         let activated = tc.agents_to_activate(&session_id, msg);
                                         let desired_model = msg.model.clone();
                                         for agent_actor_id in activated {
-                                            if msg.sender_actor_id == agent_actor_id { continue; }
-                                            if self.agents.get_handle(&agent_actor_id).is_some() {
+                                            if msg.sender_actor_id == agent_actor_id {
+                                                continue;
+                                            }
+                                            if let Some(runtime_id) = self
+                                                .runtime_id_for_agent_actor_in_session(
+                                                    &agent_actor_id,
+                                                    &session_id,
+                                                )
+                                            {
                                                 if !desired_model.is_empty() {
-                                                    let current = self.agents.current_model(&agent_actor_id).cloned().unwrap_or_default();
+                                                    let current = self
+                                                        .agents
+                                                        .current_model(&runtime_id)
+                                                        .cloned()
+                                                        .unwrap_or_default();
                                                     if desired_model != current {
-                                                        if let Err(e) = self.agents.send_set_model(&agent_actor_id, &desired_model).await {
+                                                        if let Err(e) = self
+                                                            .agents
+                                                            .send_set_model(&runtime_id, &desired_model)
+                                                            .await
+                                                        {
                                                             warn!(?e, "send_set_model from live message failed");
                                                         } else {
-                                                            self.agents.set_current_model(&agent_actor_id, &desired_model);
-                                                            self.publish_runtime_state_by_id(&agent_actor_id).await;
+                                                            self.agents.set_current_model(
+                                                                &runtime_id,
+                                                                &desired_model,
+                                                            );
+                                                            self.publish_runtime_state_by_id(&runtime_id).await;
                                                         }
                                                     }
                                                 }
@@ -791,8 +823,13 @@ impl DaemonServer {
                                                     "[Collab session: {}] {} says:\n{}",
                                                     session_id, msg.sender_actor_id, msg.content
                                                 );
-                                                if let Err(e) = self.agents.send_prompt(&agent_actor_id, &prompt).await {
-                                                    warn!("Failed to route live message to agent {}: {}", agent_actor_id, e);
+                                                if let Err(e) =
+                                                    self.agents.send_prompt(&runtime_id, &prompt).await
+                                                {
+                                                    warn!(
+                                                        "Failed to route live message to agent {} runtime {}: {}",
+                                                        agent_actor_id, runtime_id, e
+                                                    );
                                                 }
                                             }
                                         }
@@ -801,7 +838,9 @@ impl DaemonServer {
                             }
                         }
                         "idea.created" | "idea.updated" => {
-                            if let Ok(event) = crate::proto::teamclaw::IdeaEvent::decode(envelope.body.as_slice()) {
+                            if let Ok(event) =
+                                crate::proto::teamclaw::IdeaEvent::decode(envelope.body.as_slice())
+                            {
                                 if let Some(tc) = &mut self.teamclaw {
                                     if !tc.should_process_idea_event(&session_id, &event) {
                                         return;
@@ -810,11 +849,21 @@ impl DaemonServer {
                                 if let Some(tc) = &self.teamclaw {
                                     let activated = tc.agents_to_activate_for_idea(&session_id, &event);
                                     for agent_actor_id in activated {
-                                        if self.agents.get_handle(&agent_actor_id).is_some() {
+                                        if let Some(runtime_id) = self
+                                            .runtime_id_for_agent_actor_in_session(
+                                                &agent_actor_id,
+                                                &session_id,
+                                            )
+                                        {
                                             let prompt = format_idea_prompt(&session_id, &event);
                                             if !prompt.is_empty() {
-                                                if let Err(e) = self.agents.send_prompt(&agent_actor_id, &prompt).await {
-                                                    warn!("Failed to route live idea to agent {}: {}", agent_actor_id, e);
+                                                if let Err(e) =
+                                                    self.agents.send_prompt(&runtime_id, &prompt).await
+                                                {
+                                                    warn!(
+                                                        "Failed to route live idea to agent {} runtime {}: {}",
+                                                        agent_actor_id, runtime_id, e
+                                                    );
                                                 }
                                             }
                                         }
@@ -1911,4 +1960,3 @@ mod tests {
         assert!(merged.is_empty());
     }
 }
-

@@ -655,7 +655,24 @@ public final class RuntimeDetailViewModel {
     }
 
     public func sendPrompt(_ text: String, modelId: String? = nil, modelContext: ModelContext? = nil) async throws {
-        if runtime != nil {
+        if let session, let teamclawService {
+            // Session-backed chats use the session live stream as the source of
+            // truth. `session.primaryAgentId` is a Supabase actor id, not the
+            // daemon's short runtime id, so sending an ACP runtime command here
+            // would route to a non-existent runtime after the first turn.
+            let seq = (events.last?.sequence ?? 0) + 1
+            let userEvent = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "user_prompt")
+            userEvent.text = text
+            if let ctx = modelContext ?? startModelContext { ctx.insert(userEvent); try? ctx.save() }
+            appendEvent(userEvent)
+            recomputeGroups()
+
+            teamclawService.sendMessage(
+                sessionId: session.sessionId,
+                content: text,
+                modelId: modelId
+            )
+        } else if runtime != nil {
             // Runtime session: send ACP command
             let seq = (events.last?.sequence ?? 0) + 1
             let userEvent = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "user_prompt")
@@ -669,20 +686,6 @@ public final class RuntimeDetailViewModel {
                 p.modelID = modelId
             }
             try await sendCommand { $0.command = .sendPrompt(p) }
-        } else if let session, let teamclawService {
-            // Shared session: add local bubble + send via TeamclawService
-            let seq = (events.last?.sequence ?? 0) + 1
-            let userEvent = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "user_prompt")
-            userEvent.text = text
-            if let ctx = modelContext ?? startModelContext { ctx.insert(userEvent); try? ctx.save() }
-            appendEvent(userEvent)
-            recomputeGroups()
-
-            teamclawService.sendMessage(
-                sessionId: session.sessionId,
-                content: text,
-                modelId: modelId
-            )
         }
     }
     public func cancelTask() async throws {
