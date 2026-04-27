@@ -782,6 +782,11 @@ impl DaemonServer {
                 self.handle_rpc_request(&topic, &payload).await;
             }
             subscriber::IncomingMessage::TeamclawSessionLive { session_id, payload } => {
+                info!(
+                    session_id = %session_id,
+                    payload_bytes = payload.len(),
+                    "session/live message received"
+                );
                 if let Ok(envelope) = crate::proto::teamclaw::LiveEventEnvelope::decode(payload.as_slice()) {
                     match envelope.event_type.as_str() {
                         "message.created" => {

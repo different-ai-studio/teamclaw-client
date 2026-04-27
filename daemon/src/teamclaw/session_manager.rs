@@ -1317,9 +1317,11 @@ impl SessionManager {
         if self.skip_live_subscription_io {
             return Ok(());
         }
+        let topic = self.live_session_topic(session_id);
         self.client
-            .subscribe(self.live_session_topic(session_id), QoS::AtLeastOnce)
+            .subscribe(&topic, QoS::AtLeastOnce)
             .await?;
+        info!(session_id, topic = %topic, "subscribed to session live");
         Ok(())
     }
 
