@@ -1330,9 +1330,15 @@ impl SessionManager {
         if self.skip_live_subscription_io {
             return Ok(());
         }
+        let topic = self.live_session_topic(session_id);
         self.client
-            .unsubscribe(self.live_session_topic(session_id))
+            .unsubscribe(&topic)
             .await?;
+        // We've seen "second user message never lands on daemon" reports
+        // that look like the subscription went away between turns —
+        // surface every unsubscribe so the next repro shows whether it
+        // happened, and which membership-refresh path triggered it.
+        warn!(session_id, topic = %topic, "unsubscribed from session live");
         Ok(())
     }
 

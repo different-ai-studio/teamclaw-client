@@ -794,8 +794,25 @@ impl DaemonServer {
                                 crate::proto::teamclaw::SessionMessageEnvelope::decode(envelope.body.as_slice())
                             {
                                 if let Some(msg) = &message_envelope.message {
+                                    let content_preview: String = msg
+                                        .content
+                                        .chars()
+                                        .take(40)
+                                        .collect();
+                                    info!(
+                                        session_id = %session_id,
+                                        message_id = %msg.message_id,
+                                        sender = %msg.sender_actor_id,
+                                        content = %content_preview,
+                                        "message.created decoded"
+                                    );
                                     if let Some(tc) = &mut self.teamclaw {
                                         if !tc.should_process_message(&session_id, &msg.message_id) {
+                                            warn!(
+                                                session_id = %session_id,
+                                                message_id = %msg.message_id,
+                                                "message dropped by dedup cache"
+                                            );
                                             return;
                                         }
                                     }
@@ -804,6 +821,13 @@ impl DaemonServer {
                                     }
                                     if let Some(tc) = &self.teamclaw {
                                         let activated = tc.agents_to_activate(&session_id, msg);
+                                        if activated.is_empty() {
+                                            warn!(
+                                                session_id = %session_id,
+                                                message_id = %msg.message_id,
+                                                "no agents activated — message will not be routed to a runtime"
+                                            );
+                                        }
                                         let desired_model = msg.model.clone();
                                         for agent_actor_id in activated {
                                             if msg.sender_actor_id == agent_actor_id {
