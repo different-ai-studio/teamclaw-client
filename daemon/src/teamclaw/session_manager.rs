@@ -547,6 +547,110 @@ impl SessionManager {
         }
     }
 
+    /// Synthesise a local `StoredSession` from a Supabase fetch, populate
+    /// participants, and trigger a `refresh_membership_subscriptions` so the
+    /// daemon subscribes to `session/{sid}/live` if it is a participant.
+    ///
+    /// iOS creates collab sessions by writing directly to Supabase
+    /// `sessions`/`session_participants`; the daemon only learns about them
+    /// via this path (called from `apply_start_runtime`). Without this,
+    /// inbound `message.created` events on `session/{sid}/live` are silently
+    /// dropped because the daemon never subscribed.
+    ///
+    /// `session_participants` doesn't carry an explicit actor_type. We stamp
+    /// the local daemon actor as `personal_agent` (which it is — the daemon
+    /// owns the device's primary agent), and other participants as
+    /// `unknown` until a richer source of truth is wired through. This is
+    /// load-bearing for `agents_to_activate`, which only routes messages to
+    /// participants whose stored actor_type is `personal_agent` or
+    /// `role_agent`.
+    pub async fn insert_session_from_supabase(
+        &mut self,
+        session: &crate::supabase::SupabaseSessionRow,
+        participants: &[crate::supabase::SupabaseParticipantRow],
+    ) -> crate::error::Result<()> {
+        let session_type = match session.mode.as_str() {
+            "control" => "control",
+            _ => "collab",
+        };
+
+        let local_actor_id = self.actor_id.as_deref();
+        let stored_participants: Vec<StoredParticipant> = participants
+            .iter()
+            .map(|p| {
+                let actor_type = if local_actor_id.is_some_and(|a| a == p.actor_id) {
+                    "personal_agent"
+                } else {
+                    "unknown"
+                };
+                StoredParticipant {
+                    actor_id: p.actor_id.clone(),
+                    actor_type: actor_type.to_string(),
+                    display_name: String::new(),
+                    joined_at: p.joined_at,
+                }
+            })
+            .collect();
+
+        let stored = StoredSession {
+            session_id: session.id.clone(),
+            session_type: session_type.to_string(),
+            team_id: session.team_id.clone(),
+            title: session.title.clone(),
+            created_by: session.created_by_actor_id.clone().unwrap_or_default(),
+            created_at: session.created_at,
+            summary: session.summary.clone(),
+            idea_id: session.idea_id.clone().unwrap_or_default(),
+            participants: stored_participants,
+            primary_agent_id: session.primary_agent_id.clone().unwrap_or_default(),
+        };
+
+        self.sessions.upsert(stored);
+        if let Err(e) = self.sessions.save(&self.sessions_path) {
+            warn!("insert_session_from_supabase: failed to save sessions: {}", e);
+        }
+
+        self.refresh_membership_subscriptions().await?;
+        info!(
+            session_id = %session.id,
+            "inserted Supabase-sourced session into teamclaw cache"
+        );
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub async fn insert_session_from_supabase_for_test(
+        &mut self,
+        session_id: &str,
+        team_id: &str,
+        primary_agent_id: Option<&str>,
+        participants: &[(&str, &str)],
+    ) -> crate::error::Result<()> {
+        use crate::supabase::{SupabaseParticipantRow, SupabaseSessionRow};
+        let session = SupabaseSessionRow {
+            id: session_id.into(),
+            team_id: team_id.into(),
+            created_by_actor_id: None,
+            primary_agent_id: primary_agent_id.map(String::from),
+            mode: "collab".into(),
+            title: String::new(),
+            summary: String::new(),
+            idea_id: None,
+            created_at: chrono::Utc::now(),
+        };
+        let now = chrono::Utc::now();
+        let parts: Vec<SupabaseParticipantRow> = participants
+            .iter()
+            .map(|(actor, role)| SupabaseParticipantRow {
+                session_id: session_id.into(),
+                actor_id: (*actor).into(),
+                role: Some((*role).into()),
+                joined_at: now,
+            })
+            .collect();
+        self.insert_session_from_supabase(&session, &parts).await
+    }
+
     async fn handle_create_idea(
         &mut self,
         req: &RpcRequest,
@@ -1463,6 +1567,60 @@ mod tests {
 
         let targets = sm.membership_refresh_targets("s1", Some("dev-a"));
         assert!(targets.is_empty());
+    }
+
+    fn make_test_session_manager_with_actor(actor_id: &str) -> (TempDir, SessionManager) {
+        let tmp = TempDir::new().unwrap();
+        let (client, _eventloop) = rumqttc::AsyncClient::new(
+            rumqttc::MqttOptions::new("test", "localhost", 1883),
+            10,
+        );
+        let mut sm = SessionManager::new(
+            client,
+            "team1",
+            "dev-a",
+            Some(actor_id.to_string()),
+            tmp.path().to_path_buf(),
+        )
+        .unwrap();
+        sm.skip_live_subscription_io = true;
+        (tmp, sm)
+    }
+
+    fn test_message(sender_actor_id: &str, session_id: &str, content: &str) -> teamclaw::Message {
+        teamclaw::Message {
+            message_id: "msg-test".to_string(),
+            session_id: session_id.to_string(),
+            sender_actor_id: sender_actor_id.to_string(),
+            kind: teamclaw::MessageKind::Text as i32,
+            content: content.to_string(),
+            created_at: Utc::now().timestamp(),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_insert_session_from_supabase_subscribes_when_daemon_is_participant() {
+        let (_tmp, mut sm) = make_test_session_manager_with_actor("daemon-actor-1");
+
+        sm.insert_session_from_supabase_for_test(
+            "sess-1",
+            "team-1",
+            Some("daemon-actor-1"),
+            &[("user-1", "member"), ("daemon-actor-1", "member")],
+        )
+        .await
+        .unwrap();
+
+        let subs = sm.subscribed_live_sessions();
+        assert!(
+            subs.contains(&"sess-1".to_string()),
+            "expected sess-1 to be subscribed; got {subs:?}"
+        );
+
+        let msg = test_message("user-1", "sess-1", "hello");
+        let activated = sm.agents_to_activate("sess-1", &msg);
+        assert_eq!(activated, vec!["daemon-actor-1".to_string()]);
     }
 
     #[tokio::test]
