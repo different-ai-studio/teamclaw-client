@@ -3,6 +3,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::proto::amux;
+use crate::runtime::turn_aggregator::TurnAggregator;
 use crate::supabase::{AgentRuntimeUpsert, SupabaseClient};
 use chrono::Utc;
 use super::adapter;
@@ -10,6 +11,7 @@ use super::handle::RuntimeHandle;
 
 pub struct RuntimeManager {
     agents: HashMap<String, RuntimeHandle>,
+    pub aggregators: std::collections::HashMap<String, TurnAggregator>,
     claude_binary: String,
     /// Tracks the model id currently applied to each agent's ACP session.
     /// Populated on spawn (after the adapter sends the initial set_model)
@@ -24,6 +26,7 @@ impl RuntimeManager {
     pub fn new(binary: String, _flags: Vec<String>, supabase: Option<SupabaseClient>) -> Self {
         Self {
             agents: HashMap::new(),
+            aggregators: std::collections::HashMap::new(),
             claude_binary: binary,
             current_model_per_agent: HashMap::new(),
             supabase,
@@ -42,6 +45,12 @@ impl RuntimeManager {
     /// Returns the model id last recorded for `agent_id`, if any.
     pub fn current_model(&self, agent_id: &str) -> Option<&String> {
         self.current_model_per_agent.get(agent_id)
+    }
+
+    /// Returns a mutable reference to the per-agent `TurnAggregator`, if any.
+    /// Inserted on `spawn_agent` / `resume_agent` and removed on `stop_agent`.
+    pub fn aggregator_mut(&mut self, agent_id: &str) -> Option<&mut TurnAggregator> {
+        self.aggregators.get_mut(agent_id)
     }
 
     pub async fn spawn_agent(
@@ -77,6 +86,7 @@ impl RuntimeManager {
 
         info!(agent_id, worktree, "agent spawned via ACP");
         self.agents.insert(agent_id.clone(), handle);
+        self.aggregators.insert(agent_id.clone(), TurnAggregator::new());
 
         // Wait for the adapter to report the model it applied. None means no
         // model was applied (no models known for this agent type, or the ACP
@@ -154,6 +164,8 @@ impl RuntimeManager {
 
         info!(agent_id, worktree, "agent resumed via ACP");
         self.agents.insert(agent_id.to_string(), handle);
+        self.aggregators
+            .insert(agent_id.to_string(), TurnAggregator::new());
 
         // Capture initial model
         if let Ok(Some(model_id)) = initial_model_rx.await {
@@ -193,6 +205,7 @@ impl RuntimeManager {
 
     pub async fn stop_agent(&mut self, agent_id: &str) -> Option<RuntimeHandle> {
         if let Some(mut handle) = self.agents.remove(agent_id) {
+            self.aggregators.remove(agent_id);
             handle.status = amux::AgentStatus::Stopped;
             handle.shutdown().await;
             info!(agent_id, "agent stopped");
