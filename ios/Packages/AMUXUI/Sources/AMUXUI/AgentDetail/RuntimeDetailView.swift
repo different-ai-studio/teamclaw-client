@@ -117,9 +117,13 @@ public struct RuntimeDetailView: View {
                     }
                     .padding(.top, 8)
                 }
-                // iMessage-style: a downward drag pulls the keyboard down
-                // with the gesture, restoring chat surface area.
-                .scrollDismissesKeyboard(.interactively)
+                // Any scroll on the chat surface dismisses the keyboard.
+                // .interactively (iMessage-style finger-tracks-keyboard)
+                // got swallowed by the composer's nested TextField scroll
+                // and the SafeAreaInset hosting it; .immediately is more
+                // robust and matches the user's expectation that pulling
+                // the chat reveals more chat.
+                .scrollDismissesKeyboard(.immediately)
                 .onAppear {
                     proxy.scrollTo("bottom", anchor: .bottom)
                 }
