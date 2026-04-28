@@ -300,6 +300,14 @@ message RuntimeInfo {
   string error_code = 16;             // meaningful iff state == FAILED
   string error_message = 17;          // meaningful iff state == FAILED
   string failed_stage = 18;           // meaningful iff state == FAILED
+
+  // Most recent slash commands the agent reported. Cached on the daemon so
+  // a fresh iOS subscription sees them in the retained state snapshot
+  // instead of having to wait for the next live AvailableCommandsUpdate
+  // on the events stream (which is not retained). Empty when the daemon
+  // has not yet observed any AvailableCommandsUpdate for the runtime
+  // (e.g. cold-spawned historical session before ACP boots).
+  repeated AcpAvailableCommand available_commands = 19;
 }
 
 message ModelInfo {

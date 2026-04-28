@@ -218,6 +218,18 @@ public final class SessionListViewModel {
                     existing.availableModelsJSON = str
                 }
             }
+            // Same caching rule for slash commands: never blow away a known
+            // list with an empty one (cold-spawned historical sessions ship
+            // empty until ACP boots and re-emits AvailableCommandsUpdate).
+            if !proto.availableCommands.isEmpty {
+                let cmds = proto.availableCommands.map {
+                    SlashCommand(name: $0.name, description: $0.description_p, inputHint: $0.inputHint)
+                }
+                if let json = try? JSONEncoder().encode(cmds),
+                   let str = String(data: json, encoding: .utf8) {
+                    existing.availableCommandsJSON = str
+                }
+            }
             existing.currentModel = proto.currentModel.isEmpty ? nil : proto.currentModel
         } else {
             let newRuntime = Runtime(
@@ -237,6 +249,13 @@ public final class SessionListViewModel {
             if let json = try? JSONEncoder().encode(models),
                let str = String(data: json, encoding: .utf8) {
                 newRuntime.availableModelsJSON = str
+            }
+            let cmds = proto.availableCommands.map {
+                SlashCommand(name: $0.name, description: $0.description_p, inputHint: $0.inputHint)
+            }
+            if let json = try? JSONEncoder().encode(cmds),
+               let str = String(data: json, encoding: .utf8) {
+                newRuntime.availableCommandsJSON = str
             }
             newRuntime.currentModel = proto.currentModel.isEmpty ? nil : proto.currentModel
             modelContext.insert(newRuntime)

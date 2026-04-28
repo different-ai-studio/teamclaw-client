@@ -19,6 +19,11 @@ pub struct RuntimeManager {
     /// responsible for actually calling ACP `session/set_model`; this map
     /// is the daemon-side mirror used to populate RuntimeInfo.current_model.
     current_model_per_agent: HashMap<String, String>,
+    /// Most recent slash commands reported via ACP `AvailableCommandsUpdate`,
+    /// keyed by agent id. Cached so a fresh subscriber on the retained
+    /// `runtime/{id}/state` topic sees the same list the agent already
+    /// announced earlier on the (non-retained) events topic.
+    available_commands_per_agent: HashMap<String, Vec<amux::AcpAvailableCommand>>,
     supabase: Option<SupabaseClient>,
 }
 
@@ -29,8 +34,17 @@ impl RuntimeManager {
             aggregators: std::collections::HashMap::new(),
             claude_binary: binary,
             current_model_per_agent: HashMap::new(),
+            available_commands_per_agent: HashMap::new(),
             supabase,
         }
+    }
+
+    /// Records the latest slash-command list for an agent. Callers feed
+    /// this from the adapter's translated `AvailableCommands` events so
+    /// `to_proto_info` can include them in retained state.
+    pub fn set_available_commands(&mut self, agent_id: &str, commands: Vec<amux::AcpAvailableCommand>) {
+        self.available_commands_per_agent
+            .insert(agent_id.to_string(), commands);
     }
 
 
@@ -332,7 +346,12 @@ impl RuntimeManager {
                         .get(id)
                         .cloned()
                         .unwrap_or_default();
-                    h.to_proto_info(available, current)
+                    let commands = self
+                        .available_commands_per_agent
+                        .get(id)
+                        .cloned()
+                        .unwrap_or_default();
+                    h.to_proto_info(available, current, commands)
                 })
                 .collect(),
         }
@@ -348,7 +367,12 @@ impl RuntimeManager {
             .get(agent_id)
             .cloned()
             .unwrap_or_default();
-        Some(handle.to_proto_info(available, current))
+        let commands = self
+            .available_commands_per_agent
+            .get(agent_id)
+            .cloned()
+            .unwrap_or_default();
+        Some(handle.to_proto_info(available, current, commands))
     }
 
     pub fn agent_ids(&self) -> Vec<String> {

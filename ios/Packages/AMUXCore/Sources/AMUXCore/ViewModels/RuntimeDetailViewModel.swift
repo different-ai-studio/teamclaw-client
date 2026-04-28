@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import SwiftData
 
-public struct SlashCommand: Identifiable, Equatable, Hashable, Sendable {
+public struct SlashCommand: Identifiable, Equatable, Hashable, Sendable, Codable {
     public let name: String
     public let description: String
     public let inputHint: String   // "" = no input required
@@ -264,6 +264,14 @@ public final class RuntimeDetailViewModel {
         // Clear unread badge when user opens the session
         runtime.hasUnread = false
         try? modelContext.save()
+
+        // Seed slash commands from the cached state-topic snapshot so the
+        // composer popup is populated before (or even without) a fresh
+        // AvailableCommandsUpdate arriving on the events stream.
+        let cachedCommands = runtime.availableCommands
+        if !cachedCommands.isEmpty && availableCommands.isEmpty {
+            availableCommands = cachedCommands
+        }
 
         // Load cached events immediately (works offline)
         let runtimeId = runtime.runtimeId

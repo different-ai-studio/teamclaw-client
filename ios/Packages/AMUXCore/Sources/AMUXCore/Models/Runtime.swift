@@ -22,6 +22,12 @@ public final class Runtime {
     /// if the model list grows beyond the daemon-hardcoded handful.
     public var availableModelsJSON: String = ""
     public var currentModel: String?
+    /// Most recent slash commands the daemon reported on the retained
+    /// `runtime/{id}/state` topic. Populated by `SessionListViewModel.syncRuntime`
+    /// from `Amux_RuntimeInfo.available_commands` so detail views can seed
+    /// the slash popup before the (non-retained) events stream replays the
+    /// next `AvailableCommandsUpdate`. JSON-encoded `[SlashCommand]`.
+    public var availableCommandsJSON: String = ""
 
     /// MQTT device-id of the daemon that owns this runtime — populated from
     /// the topic path when SessionListVM ingests `runtime/{rid}/state`. Used
@@ -78,5 +84,13 @@ public extension Runtime {
               let models = try? JSONDecoder().decode([AvailableModel].self, from: data)
         else { return [] }
         return models
+    }
+
+    var availableCommands: [SlashCommand] {
+        guard !availableCommandsJSON.isEmpty,
+              let data = availableCommandsJSON.data(using: .utf8),
+              let cmds = try? JSONDecoder().decode([SlashCommand].self, from: data)
+        else { return [] }
+        return cmds
     }
 }

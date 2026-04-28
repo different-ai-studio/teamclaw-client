@@ -1081,6 +1081,17 @@ public struct Amux_RuntimeInfo: @unchecked Sendable {
     set {_uniqueStorage()._failedStage = newValue}
   }
 
+  /// Most recent slash commands the agent reported. Cached on the daemon so
+  /// a fresh iOS subscription sees them in the retained state snapshot
+  /// instead of having to wait for the next live AvailableCommandsUpdate
+  /// on the events stream (which is not retained). Empty when the daemon
+  /// has not yet observed any AvailableCommandsUpdate for the runtime
+  /// (e.g. cold-spawned historical session before ACP boots).
+  public var availableCommands: [Amux_AcpAvailableCommand] {
+    get {_storage._availableCommands}
+    set {_uniqueStorage()._availableCommands = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2888,7 +2899,7 @@ extension Amux_WorkspaceList: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
 
 extension Amux_RuntimeInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".RuntimeInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}runtime_id\0\u{3}agent_type\0\u{1}worktree\0\u{1}branch\0\u{1}status\0\u{3}started_at\0\u{3}current_prompt\0\u{3}workspace_id\0\u{3}session_title\0\u{3}last_output_summary\0\u{3}tool_use_count\0\u{3}available_models\0\u{3}current_model\0\u{1}state\0\u{1}stage\0\u{3}error_code\0\u{3}error_message\0\u{3}failed_stage\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}runtime_id\0\u{3}agent_type\0\u{1}worktree\0\u{1}branch\0\u{1}status\0\u{3}started_at\0\u{3}current_prompt\0\u{3}workspace_id\0\u{3}session_title\0\u{3}last_output_summary\0\u{3}tool_use_count\0\u{3}available_models\0\u{3}current_model\0\u{1}state\0\u{1}stage\0\u{3}error_code\0\u{3}error_message\0\u{3}failed_stage\0\u{3}available_commands\0")
 
   fileprivate class _StorageClass {
     var _runtimeID: String = String()
@@ -2909,6 +2920,7 @@ extension Amux_RuntimeInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     var _errorCode: String = String()
     var _errorMessage: String = String()
     var _failedStage: String = String()
+    var _availableCommands: [Amux_AcpAvailableCommand] = []
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -2937,6 +2949,7 @@ extension Amux_RuntimeInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       _errorCode = source._errorCode
       _errorMessage = source._errorMessage
       _failedStage = source._failedStage
+      _availableCommands = source._availableCommands
     }
   }
 
@@ -2973,6 +2986,7 @@ extension Amux_RuntimeInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         case 16: try { try decoder.decodeSingularStringField(value: &_storage._errorCode) }()
         case 17: try { try decoder.decodeSingularStringField(value: &_storage._errorMessage) }()
         case 18: try { try decoder.decodeSingularStringField(value: &_storage._failedStage) }()
+        case 19: try { try decoder.decodeRepeatedMessageField(value: &_storage._availableCommands) }()
         default: break
         }
       }
@@ -3035,6 +3049,9 @@ extension Amux_RuntimeInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       if !_storage._failedStage.isEmpty {
         try visitor.visitSingularStringField(value: _storage._failedStage, fieldNumber: 18)
       }
+      if !_storage._availableCommands.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._availableCommands, fieldNumber: 19)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -3062,6 +3079,7 @@ extension Amux_RuntimeInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         if _storage._errorCode != rhs_storage._errorCode {return false}
         if _storage._errorMessage != rhs_storage._errorMessage {return false}
         if _storage._failedStage != rhs_storage._failedStage {return false}
+        if _storage._availableCommands != rhs_storage._availableCommands {return false}
         return true
       }
       if !storagesAreEqual {return false}

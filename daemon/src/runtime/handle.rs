@@ -56,14 +56,15 @@ impl RuntimeHandle {
 
     /// Build a `RuntimeInfo` for this agent.
     ///
-    /// `available_models` and `current_model` are passed in by the caller
-    /// (typically `RuntimeManager`) so that the handle does not need to know
-    /// about the model registry or the daemon-side `current_model_per_agent`
-    /// map. Pass an empty Vec / empty String for unknown / unset.
+    /// `available_models`, `current_model`, and `available_commands` are
+    /// passed in by the caller (typically `RuntimeManager`) so the handle
+    /// does not need to know about the model registry or the daemon-side
+    /// caches. Pass empty Vecs / empty String for unknown / unset.
     pub fn to_proto_info(
         &self,
         available_models: Vec<amux::ModelInfo>,
         current_model: String,
+        available_commands: Vec<amux::AcpAvailableCommand>,
     ) -> amux::RuntimeInfo {
         amux::RuntimeInfo {
             runtime_id: self.agent_id.clone(),
@@ -86,6 +87,7 @@ impl RuntimeHandle {
             error_code: String::new(),
             error_message: String::new(),
             failed_stage: String::new(),
+            available_commands,
         }
     }
 

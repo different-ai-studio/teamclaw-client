@@ -107,6 +107,10 @@ impl SessionStore {
             error_code: String::new(),
             error_message: String::new(),
             failed_stage: String::new(),
+            // Slash commands are reported by ACP at runtime — historical
+            // sessions don't have any cached until the agent boots and
+            // emits AvailableCommandsUpdate.
+            available_commands: vec![],
         }
     }
 }
