@@ -342,10 +342,6 @@ public final class RuntimeDetailViewModel {
                 try? await mqtt.subscribe(subscribeTopic)
                 print("[RuntimeDetailVM] subscribed to \(subscribeTopic)")
 
-                // Pull any events we missed while disconnected (no-op on first
-                // connect if local cache is empty and daemon has nothing newer).
-                try? await requestIncrementalSync(modelContext: modelContext)
-
                 for await msg in stream {
                     guard msg.topic == subscribeTopic else { continue }
                     let envelope: Amux_Envelope?
@@ -568,6 +564,7 @@ public final class RuntimeDetailViewModel {
 
     private var syncModelContext: ModelContext?
     public var isSyncing = false
+    private var syncGeneration: Int = 0
     private var startModelContext: ModelContext?
 
     private func handleHistoryBatch(_ batch: Amux_HistoryBatch) {
@@ -604,6 +601,7 @@ public final class RuntimeDetailViewModel {
             events.sort { $0.sequence < $1.sequence }
             rebuildIndexes()
             recomputeGroups()
+            syncGeneration &+= 1
             isSyncing = false
         }
     }
@@ -626,6 +624,21 @@ public final class RuntimeDetailViewModel {
         streamingText = ""
         streamingModel = nil
         let maxSeq = events.compactMap({ $0.sequence != 0 ? $0.sequence : nil }).max() ?? 0
+
+        // Watchdog: if no history batch arrives (daemon offline, runtime gone,
+        // etc.) the response handler in handleHistoryBatch never fires and the
+        // button would spin forever. Bumping a generation token makes back-to-back
+        // syncs safe — only the watchdog matching the active generation resets state.
+        syncGeneration &+= 1
+        let myGeneration = syncGeneration
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(8))
+            guard let self else { return }
+            if self.syncGeneration == myGeneration && self.isSyncing {
+                self.isSyncing = false
+            }
+        }
+
         try await requestHistoryPage(afterSequence: UInt64(maxSeq))
     }
 
