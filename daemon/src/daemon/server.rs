@@ -1646,7 +1646,7 @@ impl DaemonServer {
 
         // Resolve workspace + worktree. Same 4-branch logic as the legacy
         // AcpCommand::StartAgent arm (see server.rs ~800-836 pre-refactor).
-        let (resolved_worktree, ws_id, supabase_ws_id_owned): (String, String, Option<String>) =
+        let (mut resolved_worktree, mut ws_id, mut supabase_ws_id_owned): (String, String, Option<String>) =
             if !workspace_id.is_empty() {
                 if let Some(ws) = self.workspaces.find_by_id(workspace_id) {
                     (
@@ -1681,6 +1681,23 @@ impl DaemonServer {
                 };
                 (wt, String::new(), None)
             };
+
+        // Fallback: when ws_id stayed empty (bare-agent spawn or
+        // workspace_id-not-found-with-worktree branch), try to match
+        // resolved_worktree against a registered workspace path so the
+        // runtime row, persisted session, and downstream agent_runtimes
+        // upsert all carry the right workspace_id instead of stomping it
+        // null on idle transitions.
+        if ws_id.is_empty() {
+            if let Some(ws) = self.workspaces.workspaces.iter().find(|w| w.path == resolved_worktree) {
+                ws_id = ws.workspace_id.clone();
+                if supabase_ws_id_owned.is_none() && !ws.supabase_workspace_id.is_empty() {
+                    supabase_ws_id_owned = Some(ws.supabase_workspace_id.clone());
+                }
+                resolved_worktree = ws.path.clone();
+            }
+        }
+
         let supabase_ws_id = supabase_ws_id_owned.as_deref();
 
         // If iOS handed us a Supabase session_id, pull the row + participants

@@ -122,6 +122,11 @@ public struct SessionsTab: View {
                                connectedAgentsStore: connectedAgentsStore,
                                viewModel: viewModel) { agentId in
                     navigationPath = [agentId]
+                    // Pull the freshly-created Supabase rows (sessions +
+                    // agent_runtimes + workspaces) into the local cache so
+                    // the row's agent type / workspace populate without
+                    // waiting for the user to pull-to-refresh.
+                    Task { await refreshSessionsFromBackend() }
                 }
                 .modifier(ZoomTransitionModifier(sourceID: "newSession", namespace: sheetTransition))
             }
