@@ -65,8 +65,8 @@ public struct IdeasTab: View {
                         } else {
                             Text("Idea store unavailable")
                         }
-                    } else if id.hasPrefix("collab:") {
-                        let sessionId = String(id.dropFirst("collab:".count))
+                    } else if id.hasPrefix("session:") {
+                        let sessionId = String(id.dropFirst("session:".count))
                         let descriptor = FetchDescriptor<Session>(
                             predicate: #Predicate { $0.sessionId == sessionId }
                         )
@@ -85,15 +85,8 @@ public struct IdeasTab: View {
                         } else {
                             Text("Session not found")
                         }
-                    } else if let runtime = sessionViewModel.runtimes.first(where: { $0.runtimeId == id }) {
-                        RuntimeDetailView(
-                            runtime: runtime,
-                            mqtt: mqtt,
-                            peerId: "ios-\(pairing.authToken.prefix(6))",
-                            connectedAgentsStore: connectedAgentsStore
-                        )
                     } else {
-                        Text("Agent not found")
+                        Text("Unknown destination")
                     }
                 }
         }

@@ -85,27 +85,22 @@ public struct SessionsTab: View {
                 }
             }
             .navigationDestination(for: String.self) { id in
-                if id.hasPrefix("collab:") {
-                    let sessionId = String(id.dropFirst("collab:".count))
-                    CollabSessionDestinationView(
-                        sessionId: sessionId,
-                        mqtt: mqtt,
-                        pairing: pairing,
-                        teamclawService: teamclawService,
-                        currentActorID: currentActorID,
-                        refreshSessionsFromBackend: refreshSessionsFromBackend,
-                        navigationPath: $navigationPath,
-                        connectedAgentsStore: connectedAgentsStore
-                    )
-                } else {
-                    RuntimeDestinationView(
-                        runtimeId: id,
-                        mqtt: mqtt,
-                        pairing: pairing,
-                        navigationPath: $navigationPath,
-                        connectedAgentsStore: connectedAgentsStore
-                    )
-                }
+                // Every iOS-side push goes through "session:<sid>" now;
+                // the runtime-only fallback path was the legacy entry from
+                // when the session list emitted bare runtime ids.
+                let sessionId = id.hasPrefix("session:")
+                    ? String(id.dropFirst("session:".count))
+                    : id
+                SessionDestinationView(
+                    sessionId: sessionId,
+                    mqtt: mqtt,
+                    pairing: pairing,
+                    teamclawService: teamclawService,
+                    currentActorID: currentActorID,
+                    refreshSessionsFromBackend: refreshSessionsFromBackend,
+                    navigationPath: $navigationPath,
+                    connectedAgentsStore: connectedAgentsStore
+                )
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView(connectedAgentsStore: connectedAgentsStore,
@@ -151,67 +146,7 @@ public struct SessionsTab: View {
     }
 }
 
-private struct RuntimeDestinationView: View {
-    let runtimeId: String
-    let mqtt: MQTTService
-    let pairing: PairingManager
-    @Binding var navigationPath: [String]
-    let connectedAgentsStore: ConnectedAgentsStore?
-
-    @Environment(\.modelContext) private var modelContext
-    @State private var runtime: Runtime?
-    @State private var session: Session?
-    @State private var attemptedLoad = false
-
-    var body: some View {
-        Group {
-            if let session {
-                RuntimeDetailView(
-                    session: session,
-                    mqtt: mqtt,
-                    peerId: "ios-\(pairing.authToken.prefix(6))",
-                    teamclawService: nil,
-                    connectedAgentsStore: connectedAgentsStore
-                )
-                .id("agent-session:\(session.sessionId)")
-            } else if let runtime {
-                RuntimeDetailView(
-                    runtime: runtime,
-                    mqtt: mqtt,
-                    peerId: "ios-\(pairing.authToken.prefix(6))",
-                    connectedAgentsStore: connectedAgentsStore
-                )
-                .id("agent:\(runtime.runtimeId)")
-            } else if attemptedLoad {
-                Text("Agent not found")
-            } else {
-                ProgressView()
-            }
-        }
-        .task(id: runtimeId) {
-            await loadDestination()
-        }
-    }
-
-    @MainActor
-    private func loadDestination() {
-        let runtimeDescriptor = FetchDescriptor<Runtime>(
-            predicate: #Predicate { $0.runtimeId == runtimeId }
-        )
-        runtime = (try? modelContext.fetch(runtimeDescriptor))?.first
-
-        let sessionDescriptor = FetchDescriptor<Session>()
-        session = (try? modelContext.fetch(sessionDescriptor))?.first(where: { $0.primaryAgentId == runtimeId })
-
-        // Same flash-suppression trick as CollabSessionDestinationView:
-        // hold a ProgressView until SwiftData has actually been queried,
-        // so newly-routed runtime IDs don't briefly render "Agent not
-        // found" before the row lands.
-        attemptedLoad = true
-    }
-}
-
-private struct CollabSessionDestinationView: View {
+private struct SessionDestinationView: View {
     let sessionId: String
     let mqtt: MQTTService
     let pairing: PairingManager

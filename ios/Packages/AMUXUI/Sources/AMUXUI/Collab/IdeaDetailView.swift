@@ -113,7 +113,7 @@ public struct IdeaDetailView: View {
                 } else {
                     ForEach(relatedSessions, id: \.sessionId) { session in
                         Button {
-                            navigationPath.append("collab:\(session.sessionId)")
+                            navigationPath.append("session:\(session.sessionId)")
                         } label: {
                             SessionLinkRow(session: session)
                         }

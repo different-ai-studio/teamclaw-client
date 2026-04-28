@@ -11,11 +11,17 @@ pub struct SessionStore {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredSession {
-    pub session_id: String,
+    /// Daemon's 8-char runtime/spawn id. Old TOML files used `session_id`
+    /// for this — the alias keeps existing on-disk stores readable.
+    #[serde(alias = "session_id")]
+    pub runtime_id: String,
     #[serde(default)]
     pub acp_session_id: String,
-    #[serde(default)]
-    pub collab_session_id: String,
+    /// Supabase `sessions.id` UUID this runtime is bound to. Old TOML used
+    /// `collab_session_id`; alias preserves back-compat. Empty when the
+    /// runtime is session-less (legacy bare-agent spawn).
+    #[serde(default, alias = "collab_session_id")]
+    pub session_id: String,
     pub agent_type: i32,
     pub workspace_id: String,
     pub worktree: String,
@@ -52,32 +58,32 @@ impl SessionStore {
     }
 
     pub fn upsert(&mut self, session: StoredSession) {
-        if let Some(existing) = self.sessions.iter_mut().find(|s| s.session_id == session.session_id) {
+        if let Some(existing) = self.sessions.iter_mut().find(|s| s.runtime_id == session.runtime_id) {
             *existing = session;
         } else {
             self.sessions.push(session);
         }
     }
 
-    pub fn find_by_id(&self, session_id: &str) -> Option<&StoredSession> {
-        self.sessions.iter().find(|s| s.session_id == session_id)
+    pub fn find_by_id(&self, runtime_id: &str) -> Option<&StoredSession> {
+        self.sessions.iter().find(|s| s.runtime_id == runtime_id)
     }
 
-    pub fn find_by_id_mut(&mut self, session_id: &str) -> Option<&mut StoredSession> {
-        self.sessions.iter_mut().find(|s| s.session_id == session_id)
+    pub fn find_by_id_mut(&mut self, runtime_id: &str) -> Option<&mut StoredSession> {
+        self.sessions.iter_mut().find(|s| s.runtime_id == runtime_id)
     }
 
     pub fn to_proto_agent_list(&self) -> Vec<amux::RuntimeInfo> {
         self.sessions.iter().map(Self::session_to_info).collect()
     }
 
-    pub fn to_proto_agent_info(&self, session_id: &str) -> Option<amux::RuntimeInfo> {
-        self.find_by_id(session_id).map(Self::session_to_info)
+    pub fn to_proto_agent_info(&self, runtime_id: &str) -> Option<amux::RuntimeInfo> {
+        self.find_by_id(runtime_id).map(Self::session_to_info)
     }
 
     fn session_to_info(s: &StoredSession) -> amux::RuntimeInfo {
         amux::RuntimeInfo {
-            runtime_id: s.session_id.clone(),
+            runtime_id: s.runtime_id.clone(),
             agent_type: s.agent_type,
             worktree: s.worktree.clone(),
             branch: String::new(),

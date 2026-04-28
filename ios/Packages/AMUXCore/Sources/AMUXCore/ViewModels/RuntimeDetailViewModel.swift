@@ -419,7 +419,7 @@ public final class RuntimeDetailViewModel {
                 try? modelContext.save()
                 recomputeGroups()
             }
-        case .collabEvent(let collab): handleCollabEvent(collab, sequence: Int(env.sequence))
+        case .sessionEvent(let evt): handleSessionEvent(evt, sequence: Int(env.sequence))
         case .none: break
         }
     }
@@ -567,8 +567,8 @@ public final class RuntimeDetailViewModel {
         return dirty
     }
 
-    private func handleCollabEvent(_ collab: Amux_CollabEvent, sequence: Int) {
-        switch collab.event {
+    private func handleSessionEvent(_ sessionEvent: Amux_SessionEvent, sequence: Int) {
+        switch sessionEvent.event {
         case .promptAccepted:
             // Confirmation: set runtime to active (triggers typing indicator)
             runtime?.status = Int(Amux_AgentStatus.active.rawValue)

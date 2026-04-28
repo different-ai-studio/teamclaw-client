@@ -419,7 +419,7 @@ impl DaemonServer {
 
     /// Returns the single collab session_id this runtime should publish
     /// ACP events to. Each runtime is bound at spawn time to one session
-    /// via `RuntimeHandle.collab_session_id` (set from
+    /// via `RuntimeHandle.session_id` (set from
     /// `apply_start_runtime`'s supabase_session_id), so fanout has to be
     /// scoped to that one session.
     ///
@@ -431,15 +431,15 @@ impl DaemonServer {
     /// every session — bug observed 2026-04-27 where one user message
     /// in session A produced agent reply copies in 8 unrelated sessions
     /// (and 9× the broker traffic on every turn). The runtime's own
-    /// `collab_session_id` is the only correct destination.
+    /// `session_id` is the only correct destination.
     ///
     /// Returns an empty vec for ambient/bare-agent spawns where
-    /// `collab_session_id` was never set; callers fall back to the
+    /// `session_id` was never set; callers fall back to the
     /// legacy per-runtime events topic in that case.
-    fn target_collab_sessions(&self, agent_id: &str) -> Vec<String> {
+    fn target_sessions(&self, agent_id: &str) -> Vec<String> {
         self.sessions
             .find_by_id(agent_id)
-            .map(|s| s.collab_session_id.clone())
+            .map(|s| s.session_id.clone())
             .filter(|s| !s.is_empty())
             .map(|sid| vec![sid])
             .unwrap_or_default()
@@ -531,8 +531,8 @@ impl DaemonServer {
                 let acp_sid = self.agents.get_handle(agent_id)
                     .map(|h| h.acp_session_id.clone())
                     .unwrap_or_default();
-                let collab_session_id = self.agents.get_handle(agent_id)
-                    .map(|h| h.collab_session_id.clone())
+                let session_id = self.agents.get_handle(agent_id)
+                    .map(|h| h.session_id.clone())
                     .unwrap_or_default();
                 let ws_id = self.agents.get_handle(agent_id)
                     .map(|h| h.workspace_id.clone())
@@ -548,7 +548,7 @@ impl DaemonServer {
                     let row = crate::supabase::AgentRuntimeUpsert {
                         team_id: &team_id,
                         agent_id: &actor_id,
-                        session_id: (!collab_session_id.is_empty()).then_some(collab_session_id.as_str()),
+                        session_id: (!session_id.is_empty()).then_some(session_id.as_str()),
                         workspace_id: supabase_ws_id.as_deref(),
                         backend_type: "claude",
                         backend_session_id: if acp_sid.is_empty() { None } else { Some(acp_sid.as_str()) },
@@ -579,7 +579,7 @@ impl DaemonServer {
         // `message.created`, and (for AGENT_REPLY only) persisted to
         // Supabase `messages`. ACP `acp.event` envelopes still flow through
         // the unchanged publish path below for streaming UI.
-        let collab_sessions = self.target_collab_sessions(agent_id);
+        let collab_sessions = self.target_sessions(agent_id);
         if !collab_sessions.is_empty() {
             let emitted = self
                 .agents
@@ -667,7 +667,7 @@ impl DaemonServer {
         // runtime_id — now iOS subscribes by session_id (which it owns).
         // Untracked agents (e.g. ambient pre-session events) fall back to the
         // legacy per-runtime topic so the event isn't dropped on the floor.
-        let sessions = self.target_collab_sessions(agent_id);
+        let sessions = self.target_sessions(agent_id);
         if let (false, Some(tc)) = (sessions.is_empty(), self.teamclaw.as_ref()) {
             // Use the daemon's Supabase actor_id (not the per-spawn 8-char agent_id)
             // because session participants store Supabase agent UUIDs.
@@ -1087,7 +1087,7 @@ impl DaemonServer {
                         let worktree = stored.worktree.clone();
                         let ws_id = stored.workspace_id.clone();
                         let acp_sid = stored.acp_session_id.clone();
-                        let collab_session_id = stored.collab_session_id.clone();
+                        let session_id = stored.session_id.clone();
                         info!(agent_id, "lazy-resuming historical session");
                         let supabase_ws_id = self.workspaces.find_by_id(&ws_id)
                             .and_then(|w| (!w.supabase_workspace_id.is_empty()).then_some(w.supabase_workspace_id.as_str()));
@@ -1098,7 +1098,7 @@ impl DaemonServer {
                             &worktree,
                             &ws_id,
                             supabase_ws_id,
-                            (!collab_session_id.is_empty()).then_some(collab_session_id.as_str()),
+                            (!session_id.is_empty()).then_some(session_id.as_str()),
                             &prompt.text,
                         ).await {
                             Ok(new_acp_sid) => {
@@ -1117,14 +1117,14 @@ impl DaemonServer {
                                 // Update stored session with potentially new acp_session_id
                                 if let Some(s) = self.sessions.find_by_id_mut(agent_id) {
                                     s.acp_session_id = new_acp_sid;
-                                    s.collab_session_id = collab_session_id.clone();
+                                    s.session_id = session_id.clone();
                                     s.status = amux::AgentStatus::Active as i32;
                                     s.last_prompt = prompt.text.clone();
                                 }
                                 let _ = self.sessions.save(&self.sessions_path);
                                 info!(agent_id, peer_id, "session resumed, prompt sent");
-                                self.publish_collab_event(agent_id, amux::CollabEvent {
-                                    event: Some(amux::collab_event::Event::PromptAccepted(amux::PromptAccepted {
+                                self.publish_session_event(agent_id, amux::SessionEvent {
+                                    event: Some(amux::session_event::Event::PromptAccepted(amux::PromptAccepted {
                                         command_id,
                                     })),
                                 }).await;
@@ -1132,8 +1132,8 @@ impl DaemonServer {
                             }
                             Err(e) => {
                                 warn!(agent_id, "lazy resume failed: {}", e);
-                                self.publish_collab_event(agent_id, amux::CollabEvent {
-                                    event: Some(amux::collab_event::Event::PromptRejected(amux::PromptRejected {
+                                self.publish_session_event(agent_id, amux::SessionEvent {
+                                    event: Some(amux::session_event::Event::PromptRejected(amux::PromptRejected {
                                         command_id,
                                         reason: format!("session resume failed: {}", e),
                                     })),
@@ -1147,8 +1147,8 @@ impl DaemonServer {
                 // Check busy
                 if let Some(handle) = self.agents.get_handle(agent_id) {
                     if let Err(reason) = self.permissions.check_agent_busy(handle.status) {
-                        self.publish_collab_event(agent_id, amux::CollabEvent {
-                            event: Some(amux::collab_event::Event::PromptRejected(amux::PromptRejected {
+                        self.publish_session_event(agent_id, amux::SessionEvent {
+                            event: Some(amux::session_event::Event::PromptRejected(amux::PromptRejected {
                                 command_id,
                                 reason,
                             })),
@@ -1188,8 +1188,8 @@ impl DaemonServer {
                             let _ = self.sessions.save(&self.sessions_path);
                         }
                         info!(agent_id, peer_id, "prompt sent to agent");
-                        self.publish_collab_event(agent_id, amux::CollabEvent {
-                            event: Some(amux::collab_event::Event::PromptAccepted(amux::PromptAccepted {
+                        self.publish_session_event(agent_id, amux::SessionEvent {
+                            event: Some(amux::session_event::Event::PromptAccepted(amux::PromptAccepted {
                                 command_id,
                             })),
                         }).await;
@@ -1221,8 +1221,8 @@ impl DaemonServer {
                     // Resolve via ACP permission response
                     let _ = self.agents.resolve_permission(agent_id, &grant.request_id, true).await;
                     info!(request_id = %grant.request_id, peer_id, "permission granted via ACP");
-                    self.publish_collab_event(agent_id, amux::CollabEvent {
-                        event: Some(amux::collab_event::Event::PermissionResolved(amux::PermissionResolved {
+                    self.publish_session_event(agent_id, amux::SessionEvent {
+                        event: Some(amux::session_event::Event::PermissionResolved(amux::PermissionResolved {
                             request_id: grant.request_id,
                             resolved_by_peer_id: peer_id,
                             granted: true,
@@ -1236,8 +1236,8 @@ impl DaemonServer {
                     // Resolve via ACP permission response
                     let _ = self.agents.resolve_permission(agent_id, &deny.request_id, false).await;
                     info!(request_id = %deny.request_id, peer_id, "permission denied via ACP");
-                    self.publish_collab_event(agent_id, amux::CollabEvent {
-                        event: Some(amux::collab_event::Event::PermissionResolved(amux::PermissionResolved {
+                    self.publish_session_event(agent_id, amux::SessionEvent {
+                        event: Some(amux::session_event::Event::PermissionResolved(amux::PermissionResolved {
                             request_id: deny.request_id,
                             resolved_by_peer_id: peer_id,
                             granted: false,
@@ -1275,8 +1275,8 @@ impl DaemonServer {
                     has_more,
                     next_after_sequence: next_seq,
                 };
-                self.publish_collab_event(agent_id, amux::CollabEvent {
-                    event: Some(amux::collab_event::Event::HistoryBatch(batch)),
+                self.publish_session_event(agent_id, amux::SessionEvent {
+                    event: Some(amux::session_event::Event::HistoryBatch(batch)),
                 }).await;
             }
         }
@@ -1289,16 +1289,16 @@ impl DaemonServer {
     /// fanout: prefer the session live topic for runtimes tied to a collab
     /// session, fall back to the legacy per-runtime events topic for
     /// session-less spawns.
-    async fn publish_collab_event(&self, agent_id: &str, event: amux::CollabEvent) {
+    async fn publish_session_event(&self, agent_id: &str, event: amux::SessionEvent) {
         let envelope = amux::Envelope {
             runtime_id: agent_id.into(),
             device_id: self.config.device.id.clone(),
             source_peer_id: String::new(),
             timestamp: chrono::Utc::now().timestamp(),
             sequence: 0,
-            payload: Some(amux::envelope::Payload::CollabEvent(event)),
+            payload: Some(amux::envelope::Payload::SessionEvent(event)),
         };
-        let sessions = self.target_collab_sessions(agent_id);
+        let sessions = self.target_sessions(agent_id);
         if let (false, Some(tc)) = (sessions.is_empty(), self.teamclaw.as_ref()) {
             let actor_id = self.actor_id.clone();
             for sid in &sessions {
@@ -1798,9 +1798,9 @@ impl DaemonServer {
             .map(|h| h.acp_session_id.clone())
             .unwrap_or_default();
         let stored = StoredSession {
-            session_id: new_id.clone(),
+            runtime_id: new_id.clone(),
             acp_session_id: acp_sid,
-            collab_session_id: session_id.to_string(),
+            session_id: session_id.to_string(),
             agent_type: agent_type as i32,
             workspace_id: ws_id,
             worktree: resolved_worktree,

@@ -229,13 +229,13 @@ public struct Amux_Envelope: Sendable {
     set {payload = .acpEvent(newValue)}
   }
 
-  /// Collaboration control (AMUX-only)
-  public var collabEvent: Amux_CollabEvent {
+  /// Session control (AMUX-only)
+  public var sessionEvent: Amux_SessionEvent {
     get {
-      if case .collabEvent(let v)? = payload {return v}
-      return Amux_CollabEvent()
+      if case .sessionEvent(let v)? = payload {return v}
+      return Amux_SessionEvent()
     }
-    set {payload = .collabEvent(newValue)}
+    set {payload = .sessionEvent(newValue)}
   }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -243,8 +243,8 @@ public struct Amux_Envelope: Sendable {
   public enum OneOf_Payload: Equatable, Sendable {
     /// Agent event (ACP passthrough)
     case acpEvent(Amux_AcpEvent)
-    /// Collaboration control (AMUX-only)
-    case collabEvent(Amux_CollabEvent)
+    /// Session control (AMUX-only)
+    case sessionEvent(Amux_SessionEvent)
 
   }
 
@@ -756,13 +756,16 @@ public struct Amux_AcpStopAgent: Sendable {
   public init() {}
 }
 
-/// Agent-level collab events (flow through agent's events topic in Envelope)
-public struct Amux_CollabEvent: Sendable {
+/// Agent-level session events (flow through agent's events topic in Envelope).
+/// Renamed from CollabEvent now that the "collab vs control" distinction is
+/// gone; the wire tag (Envelope field 11) and inner tags are unchanged so
+/// rolling-upgrade between old and new clients keeps decoding.
+public struct Amux_SessionEvent: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var event: Amux_CollabEvent.OneOf_Event? = nil
+  public var event: Amux_SessionEvent.OneOf_Event? = nil
 
   public var promptAccepted: Amux_PromptAccepted {
     get {
@@ -1265,7 +1268,7 @@ extension Amux_MemberRole: SwiftProtobuf._ProtoNameProviding {
 
 extension Amux_Envelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Envelope"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}runtime_id\0\u{3}device_id\0\u{3}source_peer_id\0\u{1}timestamp\0\u{1}sequence\0\u{4}\u{5}acp_event\0\u{3}collab_event\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}runtime_id\0\u{3}device_id\0\u{3}source_peer_id\0\u{1}timestamp\0\u{1}sequence\0\u{4}\u{5}acp_event\0\u{3}session_event\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1292,16 +1295,16 @@ extension Amux_Envelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
         }
       }()
       case 11: try {
-        var v: Amux_CollabEvent?
+        var v: Amux_SessionEvent?
         var hadOneofValue = false
         if let current = self.payload {
           hadOneofValue = true
-          if case .collabEvent(let m) = current {v = m}
+          if case .sessionEvent(let m) = current {v = m}
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {
           if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.payload = .collabEvent(v)
+          self.payload = .sessionEvent(v)
         }
       }()
       default: break
@@ -1334,8 +1337,8 @@ extension Amux_Envelope: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
       guard case .acpEvent(let v)? = self.payload else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
     }()
-    case .collabEvent?: try {
-      guard case .collabEvent(let v)? = self.payload else { preconditionFailure() }
+    case .sessionEvent?: try {
+      guard case .sessionEvent(let v)? = self.payload else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
     }()
     case nil: break
@@ -2407,8 +2410,8 @@ extension Amux_AcpStopAgent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
   }
 }
 
-extension Amux_CollabEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".CollabEvent"
+extension Amux_SessionEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SessionEvent"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}prompt_accepted\0\u{3}prompt_rejected\0\u{3}permission_resolved\0\u{3}history_batch\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -2501,7 +2504,7 @@ extension Amux_CollabEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Amux_CollabEvent, rhs: Amux_CollabEvent) -> Bool {
+  public static func ==(lhs: Amux_SessionEvent, rhs: Amux_SessionEvent) -> Bool {
     if lhs.event != rhs.event {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

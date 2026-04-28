@@ -20,7 +20,7 @@ import XCTest
 ///     conventions; the team must have at least one daemon agent
 ///     registered in Supabase (so the New Session sheet can pick a
 ///     collaborator and route through the shared-session path that
-///     hits `CollabSessionDestinationView`).
+///     hits `SessionDestinationView`).
 final class AMUXSessionMessageRegressionTests: XCTestCase {
 
     private var app: XCUIApplication!
@@ -41,7 +41,7 @@ final class AMUXSessionMessageRegressionTests: XCTestCase {
     // MARK: - Bug 1
 
     /// Asserts that `Text("Session not found")` (rendered by
-    /// `CollabSessionDestinationView` when the session lookup hasn't
+    /// `SessionDestinationView` when the session lookup hasn't
     /// resolved yet) never appears on screen during the first few seconds
     /// after a fresh session is created. The fix in `SessionsTab.swift`
     /// gates that copy behind `attemptedRefresh`, which is now flipped
@@ -82,7 +82,7 @@ final class AMUXSessionMessageRegressionTests: XCTestCase {
 
         sendButton.tap()
 
-        // Poll for ~6s. CollabSessionDestinationView shows "Session not
+        // Poll for ~6s. SessionDestinationView shows "Session not
         // found"; RuntimeDestinationView shows "Agent not found". Both
         // are the same gating bug — flag any flash of either.
         let notFoundQuery = app.staticTexts.matching(

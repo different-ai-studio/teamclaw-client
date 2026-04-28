@@ -79,7 +79,7 @@ impl RuntimeManager {
         let agent_id = Uuid::new_v4().to_string()[..8].to_string();
         let mut handle = RuntimeHandle::new(agent_id.clone(), agent_type, worktree.into(), workspace_id.into());
         handle.current_prompt = prompt.into();
-        handle.collab_session_id = supabase_session_id.unwrap_or_default().to_string();
+        handle.session_id = supabase_session_id.unwrap_or_default().to_string();
 
         let (initial_model_tx, initial_model_rx) = tokio::sync::oneshot::channel::<Option<String>>();
         let (acp_session_id_tx, acp_session_id_rx) = tokio::sync::oneshot::channel::<String>();
@@ -157,7 +157,7 @@ impl RuntimeManager {
             worktree.into(),
             workspace_id.into(),
         );
-        handle.collab_session_id = supabase_session_id.unwrap_or_default().to_string();
+        handle.session_id = supabase_session_id.unwrap_or_default().to_string();
 
         let (initial_model_tx, initial_model_rx) = tokio::sync::oneshot::channel::<Option<String>>();
         let (acp_session_id_tx, acp_session_id_rx) = tokio::sync::oneshot::channel::<String>();
@@ -275,15 +275,15 @@ impl RuntimeManager {
 
     pub fn running_agent_id_for_collab_session(
         &self,
-        collab_session_id: &str,
+        session_id: &str,
     ) -> Option<String> {
-        if collab_session_id.is_empty() {
+        if session_id.is_empty() {
             return None;
         }
         self.agents
             .iter()
             .find(|(_, h)| {
-                h.collab_session_id == collab_session_id
+                h.session_id == session_id
                     && matches!(
                         h.status,
                         amux::AgentStatus::Active | amux::AgentStatus::Idle
@@ -409,7 +409,7 @@ mod tests {
             ".".to_string(),
             "workspace-1".to_string(),
         );
-        stopped.collab_session_id = "session-1".to_string();
+        stopped.session_id = "session-1".to_string();
         stopped.status = amux::AgentStatus::Stopped;
 
         let mut running = RuntimeHandle::new(
@@ -418,7 +418,7 @@ mod tests {
             ".".to_string(),
             "workspace-1".to_string(),
         );
-        running.collab_session_id = "session-1".to_string();
+        running.session_id = "session-1".to_string();
         running.status = amux::AgentStatus::Idle;
 
         mgr.agents.insert(stopped.agent_id.clone(), stopped);

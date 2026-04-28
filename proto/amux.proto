@@ -15,7 +15,7 @@ message Envelope {
 
   oneof payload {
     AcpEvent acp_event = 10;      // Agent event (ACP passthrough)
-    CollabEvent collab_event = 11; // Collaboration control (AMUX-only)
+    SessionEvent session_event = 11; // Session control (AMUX-only)
   }
 }
 
@@ -171,11 +171,14 @@ message AcpStartAgent {
 message AcpStopAgent {}
 
 // ═══════════════════════════════════════════
-//  Collaboration — AMUX-only, not in ACP
+//  Session control — AMUX-only, not in ACP
 // ═══════════════════════════════════════════
 
-// Agent-level collab events (flow through agent's events topic in Envelope)
-message CollabEvent {
+// Agent-level session events (flow through agent's events topic in Envelope).
+// Renamed from CollabEvent now that the "collab vs control" distinction is
+// gone; the wire tag (Envelope field 11) and inner tags are unchanged so
+// rolling-upgrade between old and new clients keeps decoding.
+message SessionEvent {
   oneof event {
     PromptAccepted prompt_accepted = 1;
     PromptRejected prompt_rejected = 2;

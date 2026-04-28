@@ -79,7 +79,7 @@ public struct SearchTab: View {
                                 let runtime = primaryRuntime(for: session)
                                 Button {
                                     rootSelection = .sessions
-                                    sessionsPath.append("collab:\(session.sessionId)")
+                                    sessionsPath.append("session:\(session.sessionId)")
                                 } label: {
                                     AgentRowView(
                                         session: session,

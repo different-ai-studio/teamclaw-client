@@ -110,7 +110,7 @@ struct SessionListContent: View {
             if isEditing {
                 toggleSelection(session.sessionId)
             } else {
-                navigationPath.append("collab:\(session.sessionId)")
+                navigationPath.append("session:\(session.sessionId)")
             }
         }
         .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))

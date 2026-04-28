@@ -117,15 +117,15 @@ pub async fn run_watch(config: DaemonConfig) -> anyhow::Result<()> {
                                         _ => println!("📨 [{}] seq={} AcpEvent (other)", agent_id, seq),
                                     }
                                 }
-                                Some(amux::envelope::Payload::CollabEvent(ce)) => {
+                                Some(amux::envelope::Payload::SessionEvent(ce)) => {
                                     match &ce.event {
-                                        Some(amux::collab_event::Event::PromptAccepted(pa)) => {
+                                        Some(amux::session_event::Event::PromptAccepted(pa)) => {
                                             println!("✅ [{}] PromptAccepted cmd={}", agent_id, pa.command_id);
                                         }
-                                        Some(amux::collab_event::Event::PromptRejected(pr)) => {
+                                        Some(amux::session_event::Event::PromptRejected(pr)) => {
                                             println!("❌ [{}] PromptRejected cmd={} reason={}", agent_id, pr.command_id, pr.reason);
                                         }
-                                        Some(amux::collab_event::Event::PermissionResolved(pr)) => {
+                                        Some(amux::session_event::Event::PermissionResolved(pr)) => {
                                             println!("🔐 [{}] PermissionResolved req={} granted={}", agent_id, pr.request_id, pr.granted);
                                         }
                                         _ => println!("📨 [{}] CollabEvent (other)", agent_id),
@@ -345,9 +345,9 @@ fn print_publish(publish: &rumqttc::Publish) {
                     Some(amux::acp_event::Event::Error(e)) => println!("❌ [{}] Error: {}", id, e.message),
                     _ => println!("📨 [{}] seq={} AcpEvent", id, seq),
                 },
-                Some(amux::envelope::Payload::CollabEvent(ce)) => match &ce.event {
-                    Some(amux::collab_event::Event::PromptAccepted(pa)) => println!("✅ PromptAccepted cmd={}", pa.command_id),
-                    Some(amux::collab_event::Event::PromptRejected(pr)) => println!("❌ PromptRejected: {}", pr.reason),
+                Some(amux::envelope::Payload::SessionEvent(ce)) => match &ce.event {
+                    Some(amux::session_event::Event::PromptAccepted(pa)) => println!("✅ PromptAccepted cmd={}", pa.command_id),
+                    Some(amux::session_event::Event::PromptRejected(pr)) => println!("❌ PromptRejected: {}", pr.reason),
                     _ => println!("📨 CollabEvent"),
                 },
                 None => {}

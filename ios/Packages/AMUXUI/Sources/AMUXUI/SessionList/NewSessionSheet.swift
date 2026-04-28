@@ -656,9 +656,9 @@ public struct NewSessionSheet: View {
             await MainActor.run {
                 isSending = false
                 newSessionLogger.info(
-                    "shared-session success destination=collab:\(sessionID, privacy: .public)"
+                    "shared-session success destination=session:\(sessionID, privacy: .public)"
                 )
-                onSessionCreated?("collab:\(sessionID)")
+                onSessionCreated?("session:\(sessionID)")
                 dismiss()
             }
 
@@ -714,7 +714,7 @@ public struct NewSessionSheet: View {
         modelContext.insert(message)
         try? modelContext.save()
         viewModel.reloadSessions(modelContext: modelContext)
-        onSessionCreated?("collab:\(sessionID)")
+        onSessionCreated?("session:\(sessionID)")
         dismiss()
     }
 
