@@ -638,10 +638,15 @@ impl DaemonServer {
         // last resort commands themselves) in-place until the envelope fits.
         if let Some(amux::acp_event::Event::AvailableCommands(ref mut ac)) = acp_event.event {
             fit_available_commands_in_budget(ac);
-            // Cache the trimmed list so the next retained `runtime/{id}/state`
+            // Cache the trimmed list so the retained `runtime/{id}/state`
             // publish carries the same commands a fresh subscriber would
-            // otherwise miss (events stream is not retained).
+            // otherwise miss (events stream is not retained). Republish
+            // immediately — ACP's AvailableCommandsUpdate fires after spawn
+            // but typically before any status transition, so without this
+            // bump the retained state would stay empty until the next
+            // unrelated transition.
             self.agents.set_available_commands(agent_id, ac.commands.clone());
+            self.publish_runtime_state_by_id(agent_id).await;
         }
 
         let envelope = amux::Envelope {
