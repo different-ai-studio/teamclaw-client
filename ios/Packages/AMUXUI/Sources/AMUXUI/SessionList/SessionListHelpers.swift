@@ -245,6 +245,8 @@ struct AgentRowView: View {
                 }
 
                 HStack(spacing: 4) {
+                    let hasLeadingChip = agentLogoName != nil || !workspaceName.isEmpty
+
                     if let logo = agentLogoName {
                         Image(logo, bundle: .module)
                             .resizable()
@@ -259,9 +261,11 @@ struct AgentRowView: View {
                     }
 
                     if session.participantCount > 1 {
-                        Text("·")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        if hasLeadingChip {
+                            Text("·")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                         Image(systemName: "person.2")
                             .font(.caption)
                             .foregroundStyle(.secondary)
