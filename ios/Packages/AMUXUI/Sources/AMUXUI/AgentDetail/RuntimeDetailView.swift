@@ -117,6 +117,9 @@ public struct RuntimeDetailView: View {
                     }
                     .padding(.top, 8)
                 }
+                // iMessage-style: a downward drag pulls the keyboard down
+                // with the gesture, restoring chat surface area.
+                .scrollDismissesKeyboard(.interactively)
                 .onAppear {
                     proxy.scrollTo("bottom", anchor: .bottom)
                 }
