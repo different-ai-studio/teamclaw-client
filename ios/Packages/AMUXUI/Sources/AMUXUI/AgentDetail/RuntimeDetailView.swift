@@ -1,16 +1,16 @@
 import SwiftUI
 import SwiftData
-import UniformTypeIdentifiers
 import AMUXCore
 import AMUXSharedUI
 
-// MARK: - RuntimeDetailView (NetNewsWire Article-style)
+// MARK: - RuntimeDetailView (iMessage-style chat detail)
 
 public struct RuntimeDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel: RuntimeDetailViewModel
     @State private var promptText = ""
-    @State private var showReplySheet = false
+    @State private var selectedModelId: String?
+    @State private var attachments: [URL] = []
     @State private var showSettings = false
     @State private var showMembers = false
     @State private var collaborators: [CachedActor] = []
@@ -22,31 +22,24 @@ public struct RuntimeDetailView: View {
         "API", "JSON", "YAML", "REST", "gRPC",
     ])
 
-    let allAgentIds: [String]
-    @Binding var navigationPath: [String]
     let connectedAgentsStore: ConnectedAgentsStore?
 
     public init(runtime: Runtime, mqtt: MQTTService, peerId: String,
-                allAgentIds: [String], navigationPath: Binding<[String]>,
                 connectedAgentsStore: ConnectedAgentsStore? = nil) {
         _viewModel = State(initialValue: RuntimeDetailViewModel(
             runtime: runtime, mqtt: mqtt, peerId: peerId,
             connectedAgentsStore: connectedAgentsStore))
-        self.allAgentIds = allAgentIds
-        self._navigationPath = navigationPath
         self.connectedAgentsStore = connectedAgentsStore
     }
 
     public init(session: Session, mqtt: MQTTService, peerId: String,
-                teamclawService: TeamclawService?, navigationPath: Binding<[String]>,
+                teamclawService: TeamclawService?,
                 connectedAgentsStore: ConnectedAgentsStore? = nil) {
         _viewModel = State(initialValue: RuntimeDetailViewModel(
             runtime: nil, mqtt: mqtt, teamID: session.teamId,
             peerId: peerId, session: session,
             teamclawService: teamclawService,
             connectedAgentsStore: connectedAgentsStore))
-        self.allAgentIds = []
-        self._navigationPath = navigationPath
         self.connectedAgentsStore = connectedAgentsStore
     }
 
@@ -62,22 +55,6 @@ public struct RuntimeDetailView: View {
     private var memberBadgeCount: Int {
         let collab = viewModel.participantCount
         return collab > 0 ? collab : collaborators.count
-    }
-
-    private var currentIndex: Int? {
-        guard let runtimeId = viewModel.runtime?.runtimeId else { return nil }
-        return allAgentIds.firstIndex(of: runtimeId)
-    }
-    private var canGoUp: Bool { (currentIndex ?? 0) > 0 }
-    private var canGoDown: Bool { (currentIndex ?? allAgentIds.count) < allAgentIds.count - 1 }
-
-    private func goUp() {
-        guard let idx = currentIndex, idx > 0 else { return }
-        navigationPath = [allAgentIds[idx - 1]]
-    }
-    private func goDown() {
-        guard let idx = currentIndex, idx < allAgentIds.count - 1 else { return }
-        navigationPath = [allAgentIds[idx + 1]]
     }
 
     public var body: some View {
@@ -155,144 +132,60 @@ public struct RuntimeDetailView: View {
         }
         .navigationTitle(viewModel.sessionTitle)
         .navigationBarTitleDisplayMode(.inline)
-        // Top right: prev/next (NetNewsWire ▲▼)
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button { goUp() } label: { Image(systemName: "chevron.up").font(.title3) }
-                    .disabled(!canGoUp)
-                Button { goDown() } label: { Image(systemName: "chevron.down").font(.title3) }
-                    .disabled(!canGoDown)
+                Button { showMembers = true } label: {
+                    Image(systemName: "person.2")
+                        .font(.title3)
+                        .overlay(alignment: .topTrailing) {
+                            if memberBadgeCount > 0 {
+                                Text("\(memberBadgeCount)")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(.blue, in: Capsule())
+                                    .offset(x: 8, y: -8)
+                            }
+                        }
+                }
+                .accessibilityIdentifier("runtime.membersButton")
+
+                if viewModel.hasRuntime {
+                    Button { showSettings = true } label: {
+                        Image(agentLogoName, bundle: .module)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 22, height: 22)
+                    }
+                    .accessibilityIdentifier("runtime.agentSettingsButton")
+                }
             }
         }
         .toolbar(.hidden, for: .bottomBar)
         .toolbar(.hidden, for: .tabBar)
-        // Bottom: voice result bubble + toolbar
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 8) {
-                // Transcribed text bubble
-                if let text = voiceRecorder.transcribedText, !text.isEmpty,
-                   voiceRecorder.state == .done {
-                    VStack(spacing: 8) {
-                        Text(text)
-                            .font(.subheadline)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .liquidGlass(in: RoundedRectangle(cornerRadius: 16), interactive: false)
-
-                        HStack(spacing: 12) {
-                            Spacer()
-                            Button {
-                                promptText = text
-                                voiceRecorder.reset()
-                                showReplySheet = true
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "pencil")
-                                        .font(.subheadline.weight(.semibold))
-                                    Text("Edit")
-                                        .font(.subheadline).fontWeight(.medium)
-                                }
-                                .foregroundStyle(.primary)
-                                .padding(.horizontal, 16).padding(.vertical, 8)
-                                .liquidGlass(in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-
-                            Button {
-                                let t = text
-                                voiceRecorder.reset()
-                                Task { try? await viewModel.sendPrompt(t, modelContext: modelContext) }
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "arrow.up")
-                                        .font(.subheadline.weight(.semibold))
-                                    Text("Send")
-                                        .font(.subheadline).fontWeight(.medium)
-                                }
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 16).padding(.vertical, 8)
-                                .background(.green.gradient, in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-                        }
+            SessionComposer(
+                promptText: $promptText,
+                selectedModelId: $selectedModelId,
+                attachments: $attachments,
+                voiceRecorder: voiceRecorder,
+                runtime: viewModel.runtime,
+                isAgentActive: viewModel.isActive,
+                availableCommands: viewModel.availableCommands,
+                onSend: {
+                    let text = promptText
+                    let modelId = resolvedModelId
+                    promptText = ""
+                    attachments = []
+                    Task {
+                        try? await viewModel.sendPrompt(text, modelId: modelId, modelContext: modelContext)
                     }
-                    .padding(.horizontal, 16)
+                },
+                onCancelTask: {
+                    Task { try? await viewModel.cancelTask() }
                 }
-
-                // Toolbar: 3 independent glass capsules
-                HStack {
-                    // Left group: pin + members
-                    HStack(spacing: 14) {
-                        Button {} label: { Image(systemName: "pin").font(.title3) }
-                        Button { showMembers = true } label: {
-                            Image(systemName: "person.2").font(.title3)
-                                .overlay(alignment: .topTrailing) {
-                                    if memberBadgeCount > 0 {
-                                        Text("\(memberBadgeCount)")
-                                            .font(.caption2.weight(.bold))
-                                            .foregroundStyle(.white)
-                                            .padding(.horizontal, 4)
-                                            .padding(.vertical, 1)
-                                            .background(.blue, in: Capsule())
-                                            .offset(x: 8, y: -8)
-                                    }
-                                }
-                        }
-                    }
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .liquidGlass(in: Capsule())
-
-                    Spacer()
-
-                    // Center: mic
-                    RecordButton(voiceRecorder: voiceRecorder)
-                        .disabled(viewModel.isActive)
-
-                    Spacer()
-
-                    // Right group: agent avatar + action
-                    HStack(spacing: 14) {
-                        if viewModel.hasRuntime {
-                            Button { showSettings = true } label: {
-                                Image(agentLogoName, bundle: .module)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 22, height: 22)
-                            }
-                        }
-                        if viewModel.isActive {
-                            Button { Task { try? await viewModel.cancelTask() } } label: { Image(systemName: "stop.fill").font(.title3) }
-                                .accessibilityIdentifier("runtime.stopButton")
-                        } else {
-                            Button { showReplySheet = true } label: { Image(systemName: "arrowshape.turn.up.left").font(.title3) }
-                                .accessibilityIdentifier("runtime.replyButton")
-                        }
-                    }
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .liquidGlass(in: Capsule())
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-            }
-        }
-        .sheet(isPresented: $showReplySheet) {
-            ReplySheet(text: $promptText,
-                       isDisabled: !viewModel.isIdle,
-                       isStreaming: viewModel.isStreaming,
-                       hasRuntime: viewModel.hasRuntime,
-                       runtime: viewModel.runtime,
-                       availableCommands: viewModel.availableCommands,
-                       onSend: { modelId in
-                           let t = promptText; promptText = ""
-                           Task { try? await viewModel.sendPrompt(t, modelId: modelId, modelContext: modelContext) }
-                       },
-                       onCancel: { Task { try? await viewModel.cancelTask() } })
-                .presentationDetents([.medium])
+            )
         }
         .sheet(isPresented: $showSettings) {
             if let runtime = viewModel.runtime {
@@ -305,9 +198,6 @@ public struct RuntimeDetailView: View {
             }
         }
         .sheet(isPresented: $showMembers) {
-            // "Add Actor" on an existing session: the session's current primary
-            // agent stays pinned (⭐), and the picker lets the caller add extra
-            // collaborators (humans + any agents they have access to).
             let accessible: Set<String> = {
                 var s = Set(connectedAgentsStore?.agents.map(\.id) ?? [])
                 if let current = viewModel.runtime?.runtimeId { s.insert(current) }
@@ -323,19 +213,22 @@ public struct RuntimeDetailView: View {
                     forkToCollab(members: selected)
                 }
             }
-            // Refresh connected-agents so agents that came online since last
-            // fetch appear in the picker (same pattern as NewSessionSheet).
             .task { await connectedAgentsStore?.reload() }
         }
         .task { viewModel.start(modelContext: modelContext) }
         .onDisappear { viewModel.stop() }
     }
 
+    private var resolvedModelId: String? {
+        if let selectedModelId, !selectedModelId.isEmpty { return selectedModelId }
+        if let current = viewModel.runtime?.currentModel, !current.isEmpty { return current }
+        return nil
+    }
+
     private func forkToCollab(members: [CachedActor]) {
         guard let runtime = viewModel.runtime else { return }
         let daemonDeviceId = viewModel.daemonDeviceIdRef
         guard !daemonDeviceId.isEmpty else { return }
-        // Use last output summary or session title as handoff context
         let summary = runtime.lastOutputSummary.isEmpty
             ? "Forked from agent session: \(runtime.sessionTitle.isEmpty ? runtime.runtimeId : runtime.sessionTitle)"
             : runtime.lastOutputSummary
@@ -343,7 +236,9 @@ public struct RuntimeDetailView: View {
         var createReq = Teamclaw_CreateSessionRequest()
         createReq.sessionType = .collab
         createReq.teamID = viewModel.session?.teamId ?? ""
-        createReq.title = runtime.sessionTitle.isEmpty ? "Collab: \(runtime.worktree.split(separator: "/").last.map(String.init) ?? runtime.runtimeId)" : "Collab: \(runtime.sessionTitle)"
+        createReq.title = runtime.sessionTitle.isEmpty
+            ? "Collab: \(runtime.worktree.split(separator: "/").last.map(String.init) ?? runtime.runtimeId)"
+            : "Collab: \(runtime.sessionTitle)"
         createReq.summary = summary
         createReq.inviteActorIds = members.map(\.actorId)
 
@@ -352,363 +247,67 @@ public struct RuntimeDetailView: View {
         rpcReq.senderDeviceID = daemonDeviceId
         rpcReq.method = .createSession(createReq)
 
-        let topic = MQTTTopics.deviceRpcRequest(teamID: viewModel.session?.teamId ?? "", deviceID: daemonDeviceId)
+        let topic = MQTTTopics.deviceRpcRequest(
+            teamID: viewModel.session?.teamId ?? "",
+            deviceID: daemonDeviceId
+        )
         Task {
             if let data = try? rpcReq.serializedData() {
                 try? await viewModel.mqttRef.publish(topic: topic, payload: data, retain: false)
             }
         }
     }
-}
 
-// MARK: - ReplySheet
+    // MARK: - RuntimeSettingsSheet
 
-private struct ReplySheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var text: String
-    let isDisabled: Bool
-    let isStreaming: Bool
-    let hasRuntime: Bool
-    let runtime: Runtime?
-    let availableCommands: [SlashCommand]
-    let onSend: (String?) -> Void
-    let onCancel: () -> Void
-    @FocusState private var isFocused: Bool
-    @State private var showFilePicker = false
-    @State private var selectedModelId: String?
-    @State private var attachedFiles: [String] = []
-    @State private var slashCandidates: [SlashCommand] = []
-    @State private var hasPendingSlashCommand: Bool = false
+    private struct RuntimeSettingsSheet: View {
+        let runtime: Runtime
+        let onSync: () -> Void
+        var isSyncing: Bool
+        @Environment(\.dismiss) private var dismiss
 
-    private var resolvedModelId: String? {
-        if let selectedModelId, !selectedModelId.isEmpty { return selectedModelId }
-        if let current = runtime?.currentModel, !current.isEmpty { return current }
-        return nil
-    }
-
-    private var canSend: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isDisabled && !isStreaming
-    }
-
-    /// If `text` is `/<word>` and nothing else, returns the prefix after `/`.
-    /// Returns nil when the text does not match.
-    private var slashPrefixInProgress: String? {
-        let trimmed = text
-        guard let first = trimmed.first, first == "/" else { return nil }
-        let rest = trimmed.dropFirst()
-        guard rest.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }) else {
-            return nil
-        }
-        return String(rest)
-    }
-
-    /// True when the composer currently holds `/<knownName>` (optionally
-    /// followed by a space + argument). Drives the send-button emphasis.
-    private var textMatchesKnownCommand: Bool {
-        guard text.hasPrefix("/") else { return false }
-        let afterSlash = text.dropFirst()
-        let head = afterSlash.split(whereSeparator: { $0.isWhitespace }).first.map(String.init) ?? String(afterSlash)
-        guard !head.isEmpty else { return false }
-        return availableCommands.contains(where: { $0.name == head })
-    }
-
-    /// Hint to display below the composer once a command with an input
-    /// hint has been inserted but the user hasn't typed the argument yet.
-    private var activeInputHint: String? {
-        guard hasPendingSlashCommand, text.hasPrefix("/") else { return nil }
-        for cmd in availableCommands {
-            let prefix = "/\(cmd.name) "
-            if text == prefix, !cmd.inputHint.isEmpty {
-                return cmd.inputHint
-            }
-        }
-        return nil
-    }
-
-    private func recomputeSlashCandidates() {
-        if let prefix = slashPrefixInProgress {
-            let lower = prefix.lowercased()
-            slashCandidates = availableCommands
-                .filter { $0.name.lowercased().hasPrefix(lower) }
-        } else {
-            slashCandidates = []
-        }
-        hasPendingSlashCommand = textMatchesKnownCommand
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if isStreaming {
-                Spacer()
-                VStack(spacing: 16) {
-                    ProgressView()
-                        .controlSize(.large)
-                    Text("Agent is working…")
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button(action: { onCancel(); dismiss() }) {
-                    Label("Stop Agent", systemImage: "stop.fill")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .liquidGlass(in: Capsule(), tint: .red)
-                }
-                .buttonStyle(.plain)
-                .padding()
-            } else {
-                // Immersive text editor — no title, just write
-                ZStack(alignment: .bottom) {
-                    TextEditor(text: $text)
-                        .focused($isFocused)
-                        .font(.body)
-                        .scrollContentBackground(.hidden)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                        .accessibilityIdentifier("reply.textEditor")
-                        .overlay(alignment: .topLeading) {
-                            if text.isEmpty {
-                                Text("Send a message…")
-                                    .foregroundStyle(.tertiary)
-                                    .padding(.horizontal, 21)
-                                    .padding(.top, 20)
-                                    .allowsHitTesting(false)
-                            }
-                        }
-                        .onChange(of: text) { _, _ in
-                            recomputeSlashCandidates()
-                        }
-                        .onChange(of: availableCommands) { _, _ in
-                            recomputeSlashCandidates()
-                        }
-                        .onAppear { recomputeSlashCandidates() }
-
-                    if !slashCandidates.isEmpty {
-                        SlashCommandsPopup(
-                            candidates: slashCandidates,
-                            onTap: { cmd in
-                                text = "/\(cmd.name) "
-                                slashCandidates = []
-                                hasPendingSlashCommand = true
-                            }
-                        )
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 8)
-                        .animation(.easeInOut(duration: 0.15), value: slashCandidates)
+        var body: some View {
+            NavigationStack {
+                List {
+                    Section("Agent") {
+                        LabeledContent("ID", value: runtime.runtimeId)
+                        LabeledContent("Type", value: runtime.agentTypeLabel)
+                        HStack { Text("Status"); Spacer(); StatusBadge(status: runtime.status) }
+                        LabeledContent("Worktree", value: runtime.worktree)
                     }
-                }
-
-                if let hint = activeInputHint {
-                    Text(hint)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 22)
-                        .padding(.vertical, 2)
-                }
-
-                // Attached files
-                if !attachedFiles.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(attachedFiles, id: \.self) { file in
-                                HStack(spacing: 4) {
-                                    Image(systemName: "doc").font(.caption)
-                                    Text(file.split(separator: "/").last.map(String.init) ?? file)
-                                        .font(.caption)
-                                        .lineLimit(1)
-                                    Button { attachedFiles.removeAll { $0 == file } } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .liquidGlass(in: Capsule(), interactive: false)
-                            }
+                    if !runtime.branch.isEmpty {
+                        Section("Git") {
+                            LabeledContent("Branch", value: runtime.branch)
                         }
-                        .padding(.horizontal, 16)
                     }
-                    .padding(.bottom, 4)
-                }
-
-                // Bottom toolbar
-                HStack(spacing: 12) {
-                    Button { dismiss() } label: { Image(systemName: "chevron.down").font(.title3) }
-
-                    Spacer()
-
-                    Button { showFilePicker = true } label: { Image(systemName: "paperclip").font(.title3) }
-
-                    if hasRuntime, let runtime, !runtime.availableModels.isEmpty {
-                        let models = runtime.availableModels
-                        let pickerLabel = models.first(where: { $0.id == resolvedModelId })?.displayName ?? "Default"
-                        Menu {
-                            ForEach(models) { model in
-                                Button {
-                                    selectedModelId = model.id
-                                } label: {
-                                    if model.id == resolvedModelId {
-                                        Label(model.displayName, systemImage: "checkmark")
-                                    } else {
-                                        Text(model.displayName)
-                                    }
-                                }
-                            }
+                    Section {
+                        Button {
+                            onSync()
                         } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: "cpu")
-                                    .font(.caption)
-                                Text(pickerLabel)
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                            }
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .liquidGlass(in: Capsule())
-                        }
-                    }
-
-                    Button {
-                        onSend(resolvedModelId)
-                        hasPendingSlashCommand = false
-                        dismiss()
-                    } label: {
-                        Image(systemName: "arrow.up")
-                            .font(.body)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(hasPendingSlashCommand && canSend ? Color.white : Color.primary)
-                            .frame(width: 40, height: 40)
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .modifier(SendButtonGlassModifier(emphasized: hasPendingSlashCommand && canSend))
-                    .disabled(!canSend)
-                    .opacity(canSend ? 1 : 0.4)
-                    .animation(.easeInOut(duration: 0.15), value: hasPendingSlashCommand)
-                    .accessibilityIdentifier("reply.sendButton")
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-            }
-        }
-        .onAppear { isFocused = true }
-        .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result {
-                for url in urls {
-                    let name = url.lastPathComponent
-                    if !attachedFiles.contains(name) { attachedFiles.append(name) }
-                }
-            }
-        }
-    }
-}
-
-private struct SendButtonGlassModifier: ViewModifier {
-    let emphasized: Bool
-    func body(content: Content) -> some View {
-        if emphasized {
-            content.liquidGlass(in: Circle(), tint: .accentColor)
-        } else {
-            content.liquidGlass(in: Circle())
-        }
-    }
-}
-
-// MARK: - RuntimeSettingsSheet
-
-private struct RuntimeSettingsSheet: View {
-    let runtime: Runtime
-    let onSync: () -> Void
-    var isSyncing: Bool
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("Agent") {
-                    LabeledContent("ID", value: runtime.runtimeId)
-                    LabeledContent("Type", value: runtime.agentTypeLabel)
-                    HStack { Text("Status"); Spacer(); StatusBadge(status: runtime.status) }
-                    LabeledContent("Worktree", value: runtime.worktree)
-                }
-                if !runtime.branch.isEmpty {
-                    Section("Git") {
-                        LabeledContent("Branch", value: runtime.branch)
-                    }
-                }
-                Section {
-                    Button {
-                        onSync()
-                    } label: {
-                        HStack {
-                            Label("Sync History", systemImage: "arrow.clockwise")
-                            Spacer()
-                            if isSyncing {
-                                ProgressView()
+                            HStack {
+                                Label("Sync History", systemImage: "arrow.clockwise")
+                                Spacer()
+                                if isSyncing {
+                                    ProgressView()
+                                }
                             }
                         }
+                        .disabled(isSyncing)
                     }
-                    .disabled(isSyncing)
                 }
-            }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button { dismiss() } label: {
+                            Image(systemName: "xmark")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
-    }
-}
-
-// MARK: - RecordButton
-
-private struct RecordButton: View {
-    let voiceRecorder: VoiceRecorder
-    @State private var spinning = false
-
-    private var isRecording: Bool { voiceRecorder.state == .recording }
-
-    var body: some View {
-        Button {
-            switch voiceRecorder.state {
-            case .recording: voiceRecorder.stopRecording()
-            // idle / done / denied / error all kick off a fresh recording.
-            case .idle, .done, .denied, .error: voiceRecorder.startRecording()
-            }
-        } label: {
-            ZStack {
-                // Spinning ring when recording
-                if isRecording {
-                    Circle()
-                        .trim(from: 0, to: 0.7)
-                        .stroke(Color.red, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                        .frame(width: 46, height: 46)
-                        .rotationEffect(.degrees(spinning ? 360 : 0))
-                        .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: spinning)
-                        .onAppear { spinning = true }
-                        .onDisappear { spinning = false }
-                }
-
-                Image(systemName: isRecording ? "mic.fill" : "mic")
-                    .font(.body)
-                    .foregroundStyle(isRecording ? .red : .primary)
-                    .frame(width: 40, height: 40)
-                    .contentShape(Circle())
-            }
-        }
-        .buttonStyle(.plain)
-        .liquidGlass(in: Circle())
-        .animation(.easeInOut(duration: 0.2), value: isRecording)
     }
 }
