@@ -23,20 +23,20 @@ public struct SlashCommandsPopup: View {
                     Button {
                         onTap(cmd)
                     } label: {
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text("/\(cmd.name)")
-                                .font(.system(.body, design: .monospaced).weight(.semibold))
+                                .font(.system(.subheadline, design: .monospaced).weight(.semibold))
                                 .foregroundStyle(.primary)
                             Text(cmd.description)
-                                .font(.caption)
+                                .font(.caption2)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                             Spacer(minLength: 0)
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .frame(minHeight: 44)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .frame(minHeight: 34)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -45,20 +45,19 @@ public struct SlashCommandsPopup: View {
                     .accessibilityHint(Text("Inserts this command into the message"))
 
                     if cmd.id != candidates.last?.id {
-                        Divider().padding(.leading, 14)
+                        Divider().padding(.leading, 12)
                     }
                 }
             }
         }
         .scrollBounceBehavior(.basedOnSize)
-        .frame(maxHeight: 240)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .frame(maxHeight: 200)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5)
         )
-        .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
-        .frame(maxWidth: 320)
+        .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 }
