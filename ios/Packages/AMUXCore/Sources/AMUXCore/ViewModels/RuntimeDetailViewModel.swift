@@ -350,6 +350,14 @@ public final class RuntimeDetailViewModel {
                 try? await mqtt.subscribe(subscribeTopic)
                 print("[RuntimeDetailVM] subscribed to \(subscribeTopic)")
 
+                // Pull any events that fired while we weren't subscribed,
+                // including streaming deltas the daemon published mid-turn
+                // while the iOS process was killed (the events topic isn't
+                // retained, so without a history sync those deltas are
+                // gone). On steady-state reconnects with no missed events,
+                // the daemon returns an empty batch — a no-op.
+                try? await requestIncrementalSync(modelContext: modelContext)
+
                 for await msg in stream {
                     guard msg.topic == subscribeTopic else { continue }
                     let envelope: Amux_Envelope?
