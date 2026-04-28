@@ -1282,7 +1282,13 @@ impl DaemonServer {
         }
     }
 
-    /// Publish a collab event on the agent's events topic
+    /// Publish a collab event (e.g. HistoryBatch reply) so iOS can pick it
+    /// up through whichever channel it's subscribed on. Session-backed
+    /// iOS subscribes to `session/{sid}/live` only and never to the legacy
+    /// `runtime/{rid}/events` topic, so we mirror the forward_agent_event
+    /// fanout: prefer the session live topic for runtimes tied to a collab
+    /// session, fall back to the legacy per-runtime events topic for
+    /// session-less spawns.
     async fn publish_collab_event(&self, agent_id: &str, event: amux::CollabEvent) {
         let envelope = amux::Envelope {
             runtime_id: agent_id.into(),
@@ -1292,8 +1298,16 @@ impl DaemonServer {
             sequence: 0,
             payload: Some(amux::envelope::Payload::CollabEvent(event)),
         };
-        let publisher = Publisher::new(&self.mqtt);
-        let _ = publisher.publish_runtime_event(agent_id, &envelope).await;
+        let sessions = self.target_collab_sessions(agent_id);
+        if let (false, Some(tc)) = (sessions.is_empty(), self.teamclaw.as_ref()) {
+            let actor_id = self.actor_id.clone();
+            for sid in &sessions {
+                tc.publish_agent_acp_event(sid, &actor_id, &envelope).await;
+            }
+        } else {
+            let publisher = Publisher::new(&self.mqtt);
+            let _ = publisher.publish_runtime_event(agent_id, &envelope).await;
+        }
     }
 
     // ─── Non-session RPC handlers ───

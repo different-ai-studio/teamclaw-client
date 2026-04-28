@@ -13,6 +13,9 @@ public struct MessageRecord: Equatable, Sendable {
     public let kind: String
     public let content: String
     public let createdAt: Date
+    /// Model id is currently stored inside `messages.metadata` JSON; not
+    /// surfaced through the seed today. Left nil here until we add a typed
+    /// metadata path.
     public let model: String?
 }
 
@@ -41,7 +44,7 @@ public actor SupabaseMessagesRepository: MessagesRepository {
     public func listForSession(sessionID: String) async throws -> [MessageRecord] {
         let rows: [MessageRow] = try await client
             .from("messages")
-            .select("id, session_id, sender_actor_id, kind, content, created_at, model")
+            .select("id, session_id, sender_actor_id, kind, content, created_at")
             .eq("session_id", value: sessionID)
             .order("created_at", ascending: true)
             .execute()
@@ -55,7 +58,7 @@ public actor SupabaseMessagesRepository: MessagesRepository {
                 kind: row.kind,
                 content: row.content,
                 createdAt: row.createdAt,
-                model: row.model
+                model: nil
             )
         }
     }
@@ -68,7 +71,6 @@ private struct MessageRow: Decodable, Sendable {
     let kind: String
     let content: String
     let createdAt: Date
-    let model: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -77,6 +79,5 @@ private struct MessageRow: Decodable, Sendable {
         case kind
         case content
         case createdAt = "created_at"
-        case model
     }
 }
