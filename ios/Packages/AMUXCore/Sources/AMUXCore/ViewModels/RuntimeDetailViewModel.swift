@@ -350,13 +350,17 @@ public final class RuntimeDetailViewModel {
                 try? await mqtt.subscribe(subscribeTopic)
                 print("[RuntimeDetailVM] subscribed to \(subscribeTopic)")
 
-                // Pull any events that fired while we weren't subscribed,
-                // including streaming deltas the daemon published mid-turn
-                // while the iOS process was killed (the events topic isn't
-                // retained, so without a history sync those deltas are
-                // gone). On steady-state reconnects with no missed events,
-                // the daemon returns an empty batch — a no-op.
-                try? await requestIncrementalSync(modelContext: modelContext)
+                // Seed past completed turns from the Supabase `messages`
+                // table. This replaces the daemon RequestHistory path on
+                // the auto-recovery hot loop — multi-agent will make the
+                // daemon's history-buffer-per-runtime untrustworthy as a
+                // session-wide source of truth, while Supabase is the
+                // shared truth for completed messages. The daemon path
+                // still exists (manual Sync History button) for cases
+                // where Supabase hasn't caught up. Mid-stream half-text
+                // is intentionally not recovered — the agent's final
+                // event will hand iOS the full turn when it completes.
+                await self.seedFromSupabaseMessages(modelContext: modelContext)
 
                 for await msg in stream {
                     guard msg.topic == subscribeTopic else { continue }
@@ -625,6 +629,61 @@ public final class RuntimeDetailViewModel {
     /// Fetch events newer than our local max sequence from the daemon.
     /// Cursor-based + paginated — cheap to call on every reconnect / foreground.
     ///
+    /// Pull `messages` rows for this session from Supabase and project them
+    /// into AgentEvent rows so past completed turns are visible without
+    /// hitting the daemon's per-runtime history buffer. Dedupe is keyed on
+    /// `supabaseMessageId` — re-running the seed is a no-op once the rows
+    /// have been ingested. Tool calls / thinking / status events are NOT
+    /// represented; only `user_*` and `agent_reply` kinds become AgentEvents.
+    func seedFromSupabaseMessages(modelContext: ModelContext) async {
+        guard let session else { return }
+        guard let repo = try? SupabaseMessagesRepository() else { return }
+        let messages: [MessageRecord]
+        do {
+            messages = try await repo.listForSession(sessionID: session.sessionId)
+        } catch {
+            print("[RuntimeDetailVM] supabase messages seed failed: \(error)")
+            return
+        }
+        guard !messages.isEmpty else { return }
+
+        let scope = eventScopeKey
+        let descriptor = FetchDescriptor<AgentEvent>(
+            predicate: #Predicate { $0.agentId == scope && $0.supabaseMessageId != nil }
+        )
+        let alreadySeeded = (try? modelContext.fetch(descriptor)) ?? []
+        let seenIDs = Set(alreadySeeded.compactMap(\.supabaseMessageId))
+
+        var inserted: [AgentEvent] = []
+        for record in messages {
+            guard !seenIDs.contains(record.id) else { continue }
+            let eventType: String
+            switch record.kind {
+            case "agent_reply": eventType = "output"
+            case "user_message", "user_prompt": eventType = "user_prompt"
+            default: continue
+            }
+            let event = AgentEvent(agentId: scope, sequence: 0, eventType: eventType)
+            event.supabaseMessageId = record.id
+            event.text = record.content
+            event.timestamp = record.createdAt
+            event.isComplete = true
+            event.model = record.model
+            modelContext.insert(event)
+            inserted.append(event)
+        }
+
+        guard !inserted.isEmpty else { return }
+        try? modelContext.save()
+
+        // Splice into the in-memory list at the right timestamp slots so
+        // the chronological view stays consistent without a full refetch.
+        for ev in inserted { events.append(ev) }
+        events.sort { $0.timestamp < $1.timestamp }
+        rebuildIndexes()
+        recomputeGroups()
+    }
+
     /// Also clears any stale streaming UI state: if the app was backgrounded
     /// mid-stream and missed the `isComplete=true` or `status_change=idle`
     /// event, `isStreaming` could be stuck showing a typing indicator. The

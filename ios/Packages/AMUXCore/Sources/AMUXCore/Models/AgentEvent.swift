@@ -17,6 +17,11 @@ public final class AgentEvent {
     /// events: output and thinking). nil for user prompts, tool events,
     /// status changes, errors, permission requests.
     public var model: String?
+    /// Supabase `messages.id` when this event was seeded from the
+    /// `messages` table on session resume. Used as the dedupe key so a
+    /// later cold-resume of the same session doesn't insert a second copy.
+    /// nil for events created from MQTT live deltas / daemon history.
+    public var supabaseMessageId: String?
 
     public init(agentId: String, sequence: Int, eventType: String) {
         self.id = UUID().uuidString
