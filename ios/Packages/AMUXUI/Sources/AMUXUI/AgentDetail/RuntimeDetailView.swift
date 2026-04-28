@@ -137,15 +137,16 @@ public struct RuntimeDetailView: View {
                 Button { showMembers = true } label: {
                     Image(systemName: "person.2")
                         .font(.title3)
+                        .padding(.top, 6)
+                        .padding(.trailing, 6)
                         .overlay(alignment: .topTrailing) {
                             if memberBadgeCount > 0 {
                                 Text("\(memberBadgeCount)")
                                     .font(.caption2.weight(.bold))
                                     .foregroundStyle(.white)
-                                    .padding(.horizontal, 4)
+                                    .padding(.horizontal, 5)
                                     .padding(.vertical, 1)
                                     .background(.blue, in: Capsule())
-                                    .offset(x: 8, y: -8)
                             }
                         }
                 }
