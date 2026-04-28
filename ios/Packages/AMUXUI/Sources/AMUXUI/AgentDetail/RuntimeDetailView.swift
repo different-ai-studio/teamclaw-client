@@ -172,7 +172,10 @@ public struct RuntimeDetailView: View {
                 attachments: $attachments,
                 voiceRecorder: voiceRecorder,
                 runtime: viewModel.runtime,
-                isAgentActive: viewModel.isActive,
+                // Codex doesn't always flip runtime.status to Active while
+                // streaming output, so OR with isStreaming so the stop
+                // button still surfaces during the response.
+                isAgentActive: viewModel.isActive || viewModel.isStreaming,
                 availableCommands: viewModel.availableCommands,
                 onSend: {
                     let text = promptText
