@@ -45,6 +45,10 @@
     <string>AMUX needs microphone access for voice input to send prompts to your AI agent.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>AMUX uses on-device speech recognition to convert your voice into text prompts.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>AMUX uses the camera to attach photos to prompts you send to your AI agent.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>AMUX accesses your photo library to attach images to prompts you send to your AI agent.</string>
     <key>SUPABASE_PUBLISHABLE_KEY</key>
     <string>sb_publishable_CJavqYCusEBD7cIebhH5tQ_K_I9AXpE</string>
     <key>SUPABASE_URL</key>
