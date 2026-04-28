@@ -34,10 +34,17 @@ public struct SearchTab: View {
         self._sessionsPath = sessionsPath
     }
 
-    private var runtimeMatches: [Runtime] {
-        viewModel.runtimes.filter {
-            SearchMatcher.matchesAny(
-                fields: [$0.sessionTitle, $0.currentPrompt, $0.worktree],
+    private var sessionMatches: [Session] {
+        viewModel.sessions.filter { session in
+            let runtime = primaryRuntime(for: session)
+            return SearchMatcher.matchesAny(
+                fields: [
+                    session.title,
+                    session.lastMessagePreview,
+                    runtime?.currentPrompt ?? "",
+                    runtime?.lastOutputSummary ?? "",
+                    runtime?.worktree ?? "",
+                ],
                 query: query
             )
         }
@@ -66,14 +73,16 @@ public struct SearchTab: View {
                         systemImage: "magnifyingglass",
                         description: Text("Search sessions, ideas, and members."))
                 } else {
-                    if !runtimeMatches.isEmpty {
+                    if !sessionMatches.isEmpty {
                         Section("Sessions") {
-                            ForEach(runtimeMatches, id: \.runtimeId) { runtime in
+                            ForEach(sessionMatches, id: \.sessionId) { session in
+                                let runtime = primaryRuntime(for: session)
                                 Button {
                                     rootSelection = .sessions
-                                    sessionsPath.append(runtime.runtimeId)
+                                    sessionsPath.append("collab:\(session.sessionId)")
                                 } label: {
                                     AgentRowView(
+                                        session: session,
                                         runtime: runtime,
                                         workspaceName: workspaceName(for: runtime)
                                     )
@@ -106,7 +115,7 @@ public struct SearchTab: View {
                         }
                     }
 
-                    if runtimeMatches.isEmpty && ideaMatches.isEmpty && memberMatches.isEmpty {
+                    if sessionMatches.isEmpty && ideaMatches.isEmpty && memberMatches.isEmpty {
                         ContentUnavailableView.search(text: query)
                     }
                 }
@@ -117,7 +126,13 @@ public struct SearchTab: View {
         }
     }
 
-    private func workspaceName(for runtime: Runtime) -> String {
-        viewModel.workspaces.first(where: { $0.workspaceId == runtime.workspaceId })?.displayName ?? ""
+    private func primaryRuntime(for session: Session) -> Runtime? {
+        guard let id = session.primaryAgentId, !id.isEmpty else { return nil }
+        return viewModel.runtimes.first(where: { $0.runtimeId == id })
+    }
+
+    private func workspaceName(for runtime: Runtime?) -> String {
+        guard let runtime else { return "" }
+        return viewModel.workspaces.first(where: { $0.workspaceId == runtime.workspaceId })?.displayName ?? ""
     }
 }

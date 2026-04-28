@@ -2,31 +2,17 @@ import Foundation
 import Observation
 import SwiftData
 
-// MARK: - SessionItem
-
-public enum SessionItem: Identifiable {
-    case runtime(Runtime)
-    case collab(Session)
-
-    public var id: String {
-        switch self {
-        case .runtime(let r): return r.runtimeId
-        case .collab(let c): return "collab:\(c.sessionId)"
-        }
-    }
-
-    public var date: Date {
-        switch self {
-        case .runtime(let r): return r.lastEventTime ?? r.startedAt
-        case .collab(let c): return c.lastMessageAt ?? c.createdAt
-        }
-    }
-}
+// MARK: - SessionGroup
 
 public struct SessionGroup: Identifiable {
     public let id: String
     public let title: String
-    public var items: [SessionItem]
+    public var items: [Session]
+}
+
+extension Session {
+    /// Sort/grouping key — most recent activity falls back to creation time.
+    public var listDate: Date { lastMessageAt ?? createdAt }
 }
 
 @Observable @MainActor
@@ -332,7 +318,6 @@ public final class SessionListViewModel {
                 return created
             }()
 
-            session.mode = record.mode
             session.teamId = record.teamID
             session.title = record.title
             session.createdBy = record.createdByActorID
@@ -353,38 +338,26 @@ public final class SessionListViewModel {
         reloadSessions(modelContext: modelContext)
     }
 
-    public var filteredRuntimes: [Runtime] {
-        if searchText.isEmpty { return runtimes }
-        let q = searchText.lowercased()
-        return runtimes.filter {
-            $0.worktree.lowercased().contains(q) || $0.currentPrompt.lowercased().contains(q) || $0.runtimeId.lowercased().contains(q)
-        }
-    }
-
     // MARK: - Time Grouping
 
     public var groupedSessions: [SessionGroup] {
-        // Merge runtimes and shared sessions into one list
-        var allItems: [SessionItem] = filteredRuntimes.map { .runtime($0) }
-        for session in sessions {
-            if searchText.isEmpty || session.title.lowercased().contains(searchText.lowercased()) {
-                allItems.append(.collab(session))
-            }
-        }
-        allItems.sort { $0.date > $1.date }
+        let q = searchText.lowercased()
+        let allItems = sessions
+            .filter { q.isEmpty || $0.title.lowercased().contains(q) }
+            .sorted { $0.listDate > $1.listDate }
 
         var groups: [SessionGroup] = []
         let calendar = Calendar.current
         let now = Date()
 
-        var today: [SessionItem] = []
-        var yesterday: [SessionItem] = []
-        var thisWeek: [SessionItem] = []
-        var thisMonth: [SessionItem] = []
-        var older: [SessionItem] = []
+        var today: [Session] = []
+        var yesterday: [Session] = []
+        var thisWeek: [Session] = []
+        var thisMonth: [Session] = []
+        var older: [Session] = []
 
         for item in allItems {
-            let date = item.date
+            let date = item.listDate
             if calendar.isDateInToday(date) {
                 today.append(item)
             } else if calendar.isDateInYesterday(date) {

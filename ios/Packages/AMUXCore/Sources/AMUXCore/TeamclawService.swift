@@ -269,7 +269,6 @@ public final class TeamclawService {
         let existing = (try? modelContext.fetch(descriptor))?.first ?? {
             let created = Session(
                 sessionId: sessionId,
-                mode: proto.sessionType == .control ? "control" : "collab",
                 teamId: proto.teamID,
                 title: proto.title,
                 createdBy: proto.createdBy,
@@ -290,7 +289,6 @@ public final class TeamclawService {
         }()
 
         existing.primaryAgentId = proto.primaryAgentID.isEmpty ? nil : proto.primaryAgentID
-        existing.mode = proto.sessionType == .control ? "control" : "collab"
         existing.teamId = proto.teamID
         existing.createdBy = proto.createdBy
         existing.createdAt = proto.createdAt > 0

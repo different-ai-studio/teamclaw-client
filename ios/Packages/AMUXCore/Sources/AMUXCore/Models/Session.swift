@@ -4,7 +4,6 @@ import SwiftData
 @Model
 public final class Session {
     @Attribute(.unique) public var sessionId: String
-    public var mode: String       // "control" or "collab"
     public var teamId: String
     public var title: String
     public var createdBy: String
@@ -18,7 +17,6 @@ public final class Session {
 
     public init(
         sessionId: String,
-        mode: String = "collab",
         teamId: String = "",
         title: String = "",
         createdBy: String = "",
@@ -30,7 +28,6 @@ public final class Session {
         ideaId: String = ""
     ) {
         self.sessionId = sessionId
-        self.mode = mode
         self.teamId = teamId
         self.title = title
         self.createdBy = createdBy
@@ -41,7 +38,4 @@ public final class Session {
         self.lastMessageAt = lastMessageAt
         self.ideaId = ideaId
     }
-
-    public var isCollab: Bool { mode == "collab" }
-    public var isControl: Bool { mode == "control" }
 }

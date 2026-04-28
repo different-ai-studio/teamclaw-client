@@ -690,7 +690,6 @@ public struct NewSessionSheet: View {
         let sessionID = UUID().uuidString
         let session = Session(
             sessionId: sessionID,
-            mode: "collab",
             teamId: teamID,
             title: String(title.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines),
             createdBy: currentActorID,
@@ -728,7 +727,6 @@ public struct NewSessionSheet: View {
         let session = (try? modelContext.fetch(fetch))?.first ?? {
             let newSession = Session(
                 sessionId: info.sessionID,
-                mode: "collab",
                 teamId: info.teamID,
                 title: info.title,
                 createdBy: info.createdBy,
@@ -745,7 +743,6 @@ public struct NewSessionSheet: View {
             return newSession
         }()
 
-        session.mode = "collab"
         session.teamId = info.teamID
         session.title = info.title
         session.createdBy = info.createdBy

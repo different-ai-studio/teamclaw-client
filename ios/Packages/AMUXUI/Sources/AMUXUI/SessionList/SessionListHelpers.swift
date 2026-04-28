@@ -67,8 +67,8 @@ struct SessionListContent: View {
                 List {
                     ForEach(viewModel.groupedSessions) { group in
                         Section {
-                            ForEach(group.items) { item in
-                                sessionRow(item)
+                            ForEach(group.items) { session in
+                                sessionRow(session)
                             }
                         } header: {
                             Text(group.title)
@@ -88,40 +88,40 @@ struct SessionListContent: View {
     }
 
     @ViewBuilder
-    private func sessionRow(_ item: SessionItem) -> some View {
-        switch item {
-        case .runtime(let runtime):
-            HStack(spacing: 10) {
-                if isEditing {
-                    Image(systemName: selectedIDs.contains(runtime.runtimeId) ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(selectedIDs.contains(runtime.runtimeId) ? .blue : .secondary)
-                        .font(.title3)
-                        .onTapGesture { toggleSelection(runtime.runtimeId) }
-                }
-                AgentRowView(runtime: runtime, workspaceName: workspaceName(for: runtime))
+    private func sessionRow(_ session: Session) -> some View {
+        let runtime = primaryRuntime(for: session)
+        HStack(spacing: 10) {
+            if isEditing {
+                Image(systemName: selectedIDs.contains(session.sessionId) ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(selectedIDs.contains(session.sessionId) ? .blue : .secondary)
+                    .font(.title3)
+                    .onTapGesture { toggleSelection(session.sessionId) }
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                if isEditing {
-                    toggleSelection(runtime.runtimeId)
-                } else {
-                    navigationPath.append(runtime.runtimeId)
-                }
-            }
-            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-
-        case .collab(let session):
-            SessionRowView(session: session)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    navigationPath.append("collab:\(session.sessionId)")
-                }
-                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+            AgentRowView(
+                session: session,
+                runtime: runtime,
+                workspaceName: workspaceName(for: runtime)
+            )
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isEditing {
+                toggleSelection(session.sessionId)
+            } else {
+                navigationPath.append("collab:\(session.sessionId)")
+            }
+        }
+        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
     }
 
-    private func workspaceName(for runtime: Runtime) -> String {
-        viewModel.workspaces.first(where: { $0.workspaceId == runtime.workspaceId })?.displayName ?? ""
+    private func primaryRuntime(for session: Session) -> Runtime? {
+        guard let agentId = session.primaryAgentId, !agentId.isEmpty else { return nil }
+        return viewModel.runtimes.first(where: { $0.runtimeId == agentId })
+    }
+
+    private func workspaceName(for runtime: Runtime?) -> String {
+        guard let runtime else { return "" }
+        return viewModel.workspaces.first(where: { $0.workspaceId == runtime.workspaceId })?.displayName ?? ""
     }
 
     private func toggleSelection(_ id: String) {
@@ -133,38 +133,65 @@ struct SessionListContent: View {
 // MARK: - AgentRowView
 
 struct AgentRowView: View {
-    let runtime: Runtime
+    let session: Session
+    let runtime: Runtime?
     let workspaceName: String
 
     @State private var breathe = false
 
     private var displayTitle: String {
-        if !runtime.sessionTitle.isEmpty { return runtime.sessionTitle }
+        if !session.title.isEmpty { return session.title }
+        if let runtime, !runtime.sessionTitle.isEmpty { return runtime.sessionTitle }
         return "Untitled Session"
     }
 
-    private var isUnread: Bool { runtime.hasUnread }
-    private var isRunning: Bool { runtime.status == 2 }
+    /// Last message: prefer the LLM's most recent output, fall back to the
+    /// pending user prompt (so a session that only has a kicked-off prompt
+    /// still shows useful preview text), and finally to the Supabase preview.
+    private var lastMessage: String {
+        if let runtime {
+            if !runtime.lastOutputSummary.isEmpty { return runtime.lastOutputSummary }
+            if !runtime.currentPrompt.isEmpty { return runtime.currentPrompt }
+        }
+        return session.lastMessagePreview
+    }
+
+    private var isUnread: Bool { runtime?.hasUnread ?? false }
+    private var isRunning: Bool { runtime?.status == 2 }
+
+    private var avatarSeed: String { session.primaryAgentId ?? session.sessionId }
 
     private var avatarInitial: String {
-        let name = runtime.worktree.isEmpty ? runtime.runtimeId : runtime.worktree
-        let lastComponent = name.split(separator: "/").last.map(String.init) ?? name
-        return String(lastComponent.prefix(1)).uppercased()
+        let source: String = {
+            if let runtime, !runtime.worktree.isEmpty { return runtime.worktree }
+            if !session.title.isEmpty { return session.title }
+            return session.sessionId
+        }()
+        let lastComponent = source.split(separator: "/").last.map(String.init) ?? source
+        return lastComponent.isEmpty ? "·" : String(lastComponent.prefix(1)).uppercased()
     }
 
+    /// Lower-saturation palette: each base color is mixed with white to
+    /// reduce vibrance so the avatar doesn't dominate the row.
     private var avatarColor: Color {
-        let colors: [Color] = [.blue, .purple, .orange, .green, .pink, .teal, .indigo, .mint]
-        let hash = runtime.runtimeId.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
-        return colors[abs(hash) % colors.count]
+        let palette: [Color] = [.blue, .purple, .orange, .green, .pink, .teal, .indigo, .mint]
+        let hash = avatarSeed.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
+        return palette[abs(hash) % palette.count].mix(with: .white, by: 0.30)
     }
 
-    private var agentLogoName: String {
-        switch runtime.agentType {
-        case 1: "ClaudeLogo"
-        case 2: "OpenCodeLogo"
-        case 3: "CodexLogo"
-        default: "ClaudeLogo"
+    private var agentLogoName: String? {
+        guard let agentType = runtime?.agentType else { return nil }
+        switch agentType {
+        case 1: return "ClaudeLogo"
+        case 2: return "OpenCodeLogo"
+        case 3: return "CodexLogo"
+        default: return nil
         }
+    }
+
+    private var rowTimestamp: Date {
+        if let runtime, let last = runtime.lastEventTime { return last }
+        return session.lastMessageAt ?? session.createdAt
     }
 
     private func formatTime(_ date: Date) -> String {
@@ -195,7 +222,7 @@ struct AgentRowView: View {
 
                 ZStack {
                     Circle()
-                        .fill(avatarColor.gradient)
+                        .fill(avatarColor)
                         .frame(width: 40, height: 40)
                     Text(avatarInitial)
                         .font(.callout)
@@ -210,18 +237,20 @@ struct AgentRowView: View {
                     .fontWeight(.semibold)
                     .lineLimit(1)
 
-                if !runtime.currentPrompt.isEmpty {
-                    Text(runtime.currentPrompt)
+                if !lastMessage.isEmpty {
+                    Text(lastMessage)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
 
                 HStack(spacing: 4) {
-                    Image(agentLogoName, bundle: .module)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 14, height: 14)
+                    if let logo = agentLogoName {
+                        Image(logo, bundle: .module)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 14, height: 14)
+                    }
 
                     if !workspaceName.isEmpty {
                         Text(workspaceName)
@@ -229,79 +258,26 @@ struct AgentRowView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Spacer(minLength: 0)
-
-                    Text(formatTime(runtime.lastEventTime ?? runtime.startedAt))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-// MARK: - SessionRowView
-
-struct SessionRowView: View {
-    let session: Session
-
-    private func formatTime(_ date: Date) -> String {
-        let seconds = Int(-date.timeIntervalSinceNow)
-        if seconds < 60 { return "Just now" }
-        if seconds < 3600 { return "\(seconds / 60)m" }
-        if seconds < 86400 { return "\(seconds / 3600)h" }
-        if seconds < 604800 { return "\(seconds / 86400)d" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MM/dd"
-        return formatter.string(from: date)
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Color.clear)
-                    .frame(width: 8, height: 8)
-
-                ZStack {
-                    Circle()
-                        .fill(Color.indigo.gradient)
-                        .frame(width: 40, height: 40)
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.white)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(session.title.isEmpty ? "Collab Session" : session.title)
-                    .font(.body)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-
-                if !session.lastMessagePreview.isEmpty {
-                    Text(session.lastMessagePreview)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-
-                HStack(spacing: 4) {
-                    Image(systemName: "person.2")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("\(session.participantCount)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    if session.participantCount > 1 {
+                        Text("·")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "person.2")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("\(session.participantCount)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
 
                     Spacer(minLength: 0)
 
-                    Text(formatTime(session.lastMessageAt ?? session.createdAt))
+                    Text(formatTime(rowTimestamp))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
+            .alignmentGuide(.listRowSeparatorLeading) { d in d[.leading] }
         }
         .padding(.vertical, 4)
     }
