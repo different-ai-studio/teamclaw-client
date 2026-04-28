@@ -202,7 +202,15 @@ public struct RuntimeDetailView: View {
             if let runtime = viewModel.runtime {
                 RuntimeSettingsSheet(
                     runtime: runtime,
-                    onSync: { Task { try? await viewModel.requestIncrementalSync(modelContext: modelContext) } },
+                    onSync: {
+                        // Manual Sync History: refresh from both sources.
+                        // Supabase fills in finalized turns; daemon catches
+                        // anything past the last persisted message id.
+                        Task {
+                            await viewModel.seedFromSupabaseMessages(modelContext: modelContext)
+                            try? await viewModel.requestIncrementalSync(modelContext: modelContext)
+                        }
+                    },
                     isSyncing: viewModel.isSyncing
                 )
                 .presentationDetents([.medium])

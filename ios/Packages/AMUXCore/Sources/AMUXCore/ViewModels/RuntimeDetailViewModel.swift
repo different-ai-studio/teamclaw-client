@@ -350,17 +350,25 @@ public final class RuntimeDetailViewModel {
                 try? await mqtt.subscribe(subscribeTopic)
                 print("[RuntimeDetailVM] subscribed to \(subscribeTopic)")
 
-                // Seed past completed turns from the Supabase `messages`
-                // table. This replaces the daemon RequestHistory path on
-                // the auto-recovery hot loop — multi-agent will make the
-                // daemon's history-buffer-per-runtime untrustworthy as a
-                // session-wide source of truth, while Supabase is the
-                // shared truth for completed messages. The daemon path
-                // still exists (manual Sync History button) for cases
-                // where Supabase hasn't caught up. Mid-stream half-text
-                // is intentionally not recovered — the agent's final
-                // event will hand iOS the full turn when it completes.
+                // Two-source recovery:
+                //   1. Supabase `messages` for past finalized turns —
+                //      this is the team-wide truth that survives any
+                //      single daemon's history buffer (multi-agent
+                //      friendly).
+                //   2. Daemon RequestHistory for events the broker may
+                //      have dropped on the floor (new session that's
+                //      streaming RIGHT NOW between Supabase persistence
+                //      and our subscribe; or kill+relaunch mid-turn).
+                //      Without this, fresh session detail shows nothing
+                //      until the agent finishes a turn.
+                // Dedupe: Supabase-seeded events carry a supabaseMessageId
+                // and won't be duplicated by re-running the seed; daemon
+                // replay uses sequence-based filtering. Some past-turn
+                // double-display can happen for sessions that have BOTH
+                // Supabase rows AND daemon history; acceptable trade-off
+                // until we add cross-source content dedupe.
                 await self.seedFromSupabaseMessages(modelContext: modelContext)
+                try? await self.requestIncrementalSync(modelContext: modelContext)
 
                 for await msg in stream {
                     guard msg.topic == subscribeTopic else { continue }
@@ -635,7 +643,7 @@ public final class RuntimeDetailViewModel {
     /// `supabaseMessageId` — re-running the seed is a no-op once the rows
     /// have been ingested. Tool calls / thinking / status events are NOT
     /// represented; only `user_*` and `agent_reply` kinds become AgentEvents.
-    func seedFromSupabaseMessages(modelContext: ModelContext) async {
+    public func seedFromSupabaseMessages(modelContext: ModelContext) async {
         guard let session else { return }
         guard let repo = try? SupabaseMessagesRepository() else { return }
         let messages: [MessageRecord]
