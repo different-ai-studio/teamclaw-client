@@ -67,8 +67,8 @@ struct AttachmentDrawerSheet: View {
                     for url in urls where !attachments.contains(url) {
                         attachments.append(url)
                     }
+                    dismiss()
                 }
-                dismiss()
             }
             .fullScreenCover(isPresented: $showCamera) {
                 CameraImagePicker(
@@ -92,8 +92,10 @@ struct AttachmentDrawerSheet: View {
                             await MainActor.run { attachments.append(url) }
                         }
                     }
-                    photoItems = []
-                    await MainActor.run { dismiss() }
+                    await MainActor.run {
+                        photoItems = []
+                        dismiss()
+                    }
                 }
             }
         }
