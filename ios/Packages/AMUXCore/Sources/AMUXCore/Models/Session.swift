@@ -14,6 +14,12 @@ public final class Session {
     public var lastMessageAt: Date?
     public var ideaId: String
     public var primaryAgentId: String?
+    /// User-pinned: floats to the top "Pinned" group in the session list.
+    /// Local-only (not synced to Supabase yet).
+    public var isPinned: Bool = false
+    /// User-archived: hidden from the main session list. Soft-delete only;
+    /// no unarchive UI yet. Local-only.
+    public var isArchived: Bool = false
 
     public init(
         sessionId: String,
@@ -25,7 +31,9 @@ public final class Session {
         participantCount: Int = 0,
         lastMessagePreview: String = "",
         lastMessageAt: Date? = nil,
-        ideaId: String = ""
+        ideaId: String = "",
+        isPinned: Bool = false,
+        isArchived: Bool = false
     ) {
         self.sessionId = sessionId
         self.teamId = teamId
@@ -37,5 +45,7 @@ public final class Session {
         self.lastMessagePreview = lastMessagePreview
         self.lastMessageAt = lastMessageAt
         self.ideaId = ideaId
+        self.isPinned = isPinned
+        self.isArchived = isArchived
     }
 }

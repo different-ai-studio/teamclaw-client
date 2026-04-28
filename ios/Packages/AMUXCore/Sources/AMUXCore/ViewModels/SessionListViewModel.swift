@@ -342,11 +342,19 @@ public final class SessionListViewModel {
 
     public var groupedSessions: [SessionGroup] {
         let q = searchText.lowercased()
-        let allItems = sessions
+        let visible = sessions
+            .filter { !$0.isArchived }
             .filter { q.isEmpty || $0.title.lowercased().contains(q) }
             .sorted { $0.listDate > $1.listDate }
 
+        let pinned = visible.filter { $0.isPinned }
+        let unpinned = visible.filter { !$0.isPinned }
+
         var groups: [SessionGroup] = []
+        if !pinned.isEmpty {
+            groups.append(SessionGroup(id: "pinned", title: "Pinned", items: pinned))
+        }
+
         let calendar = Calendar.current
         let now = Date()
 
@@ -356,7 +364,7 @@ public final class SessionListViewModel {
         var thisMonth: [Session] = []
         var older: [Session] = []
 
-        for item in allItems {
+        for item in unpinned {
             let date = item.listDate
             if calendar.isDateInToday(date) {
                 today.append(item)

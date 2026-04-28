@@ -112,6 +112,24 @@ struct SessionListContent: View {
             }
         }
         .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                session.isArchived = true
+                try? modelContext.save()
+            } label: {
+                Label("Archive", systemImage: "archivebox.fill")
+            }
+            .tint(.red)
+
+            Button {
+                session.isPinned.toggle()
+                try? modelContext.save()
+            } label: {
+                Label(session.isPinned ? "Unpin" : "Pin",
+                      systemImage: session.isPinned ? "pin.slash.fill" : "pin.fill")
+            }
+            .tint(.indigo)
+        }
     }
 
     private func primaryRuntime(for session: Session) -> Runtime? {
