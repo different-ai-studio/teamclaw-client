@@ -151,8 +151,7 @@ struct SessionListContent: View {
     }
 
     private func workspaceName(runtime: Runtime?, cached: CachedAgentRuntime?) -> String {
-        let id = runtime?.workspaceId ?? cached?.workspaceId ?? ""
-        guard !id.isEmpty else { return "" }
+        guard let id = cached?.workspaceId, !id.isEmpty else { return "" }
         return viewModel.workspaces.first(where: { $0.workspaceId == id })?.displayName ?? ""
     }
 
@@ -184,22 +183,16 @@ struct AgentRowView: View {
         self.workspaceName = workspaceName
     }
 
+    // Supabase-first row resolution. The MQTT live `Runtime` is consulted
+    // ONLY for the breathing-dot running state and the unread hint — every
+    // other field reads off `Session` + `CachedAgentRuntime` so the row is
+    // stable when the daemon is offline.
+
     private var displayTitle: String {
-        if !session.title.isEmpty { return session.title }
-        if let runtime, !runtime.sessionTitle.isEmpty { return runtime.sessionTitle }
-        return "Untitled Session"
+        session.title.isEmpty ? "Untitled Session" : session.title
     }
 
-    /// Last message: prefer the LLM's most recent output, fall back to the
-    /// pending user prompt (so a session that only has a kicked-off prompt
-    /// still shows useful preview text), and finally to the Supabase preview.
-    private var lastMessage: String {
-        if let runtime {
-            if !runtime.lastOutputSummary.isEmpty { return runtime.lastOutputSummary }
-            if !runtime.currentPrompt.isEmpty { return runtime.currentPrompt }
-        }
-        return session.lastMessagePreview
-    }
+    private var lastMessage: String { session.lastMessagePreview }
 
     private var isUnread: Bool { runtime?.hasUnread ?? false }
 
@@ -213,11 +206,7 @@ struct AgentRowView: View {
     private var avatarSeed: String { session.primaryAgentId ?? session.sessionId }
 
     private var avatarInitial: String {
-        let source: String = {
-            if let runtime, !runtime.worktree.isEmpty { return runtime.worktree }
-            if !session.title.isEmpty { return session.title }
-            return session.sessionId
-        }()
+        let source = session.title.isEmpty ? session.sessionId : session.title
         let lastComponent = source.split(separator: "/").last.map(String.init) ?? source
         return lastComponent.isEmpty ? "·" : String(lastComponent.prefix(1)).uppercased()
     }
@@ -230,17 +219,7 @@ struct AgentRowView: View {
         return palette[abs(hash) % palette.count].mix(with: .white, by: 0.30)
     }
 
-    /// Logo: prefer MQTT-live `agentType` (Int enum), fall back to the
-    /// Supabase-cached `backend_type` string. Both encode the same backend.
     private var agentLogoName: String? {
-        if let agentType = runtime?.agentType {
-            switch agentType {
-            case 1: return "ClaudeLogo"
-            case 2: return "OpenCodeLogo"
-            case 3: return "CodexLogo"
-            default: break
-            }
-        }
         switch cachedRuntime?.backendType {
         case "claude": return "ClaudeLogo"
         case "opencode": return "OpenCodeLogo"
@@ -250,8 +229,7 @@ struct AgentRowView: View {
     }
 
     private var rowTimestamp: Date {
-        if let runtime, let last = runtime.lastEventTime { return last }
-        return session.lastMessageAt ?? session.createdAt
+        session.lastMessageAt ?? session.createdAt
     }
 
     private func formatTime(_ date: Date) -> String {
