@@ -19,6 +19,7 @@ public struct RootTabView: View {
     @State private var sessionIDsRepo: SupabaseSessionIDsRepository?
     @State private var sessionsRepo: SupabaseSessionsRepository?
     @State private var agentRuntimesRepo: SupabaseAgentRuntimesRepository?
+    @State private var workspacesRepo: SupabaseWorkspaceRepository?
     @State private var agentAccessRepo: SupabaseAgentAccessRepository?
 
     /// Drives the "add the team's first agent" reminder. Set once per app
@@ -187,6 +188,9 @@ public struct RootTabView: View {
         if agentRuntimesRepo == nil {
             agentRuntimesRepo = try? SupabaseAgentRuntimesRepository()
         }
+        if workspacesRepo == nil {
+            workspacesRepo = try? SupabaseWorkspaceRepository()
+        }
         await refreshSessionsFromBackend()
         await maybeShowFirstAgentReminder(team: activeTeam)
     }
@@ -214,12 +218,17 @@ public struct RootTabView: View {
 
         let teamID = activeTeam.id
         let runtimesRepoLocal = agentRuntimesRepo
+        let workspacesRepoLocal = workspacesRepo
         let sessionsRepoLocal = sessionsRepo
         let sessionIDsRepoLocal = sessionIDsRepo
 
         async let runtimesTask: [AgentRuntimeRecord]? = {
             guard let repo = runtimesRepoLocal else { return nil }
             return try? await repo.listForTeam(teamID: teamID)
+        }()
+        async let workspacesTask: [WorkspaceRecord]? = {
+            guard let repo = workspacesRepoLocal else { return nil }
+            return try? await repo.listWorkspaces(teamID: teamID, agentID: nil)
         }()
 
         if let repo = sessionsRepoLocal,
@@ -233,6 +242,9 @@ public struct RootTabView: View {
 
         if let runtimes = await runtimesTask {
             viewModel.syncAgentRuntimeRecords(runtimes, modelContext: modelContext)
+        }
+        if let workspaces = await workspacesTask {
+            viewModel.syncWorkspaceRecords(workspaces, modelContext: modelContext)
         }
     }
 }

@@ -310,6 +310,30 @@ public final class SessionListViewModel {
         sessions = (try? modelContext.fetch(FetchDescriptor<Session>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
     }
 
+    /// Upsert-only sync from Supabase `workspaces`. Does NOT delete missing
+    /// entries — MQTT publishes the authoritative live set; Supabase here
+    /// just provides offline-resilient name + path so rows can show a
+    /// workspace label even when the daemon hasn't sent a retained state.
+    public func syncWorkspaceRecords(_ records: [WorkspaceRecord], modelContext: ModelContext) {
+        for record in records {
+            let id = record.id
+            let descriptor = FetchDescriptor<Workspace>(predicate: #Predicate { $0.workspaceId == id })
+            if let existing = try? modelContext.fetch(descriptor).first {
+                existing.displayName = record.displayName
+                if !record.path.isEmpty { existing.path = record.path }
+            } else {
+                let new = Workspace(
+                    workspaceId: record.id,
+                    path: record.path,
+                    displayName: record.displayName
+                )
+                modelContext.insert(new)
+            }
+        }
+        try? modelContext.save()
+        workspaces = (try? modelContext.fetch(FetchDescriptor<Workspace>(sortBy: [SortDescriptor(\.displayName)]))) ?? []
+    }
+
     public func syncAgentRuntimeRecords(_ records: [AgentRuntimeRecord], modelContext: ModelContext) {
         let existing = (try? modelContext.fetch(FetchDescriptor<CachedAgentRuntime>())) ?? []
         var byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
