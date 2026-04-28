@@ -18,6 +18,7 @@ public struct RootTabView: View {
     @State private var connectedAgentsStore: ConnectedAgentsStore?
     @State private var sessionIDsRepo: SupabaseSessionIDsRepository?
     @State private var sessionsRepo: SupabaseSessionsRepository?
+    @State private var agentRuntimesRepo: SupabaseAgentRuntimesRepository?
     @State private var agentAccessRepo: SupabaseAgentAccessRepository?
 
     /// Drives the "add the team's first agent" reminder. Set once per app
@@ -183,6 +184,9 @@ public struct RootTabView: View {
         if sessionsRepo == nil {
             sessionsRepo = try? SupabaseSessionsRepository()
         }
+        if agentRuntimesRepo == nil {
+            agentRuntimesRepo = try? SupabaseAgentRuntimesRepository()
+        }
         await refreshSessionsFromBackend()
         await maybeShowFirstAgentReminder(team: activeTeam)
     }
@@ -208,16 +212,27 @@ public struct RootTabView: View {
     private func refreshSessionsFromBackend() async {
         guard let activeTeam else { return }
 
-        if let repo = sessionsRepo,
-           let records = try? await repo.listSessions(teamID: activeTeam.id) {
-            viewModel.syncSessionRecords(records, modelContext: modelContext)
-            return
-        }
+        let teamID = activeTeam.id
+        let runtimesRepoLocal = agentRuntimesRepo
+        let sessionsRepoLocal = sessionsRepo
+        let sessionIDsRepoLocal = sessionIDsRepo
 
-        if let repo = sessionIDsRepo,
-           let ids = try? await repo.listSessionIDs(teamID: activeTeam.id) {
+        async let runtimesTask: [AgentRuntimeRecord]? = {
+            guard let repo = runtimesRepoLocal else { return nil }
+            return try? await repo.listForTeam(teamID: teamID)
+        }()
+
+        if let repo = sessionsRepoLocal,
+           let records = try? await repo.listSessions(teamID: teamID) {
+            viewModel.syncSessionRecords(records, modelContext: modelContext)
+        } else if let repo = sessionIDsRepoLocal,
+                  let ids = try? await repo.listSessionIDs(teamID: teamID) {
             viewModel.validSessionIDs = ids
             viewModel.reloadSessions(modelContext: modelContext)
+        }
+
+        if let runtimes = await runtimesTask {
+            viewModel.syncAgentRuntimeRecords(runtimes, modelContext: modelContext)
         }
     }
 }

@@ -89,7 +89,8 @@ struct SessionListContent: View {
 
     @ViewBuilder
     private func sessionRow(_ session: Session) -> some View {
-        let runtime = primaryRuntime(for: session)
+        let cached = cachedAgentRuntime(for: session)
+        let runtime = liveRuntime(for: cached)
         HStack(spacing: 10) {
             if isEditing {
                 Image(systemName: selectedIDs.contains(session.sessionId) ? "checkmark.circle.fill" : "circle")
@@ -100,7 +101,8 @@ struct SessionListContent: View {
             AgentRowView(
                 session: session,
                 runtime: runtime,
-                workspaceName: workspaceName(for: runtime)
+                cachedRuntime: cached,
+                workspaceName: workspaceName(runtime: runtime, cached: cached)
             )
         }
         .contentShape(Rectangle())
@@ -132,14 +134,26 @@ struct SessionListContent: View {
         }
     }
 
-    private func primaryRuntime(for session: Session) -> Runtime? {
-        guard let agentId = session.primaryAgentId, !agentId.isEmpty else { return nil }
-        return viewModel.runtimes.first(where: { $0.runtimeId == agentId })
+    /// Most-recently-updated `agent_runtimes` row that serves this session.
+    /// Provides backend type + workspace + status when MQTT is offline.
+    private func cachedAgentRuntime(for session: Session) -> CachedAgentRuntime? {
+        viewModel.cachedAgentRuntimes
+            .filter { $0.sessionId == session.sessionId }
+            .max(by: { $0.updatedAt < $1.updatedAt })
     }
 
-    private func workspaceName(for runtime: Runtime?) -> String {
-        guard let runtime else { return "" }
-        return viewModel.workspaces.first(where: { $0.workspaceId == runtime.workspaceId })?.displayName ?? ""
+    /// Bridge from a Supabase `agent_runtimes` row to its MQTT-published
+    /// `Runtime` snapshot via `backend_session_id`. Nil when the daemon is
+    /// offline or hasn't published yet.
+    private func liveRuntime(for cached: CachedAgentRuntime?) -> Runtime? {
+        guard let bridge = cached?.backendSessionId, !bridge.isEmpty else { return nil }
+        return viewModel.runtimes.first(where: { $0.runtimeId == bridge })
+    }
+
+    private func workspaceName(runtime: Runtime?, cached: CachedAgentRuntime?) -> String {
+        let id = runtime?.workspaceId ?? cached?.workspaceId ?? ""
+        guard !id.isEmpty else { return "" }
+        return viewModel.workspaces.first(where: { $0.workspaceId == id })?.displayName ?? ""
     }
 
     private func toggleSelection(_ id: String) {
@@ -153,9 +167,22 @@ struct SessionListContent: View {
 struct AgentRowView: View {
     let session: Session
     let runtime: Runtime?
+    let cachedRuntime: CachedAgentRuntime?
     let workspaceName: String
 
     @State private var breathe = false
+
+    init(
+        session: Session,
+        runtime: Runtime? = nil,
+        cachedRuntime: CachedAgentRuntime? = nil,
+        workspaceName: String = ""
+    ) {
+        self.session = session
+        self.runtime = runtime
+        self.cachedRuntime = cachedRuntime
+        self.workspaceName = workspaceName
+    }
 
     private var displayTitle: String {
         if !session.title.isEmpty { return session.title }
@@ -175,7 +202,13 @@ struct AgentRowView: View {
     }
 
     private var isUnread: Bool { runtime?.hasUnread ?? false }
-    private var isRunning: Bool { runtime?.status == 2 }
+
+    /// Live MQTT status (== 2) wins; otherwise the Supabase-cached row's
+    /// status drives the breathing dot when the daemon is offline.
+    private var isRunning: Bool {
+        if let runtime { return runtime.status == 2 }
+        return cachedRuntime?.status == "running"
+    }
 
     private var avatarSeed: String { session.primaryAgentId ?? session.sessionId }
 
@@ -197,12 +230,21 @@ struct AgentRowView: View {
         return palette[abs(hash) % palette.count].mix(with: .white, by: 0.30)
     }
 
+    /// Logo: prefer MQTT-live `agentType` (Int enum), fall back to the
+    /// Supabase-cached `backend_type` string. Both encode the same backend.
     private var agentLogoName: String? {
-        guard let agentType = runtime?.agentType else { return nil }
-        switch agentType {
-        case 1: return "ClaudeLogo"
-        case 2: return "OpenCodeLogo"
-        case 3: return "CodexLogo"
+        if let agentType = runtime?.agentType {
+            switch agentType {
+            case 1: return "ClaudeLogo"
+            case 2: return "OpenCodeLogo"
+            case 3: return "CodexLogo"
+            default: break
+            }
+        }
+        switch cachedRuntime?.backendType {
+        case "claude": return "ClaudeLogo"
+        case "opencode": return "OpenCodeLogo"
+        case "codex": return "CodexLogo"
         default: return nil
         }
     }

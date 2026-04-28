@@ -20,6 +20,10 @@ public final class SessionListViewModel {
     public var runtimes: [Runtime] = []
     public var workspaces: [Workspace] = []
     public var sessions: [Session] = []
+    /// Snapshot of Supabase `agent_runtimes` rows. Used by the session list
+    /// row to fall back to backend type / workspace when the daemon's MQTT
+    /// `Runtime` topic is offline.
+    public var cachedAgentRuntimes: [CachedAgentRuntime] = []
     public var isLoading = true
     public var searchText = ""
     private var task: Task<Void, Never>?
@@ -39,6 +43,7 @@ public final class SessionListViewModel {
         runtimes = (try? ctx.fetch(FetchDescriptor<Runtime>(sortBy: [SortDescriptor(\.lastEventTime, order: .reverse)]))) ?? []
         workspaces = (try? ctx.fetch(FetchDescriptor<Workspace>(sortBy: [SortDescriptor(\.displayName)]))) ?? []
         sessions = (try? ctx.fetch(FetchDescriptor<Session>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
+        cachedAgentRuntimes = (try? ctx.fetch(FetchDescriptor<CachedAgentRuntime>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]))) ?? []
 
         task?.cancel()
 
@@ -303,6 +308,44 @@ public final class SessionListViewModel {
             if didDelete { try? modelContext.save() }
         }
         sessions = (try? modelContext.fetch(FetchDescriptor<Session>(sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]))) ?? []
+    }
+
+    public func syncAgentRuntimeRecords(_ records: [AgentRuntimeRecord], modelContext: ModelContext) {
+        let existing = (try? modelContext.fetch(FetchDescriptor<CachedAgentRuntime>())) ?? []
+        var byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
+
+        for record in records {
+            let row = byID.removeValue(forKey: record.id) ?? {
+                let created = CachedAgentRuntime(
+                    id: record.id,
+                    teamId: record.teamID,
+                    agentId: record.agentID,
+                    backendType: record.backendType,
+                    status: record.status
+                )
+                modelContext.insert(created)
+                return created
+            }()
+
+            row.teamId = record.teamID
+            row.agentId = record.agentID
+            row.sessionId = record.sessionID
+            row.workspaceId = record.workspaceID
+            row.backendType = record.backendType
+            row.status = record.status
+            row.backendSessionId = record.backendSessionID
+            row.currentModel = record.currentModel
+            row.lastSeenAt = record.lastSeenAt
+            row.createdAt = record.createdAt
+            row.updatedAt = record.updatedAt
+        }
+
+        for stale in byID.values {
+            modelContext.delete(stale)
+        }
+
+        try? modelContext.save()
+        cachedAgentRuntimes = (try? modelContext.fetch(FetchDescriptor<CachedAgentRuntime>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]))) ?? []
     }
 
     public func syncSessionRecords(_ records: [SessionRecord], modelContext: ModelContext) {
