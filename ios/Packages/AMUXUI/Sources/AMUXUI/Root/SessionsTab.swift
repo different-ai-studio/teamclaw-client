@@ -103,8 +103,7 @@ public struct SessionsTab: View {
                         mqtt: mqtt,
                         pairing: pairing,
                         navigationPath: $navigationPath,
-                        connectedAgentsStore: connectedAgentsStore,
-                        allAgentIds: viewModel.runtimes.map(\.runtimeId)
+                        connectedAgentsStore: connectedAgentsStore
                     )
                 }
             }
@@ -153,7 +152,6 @@ private struct RuntimeDestinationView: View {
     let pairing: PairingManager
     @Binding var navigationPath: [String]
     let connectedAgentsStore: ConnectedAgentsStore?
-    let allAgentIds: [String]
 
     @Environment(\.modelContext) private var modelContext
     @State private var runtime: Runtime?
@@ -168,7 +166,6 @@ private struct RuntimeDestinationView: View {
                     mqtt: mqtt,
                     peerId: "ios-\(pairing.authToken.prefix(6))",
                     teamclawService: nil,
-                    navigationPath: $navigationPath,
                     connectedAgentsStore: connectedAgentsStore
                 )
                 .id("agent-session:\(session.sessionId)")
@@ -177,8 +174,6 @@ private struct RuntimeDestinationView: View {
                     runtime: runtime,
                     mqtt: mqtt,
                     peerId: "ios-\(pairing.authToken.prefix(6))",
-                    allAgentIds: allAgentIds,
-                    navigationPath: $navigationPath,
                     connectedAgentsStore: connectedAgentsStore
                 )
                 .id("agent:\(runtime.runtimeId)")
@@ -240,7 +235,6 @@ private struct CollabSessionDestinationView: View {
                     RuntimeDetailView(session: session, mqtt: mqtt,
                                       peerId: "ios-\(pairing.authToken.prefix(6))",
                                       teamclawService: teamclawService,
-                                      navigationPath: $navigationPath,
                                       connectedAgentsStore: connectedAgentsStore)
                     .id("collab-agent:\(session.sessionId)")
                 }

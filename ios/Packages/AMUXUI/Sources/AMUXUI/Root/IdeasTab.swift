@@ -79,7 +79,6 @@ public struct IdeasTab: View {
                                     mqtt: mqtt,
                                     peerId: "ios-\(pairing.authToken.prefix(6))",
                                     teamclawService: teamclawService,
-                                    navigationPath: $navigationPath,
                                     connectedAgentsStore: connectedAgentsStore
                                 )
                             }
@@ -91,8 +90,6 @@ public struct IdeasTab: View {
                             runtime: runtime,
                             mqtt: mqtt,
                             peerId: "ios-\(pairing.authToken.prefix(6))",
-                            allAgentIds: sessionViewModel.runtimes.map(\.runtimeId),
-                            navigationPath: $navigationPath,
                             connectedAgentsStore: connectedAgentsStore
                         )
                     } else {
