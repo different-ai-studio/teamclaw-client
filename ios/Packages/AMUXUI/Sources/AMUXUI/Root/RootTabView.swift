@@ -60,7 +60,6 @@ public struct RootTabView: View {
                             navigationPath: $sessionsPath,
                             connectedAgentsStore: connectedAgentsStore,
                             actorStore: actorStore,
-                            onReconnect: onReconnect,
                             onSignOut: onSignOut)
             }
             Tab(IdeaUIPresentation.pluralTitle, systemImage: IdeaUIPresentation.systemImage, value: AppTab.ideas) {
@@ -69,9 +68,7 @@ public struct RootTabView: View {
                          teamclawService: teamclawService,
                          activeTeam: activeTeam,
                          sessionViewModel: viewModel,
-                         connectedAgentsStore: connectedAgentsStore,
-                         onReconnect: onReconnect,
-                         onSignOut: onSignOut)
+                         connectedAgentsStore: connectedAgentsStore)
             }
             Tab("Actors", systemImage: "person.2", value: AppTab.members) {
                 if let actorStore {
@@ -82,9 +79,7 @@ public struct RootTabView: View {
                                activeTeam: activeTeam,
                                store: actorStore,
                                connectedAgentsStore: connectedAgentsStore,
-                               showInvite: $showInviteAfterReminder,
-                               onReconnect: onReconnect,
-                               onSignOut: onSignOut)
+                               showInvite: $showInviteAfterReminder)
                 } else {
                     ContentUnavailableView("No Team Selected",
                                           systemImage: "person.2",

@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 import AMUXCore
 import AMUXSharedUI
 
@@ -10,18 +9,9 @@ public struct SettingsView: View {
     /// optional so the (unused) macOS shell or any host that forgets to
     /// inject still compiles cleanly.
     @Environment(AppOnboardingCoordinator.self) private var onboarding: AppOnboardingCoordinator?
-    let pairing: PairingManager
     let connectedAgentsStore: ConnectedAgentsStore?
     let activeTeam: TeamSummary?
-    let onReconnect: (() -> Void)?
     let onSignOut: (() -> Void)?
-
-    @State private var mqttHost: String = ""
-    @State private var saveError: String?
-
-    @State private var supaURL: String = ""
-    @State private var supaKey: String = ""
-    @State private var supaSaved: Bool = false
 
     @State private var teamDetails: TeamDetails?
     @State private var teamLoadError: String?
@@ -29,15 +19,11 @@ public struct SettingsView: View {
     @State private var showSignOutConfirm = false
     @State private var showUpgradeSheet = false
 
-    public init(pairing: PairingManager,
-                connectedAgentsStore: ConnectedAgentsStore?,
+    public init(connectedAgentsStore: ConnectedAgentsStore?,
                 activeTeam: TeamSummary? = nil,
-                onReconnect: (() -> Void)? = nil,
                 onSignOut: (() -> Void)? = nil) {
-        self.pairing = pairing
         self.connectedAgentsStore = connectedAgentsStore
         self.activeTeam = activeTeam
-        self.onReconnect = onReconnect
         self.onSignOut = onSignOut
     }
 
@@ -47,15 +33,6 @@ public struct SettingsView: View {
 
     private var buildNumber: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
-    }
-
-    private var hasMQTTChanges: Bool {
-        mqttHost != pairing.brokerHost
-    }
-
-    private var hasSupabaseChanges: Bool {
-        supaURL != SupabaseServerStore.currentURL() ||
-        supaKey != SupabaseServerStore.currentKey()
     }
 
     public var body: some View {
@@ -117,49 +94,6 @@ public struct SettingsView: View {
                     } else {
                         ProgressView().frame(maxWidth: .infinity)
                     }
-                }
-
-                Section("MQTT Server") {
-                    LabeledField(label: "Host", text: $mqttHost, placeholder: "ai.ucar.cc")
-
-                    if let err = saveError {
-                        Text(err).font(.footnote).foregroundStyle(.red)
-                    }
-
-                    Button {
-                        save()
-                    } label: {
-                        Text("Save & Reconnect")
-                            .font(.body.weight(.medium))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!hasMQTTChanges || mqttHost.isEmpty)
-                }
-
-                Section {
-                    LabeledField(label: "URL", text: $supaURL,
-                                 placeholder: "https://<ref>.supabase.co")
-                    LabeledSecureField(label: "Key", text: $supaKey)
-
-                    if supaSaved {
-                        Text("Saved. Relaunch the app to apply.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Button {
-                        SupabaseServerStore.save(url: supaURL, key: supaKey)
-                        supaSaved = true
-                    } label: {
-                        Text("Save")
-                            .font(.body.weight(.medium))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(!hasSupabaseChanges || supaURL.isEmpty || supaKey.isEmpty)
-                } header: {
-                    Text("Supabase Server")
                 }
 
                 Section("Connected Agents") {
@@ -230,9 +164,6 @@ public struct SettingsView: View {
             }
             .navigationTitle("Settings").navigationBarTitleDisplayMode(.large)
             .task {
-                mqttHost = pairing.brokerHost
-                supaURL = SupabaseServerStore.currentURL()
-                supaKey = SupabaseServerStore.currentKey()
                 await loadTeam()
                 await connectedAgentsStore?.reload()
             }
@@ -250,17 +181,6 @@ public struct SettingsView: View {
         }
     }
 
-    private func save() {
-        do {
-            try pairing.updateMQTTServer(host: mqttHost)
-            saveError = nil
-            onReconnect?()
-            dismiss()
-        } catch {
-            saveError = error.localizedDescription
-        }
-    }
-
     private func loadTeam() async {
         guard let team = activeTeam else { return }
         do {
@@ -269,35 +189,6 @@ public struct SettingsView: View {
             teamLoadError = nil
         } catch {
             teamLoadError = error.localizedDescription
-        }
-    }
-}
-
-private struct LabeledField: View {
-    let label: String
-    @Binding var text: String
-    var placeholder: String = ""
-
-    var body: some View {
-        HStack {
-            Text(label).frame(width: 80, alignment: .leading)
-            TextField(placeholder, text: $text)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .multilineTextAlignment(.trailing)
-        }
-    }
-}
-
-private struct LabeledSecureField: View {
-    let label: String
-    @Binding var text: String
-
-    var body: some View {
-        HStack {
-            Text(label).frame(width: 80, alignment: .leading)
-            SecureField("", text: $text)
-                .multilineTextAlignment(.trailing)
         }
     }
 }

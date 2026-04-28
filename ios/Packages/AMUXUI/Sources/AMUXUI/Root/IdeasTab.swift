@@ -9,12 +9,9 @@ public struct IdeasTab: View {
     let mqtt: MQTTService
     let sessionViewModel: SessionListViewModel
     let connectedAgentsStore: ConnectedAgentsStore?
-    var onReconnect: (() -> Void)?
-    var onSignOut: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
 
-    @State private var showSettings = false
     @State private var showCreate = false
     @State private var navigationPath: [String] = []
     @State private var ideaStore: IdeaStore?
@@ -27,9 +24,7 @@ public struct IdeasTab: View {
         teamclawService: TeamclawService?,
         activeTeam: TeamSummary?,
         sessionViewModel: SessionListViewModel,
-        connectedAgentsStore: ConnectedAgentsStore? = nil,
-        onReconnect: (() -> Void)? = nil,
-        onSignOut: (() -> Void)? = nil
+        connectedAgentsStore: ConnectedAgentsStore? = nil
     ) {
         self.mqtt = mqtt
         self.pairing = pairing
@@ -37,8 +32,6 @@ public struct IdeasTab: View {
         self.activeTeam = activeTeam
         self.sessionViewModel = sessionViewModel
         self.connectedAgentsStore = connectedAgentsStore
-        self.onReconnect = onReconnect
-        self.onSignOut = onSignOut
     }
 
     public var body: some View {
@@ -47,12 +40,6 @@ public struct IdeasTab: View {
                 .navigationTitle(IdeaUIPresentation.pluralTitle)
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button { showSettings = true } label: {
-                            Image(systemName: "gearshape").font(.title3).foregroundStyle(.primary)
-                        }
-                        .buttonStyle(.plain)
-                    }
                     if ideaStore != nil {
                         ToolbarItem(placement: .navigationBarTrailing) {
                             Button { showCreate = true } label: {
@@ -61,13 +48,6 @@ public struct IdeasTab: View {
                             .buttonStyle(.plain)
                         }
                     }
-                }
-                .sheet(isPresented: $showSettings) {
-                    SettingsView(pairing: pairing,
-                                 connectedAgentsStore: connectedAgentsStore,
-                                 activeTeam: activeTeam,
-                                 onReconnect: onReconnect,
-                                 onSignOut: onSignOut)
                 }
                 .navigationDestination(for: String.self) { id in
                     if id.hasPrefix("idea:") {

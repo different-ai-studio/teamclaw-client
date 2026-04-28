@@ -13,10 +13,7 @@ public struct MembersTab: View {
     /// open the invite sheet without a toolbar tap. Toggled back to false
     /// after firing so subsequent triggers re-fire cleanly.
     @Binding var externalInviteTrigger: Bool
-    var onReconnect: (() -> Void)?
-    var onSignOut: (() -> Void)?
 
-    @State private var showSettings = false
     @State private var showInvite   = false
 
     public init(pairing: PairingManager,
@@ -26,9 +23,7 @@ public struct MembersTab: View {
                 activeTeam: TeamSummary?,
                 store: ActorStore,
                 connectedAgentsStore: ConnectedAgentsStore? = nil,
-                showInvite: Binding<Bool> = .constant(false),
-                onReconnect: (() -> Void)? = nil,
-                onSignOut: (() -> Void)? = nil) {
+                showInvite: Binding<Bool> = .constant(false)) {
         self.pairing = pairing
         self.mqtt = mqtt
         self.sessionViewModel = sessionViewModel
@@ -37,8 +32,6 @@ public struct MembersTab: View {
         self.store = store
         self.connectedAgentsStore = connectedAgentsStore
         self._externalInviteTrigger = showInvite
-        self.onReconnect = onReconnect
-        self.onSignOut = onSignOut
     }
 
     public var body: some View {
@@ -55,11 +48,6 @@ public struct MembersTab: View {
                 .navigationTitle("Actors")
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button { showSettings = true } label: {
-                            Image(systemName: "gearshape").font(.title3).foregroundStyle(.primary)
-                        }.buttonStyle(.plain)
-                    }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button { showInvite = true } label: {
                             Image(systemName: "person.badge.plus")
@@ -72,13 +60,6 @@ public struct MembersTab: View {
                         .accessibilityLabel("Invite Member")
                         .accessibilityIdentifier("members.inviteButton")
                     }
-                }
-                .sheet(isPresented: $showSettings) {
-                    SettingsView(pairing: pairing,
-                                 connectedAgentsStore: connectedAgentsStore,
-                                 activeTeam: activeTeam,
-                                 onReconnect: onReconnect,
-                                 onSignOut: onSignOut)
                 }
                 .sheet(isPresented: $showInvite) {
                     MemberInviteSheet(store: store)
