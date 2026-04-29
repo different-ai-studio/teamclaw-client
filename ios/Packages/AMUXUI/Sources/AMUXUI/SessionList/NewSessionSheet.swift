@@ -193,6 +193,15 @@ public struct NewSessionSheet: View {
             if collaborators.isEmpty, !preselectedCollaborators.isEmpty {
                 collaborators = preselectedCollaborators
             }
+            // Auto-pick the primary agent so the workspace row + agent
+            // picker render without forcing the user (or UI test) to open
+            // the Collaborators sheet first. Single-agent teams are the
+            // common case post-pairing; multi-agent teams still get a
+            // sensible default that the user can change via Collaborators.
+            if primaryAgentID == nil,
+               let first = connectedAgentsStore?.agents.first {
+                primaryAgentID = first.id
+            }
         }
         .onChange(of: selectedIdeaId) { _, newIdeaId in
             guard let newIdeaId,
