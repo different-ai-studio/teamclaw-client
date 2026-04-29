@@ -541,6 +541,7 @@ impl DaemonServer {
                 let current_model = self.agents.current_model(agent_id).cloned();
                 let team_id = sb.config().team_id.clone();
                 let actor_id = sb.config().actor_id.clone();
+                let runtime_id_owned = agent_id.to_string();
                 let sb_clone = sb.clone();
                 let now = chrono::Utc::now();
                 tokio::spawn(async move {
@@ -551,6 +552,7 @@ impl DaemonServer {
                         workspace_id: supabase_ws_id.as_deref(),
                         backend_type: "claude",
                         backend_session_id: if acp_sid.is_empty() { None } else { Some(acp_sid.as_str()) },
+                        runtime_id: Some(runtime_id_owned.as_str()),
                         status: supabase_status,
                         current_model: current_model.as_deref(),
                         last_seen_at: now,

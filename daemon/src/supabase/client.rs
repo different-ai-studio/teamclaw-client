@@ -277,6 +277,12 @@ pub struct AgentRuntimeUpsert<'a> {
     pub workspace_id: Option<&'a str>,
     pub backend_type: &'a str,
     pub backend_session_id: Option<&'a str>,
+    /// Daemon-side 8-char runtime id, the topic segment in
+    /// `runtime/{runtime_id}/state`. iOS uses it to bridge a Supabase
+    /// `agent_runtimes` row to the live MQTT-published `Runtime`. Distinct
+    /// from `backend_session_id` (the 36-char ACP session id used by the
+    /// daemon to resume a Claude Code session).
+    pub runtime_id: Option<&'a str>,
     pub status: &'a str,
     pub current_model: Option<&'a str>,
     pub last_seen_at: chrono::DateTime<chrono::Utc>,
@@ -765,6 +771,7 @@ mod tests {
             workspace_id: None,
             backend_type: "claude",
             backend_session_id: Some("s-1"),
+            runtime_id: Some("r-1"),
             status: "running",
             current_model: Some("opus"),
             last_seen_at: chrono::Utc::now(),
