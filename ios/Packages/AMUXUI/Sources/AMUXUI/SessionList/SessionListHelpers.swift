@@ -143,10 +143,11 @@ struct SessionListContent: View {
     }
 
     /// Bridge from a Supabase `agent_runtimes` row to its MQTT-published
-    /// `Runtime` snapshot via `backend_session_id`. Nil when the daemon is
-    /// offline or hasn't published yet.
+    /// `Runtime` snapshot via `runtime_id` (the daemon's 8-char id, distinct
+    /// from `backend_session_id`'s 36-char ACP session id). Nil when the
+    /// daemon is offline or hasn't published yet.
     private func liveRuntime(for cached: CachedAgentRuntime?) -> Runtime? {
-        guard let bridge = cached?.backendSessionId, !bridge.isEmpty else { return nil }
+        guard let bridge = cached?.runtimeId, !bridge.isEmpty else { return nil }
         return viewModel.runtimes.first(where: { $0.runtimeId == bridge })
     }
 

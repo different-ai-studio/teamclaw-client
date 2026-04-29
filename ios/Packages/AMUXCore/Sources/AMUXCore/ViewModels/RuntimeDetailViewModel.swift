@@ -118,14 +118,14 @@ public final class RuntimeDetailViewModel {
     ///
     /// `session.primaryAgentId` is the daemon's full Supabase actor id —
     /// not the daemon's MQTT runtime id (`Runtime.runtimeId` is 8-char).
-    /// The bridge between the two is `CachedAgentRuntime.backendSessionId`,
+    /// The bridge between the two is `CachedAgentRuntime.runtimeId`,
     /// populated by SessionListVM from Supabase. We pick the most-recently-
     /// updated `agent_runtimes` row for this session, then look up the
-    /// matching `Runtime` by `backendSessionId`.
+    /// matching `Runtime` by `runtimeId`.
     ///
     /// Returns nil when no bridge is available yet (no cached runtime row,
-    /// or its `backendSessionId` is empty). Callers that publish ACP
-    /// commands gate on a non-nil runtime so we don't post to a phantom
+    /// or its `runtimeId` is empty). Callers that publish ACP commands
+    /// gate on a non-nil runtime so we don't post to a phantom
     /// `runtime/{full-uuid}/commands` topic the daemon can't route.
     private func resolveRuntime(modelContext: ModelContext) -> Runtime? {
         if let runtime { return runtime }
@@ -137,7 +137,7 @@ public final class RuntimeDetailViewModel {
         )
         let cachedRows = (try? modelContext.fetch(cachedDescriptor)) ?? []
         let cached = cachedRows.max(by: { $0.updatedAt < $1.updatedAt })
-        guard let bridge = cached?.backendSessionId, !bridge.isEmpty else {
+        guard let bridge = cached?.runtimeId, !bridge.isEmpty else {
             return nil
         }
 

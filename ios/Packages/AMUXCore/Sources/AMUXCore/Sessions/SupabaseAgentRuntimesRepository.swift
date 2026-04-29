@@ -13,6 +13,11 @@ public struct AgentRuntimeRecord: Equatable, Sendable {
     public let backendType: String
     public let status: String
     public let backendSessionID: String?
+    /// Daemon-side 8-char runtime id (the segment in the MQTT topic
+    /// `runtime/{runtime_id}/state`). The bridge to the live SwiftData
+    /// `Runtime` row — distinct from `backendSessionID`, which is the
+    /// 36-char ACP session id used by the daemon to resume Claude Code.
+    public let runtimeID: String?
     public let currentModel: String?
     public let lastSeenAt: Date?
     public let createdAt: Date
@@ -54,6 +59,7 @@ public actor SupabaseAgentRuntimesRepository: AgentRuntimesRepository {
                 backend_type,
                 status,
                 backend_session_id,
+                runtime_id,
                 current_model,
                 last_seen_at,
                 created_at,
@@ -75,6 +81,7 @@ public actor SupabaseAgentRuntimesRepository: AgentRuntimesRepository {
                 backendType: row.backendType,
                 status: row.status,
                 backendSessionID: row.backendSessionID,
+                runtimeID: row.runtimeID,
                 currentModel: row.currentModel,
                 lastSeenAt: row.lastSeenAt,
                 createdAt: row.createdAt,
@@ -93,6 +100,7 @@ private struct AgentRuntimeRow: Decodable, Sendable {
     let backendType: String
     let status: String
     let backendSessionID: String?
+    let runtimeID: String?
     let currentModel: String?
     let lastSeenAt: Date?
     let createdAt: Date
@@ -107,6 +115,7 @@ private struct AgentRuntimeRow: Decodable, Sendable {
         case backendType = "backend_type"
         case status
         case backendSessionID = "backend_session_id"
+        case runtimeID = "runtime_id"
         case currentModel = "current_model"
         case lastSeenAt = "last_seen_at"
         case createdAt = "created_at"

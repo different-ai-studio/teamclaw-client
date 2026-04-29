@@ -377,6 +377,7 @@ public final class SessionListViewModel {
             row.backendType = record.backendType
             row.status = record.status
             row.backendSessionId = record.backendSessionID
+            row.runtimeId = record.runtimeID
             row.currentModel = record.currentModel
             row.lastSeenAt = record.lastSeenAt
             row.createdAt = record.createdAt

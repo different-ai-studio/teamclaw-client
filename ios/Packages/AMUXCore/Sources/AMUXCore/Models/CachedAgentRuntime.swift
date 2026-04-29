@@ -19,10 +19,15 @@ public final class CachedAgentRuntime {
     public var backendType: String
     /// "starting" | "running" | "idle" | "stopped" | "failed"
     public var status: String
-    /// Bridge to the MQTT-published `Runtime.runtimeId` (8-char). When the
-    /// daemon is online and publishing, the matching live Runtime can be
-    /// looked up by this value.
+    /// 36-char ACP session id used by the daemon to resume the Claude Code
+    /// session. **Not** the bridge to the MQTT `Runtime` row — use
+    /// `runtimeId` for that.
     public var backendSessionId: String?
+    /// Daemon-side 8-char runtime id (the segment in MQTT topic
+    /// `runtime/{runtime_id}/state`). Bridge to the live SwiftData `Runtime`
+    /// row. Optional because rows written before the column existed have
+    /// nil here; placeholder Runtime is used until the daemon re-upserts.
+    public var runtimeId: String?
     public var currentModel: String?
     public var lastSeenAt: Date?
     public var createdAt: Date
@@ -37,6 +42,7 @@ public final class CachedAgentRuntime {
         backendType: String,
         status: String,
         backendSessionId: String? = nil,
+        runtimeId: String? = nil,
         currentModel: String? = nil,
         lastSeenAt: Date? = nil,
         createdAt: Date = .now,
@@ -50,6 +56,7 @@ public final class CachedAgentRuntime {
         self.backendType = backendType
         self.status = status
         self.backendSessionId = backendSessionId
+        self.runtimeId = runtimeId
         self.currentModel = currentModel
         self.lastSeenAt = lastSeenAt
         self.createdAt = createdAt
