@@ -13,8 +13,6 @@ pub struct TeamclawSessionStore {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredSession {
     pub session_id: String,
-    /// "control" or "collab"
-    pub session_type: String,
     pub team_id: String,
     pub title: String,
     pub created_by: String,
@@ -99,7 +97,9 @@ impl TeamclawSessionStore {
             }).collect();
             teamclaw::SessionInfo {
                 session_id: s.session_id.clone(),
-                session_type: session_type_to_proto(&s.session_type) as i32,
+                // session_type is a deprecated proto field — every iOS-created
+                // session is a single kind now. Stamp UNKNOWN (0) for back-compat.
+                session_type: teamclaw::SessionType::Unknown as i32,
                 team_id: s.team_id.clone(),
                 title: s.title.clone(),
                 created_by: s.created_by.clone(),
@@ -112,14 +112,6 @@ impl TeamclawSessionStore {
                 last_message_at: 0,
             }
         })
-    }
-}
-
-fn session_type_to_proto(s: &str) -> teamclaw::SessionType {
-    match s {
-        "control" => teamclaw::SessionType::Control,
-        "collab" => teamclaw::SessionType::Collab,
-        _ => teamclaw::SessionType::Unknown,
     }
 }
 
@@ -138,10 +130,9 @@ mod tests {
     use chrono::Utc;
     use tempfile::TempDir;
 
-    fn make_session(id: &str, session_type: &str) -> StoredSession {
+    fn make_session(id: &str, _session_type: &str) -> StoredSession {
         StoredSession {
             session_id: id.to_string(),
-            session_type: session_type.to_string(),
             team_id: "team1".to_string(),
             title: format!("Session {}", id),
             created_by: "user1".to_string(),

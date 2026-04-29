@@ -522,7 +522,6 @@ public final class TeamclawService {
         ideaId: String = ""
     ) -> Teamclaw_CreateSessionRequest {
         var createReq = Teamclaw_CreateSessionRequest()
-        createReq.sessionType = .collab
         createReq.teamID = teamId
         createReq.title = title
         createReq.summary = summary

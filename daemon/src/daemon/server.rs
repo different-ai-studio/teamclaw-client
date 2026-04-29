@@ -946,40 +946,33 @@ impl DaemonServer {
 
     /// Derive the caller's MemberRole via a Supabase `agent_member_access`
     /// lookup keyed on (our own agent actor id, envelope's sender_actor_id).
-    /// Falls back to the MQTT-era peer/token role only on a transient
-    /// Supabase RPC error — Supabase itself is now a startup requirement.
-    async fn resolve_role(&mut self, sender_actor_id: &str, peer_id: &str) -> amux::MemberRole {
-        if !sender_actor_id.is_empty() {
-            let sb = &self.supabase;
-            let my_agent_id = sb.config().actor_id.clone();
-            match sb.check_agent_permission(&my_agent_id, sender_actor_id).await {
-                Ok(Some(level)) => {
-                    return match level.as_str() {
-                        "admin" => amux::MemberRole::Owner,
-                        "write" => amux::MemberRole::Member,
-                        _ => amux::MemberRole::Member,
-                    };
-                }
-                Ok(None) => {
-                    warn!(actor_id = %sender_actor_id, "no agent_member_access grant");
-                    return amux::MemberRole::Member;
-                }
-                Err(e) => {
-                    warn!(%e, "supabase permission check failed; falling back to peer role");
-                }
+    /// Supabase is the sole source of truth — on any failure (RPC error,
+    /// missing sender_actor_id) the caller is denied (`Member` is the safe
+    /// no-op level). Previous versions fell back to a `peer_id` token-prefix
+    /// scrape against members.toml, which let anyone who guessed a 6-char
+    /// prefix masquerade as a member during a Supabase outage; that path
+    /// is gone.
+    async fn resolve_role(&mut self, sender_actor_id: &str, _peer_id: &str) -> amux::MemberRole {
+        if sender_actor_id.is_empty() {
+            warn!("resolve_role: empty sender_actor_id, denying as Member");
+            return amux::MemberRole::Member;
+        }
+        let sb = &self.supabase;
+        let my_agent_id = sb.config().actor_id.clone();
+        match sb.check_agent_permission(&my_agent_id, sender_actor_id).await {
+            Ok(Some(level)) => match level.as_str() {
+                "admin" => amux::MemberRole::Owner,
+                "write" | _ => amux::MemberRole::Member,
+            },
+            Ok(None) => {
+                warn!(actor_id = %sender_actor_id, "no agent_member_access grant");
+                amux::MemberRole::Member
+            }
+            Err(e) => {
+                warn!(%e, actor_id = %sender_actor_id, "supabase permission check failed; denying");
+                amux::MemberRole::Member
             }
         }
-
-        self.peers.get_peer(peer_id)
-            .map(|p| p.role)
-            .unwrap_or_else(|| {
-                let token_prefix = peer_id
-                    .strip_prefix("ios-")
-                    .or_else(|| peer_id.strip_prefix("mac-"))
-                    .unwrap_or(peer_id);
-                self.auth.find_role_by_token_prefix(token_prefix)
-                    .unwrap_or(amux::MemberRole::Member)
-            })
     }
 
     async fn handle_agent_command(&mut self, agent_id: &str, envelope: amux::RuntimeCommandEnvelope) {

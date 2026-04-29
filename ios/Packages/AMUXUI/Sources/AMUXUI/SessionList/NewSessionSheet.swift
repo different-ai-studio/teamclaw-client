@@ -925,7 +925,6 @@ public struct NewSessionSheet: View {
     ) -> Teamclaw_SessionInfo {
         var info = Teamclaw_SessionInfo()
         info.sessionID = sessionID
-        info.sessionType = .collab
         info.teamID = effectiveTeamID
         info.title = title
         info.createdBy = currentActorID

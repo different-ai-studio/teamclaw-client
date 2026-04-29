@@ -126,15 +126,6 @@ impl AuthManager {
         self.reload_if_changed();
         self.store.members.iter().any(|m| m.member_id == member_id && m.is_owner())
     }
-
-    /// Look up a member's role by matching the start of their token.
-    /// Used when peer state was lost (daemon restart) but we can recover from peer_id format.
-    pub fn find_role_by_token_prefix(&mut self, prefix: &str) -> Option<amux::MemberRole> {
-        self.reload_if_changed();
-        self.store.members.iter()
-            .find(|m| m.token.starts_with(prefix))
-            .map(|m| if m.is_owner() { amux::MemberRole::Owner } else { amux::MemberRole::Member })
-    }
 }
 
 #[cfg(test)]

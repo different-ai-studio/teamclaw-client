@@ -253,7 +253,6 @@ public struct RuntimeDetailView: View {
             : runtime.lastOutputSummary
 
         var createReq = Teamclaw_CreateSessionRequest()
-        createReq.sessionType = .collab
         createReq.teamID = viewModel.session?.teamId ?? ""
         createReq.title = runtime.sessionTitle.isEmpty
             ? "Collab: \(runtime.worktree.split(separator: "/").last.map(String.init) ?? runtime.runtimeId)"

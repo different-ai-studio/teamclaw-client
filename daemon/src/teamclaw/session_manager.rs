@@ -154,14 +154,9 @@ impl SessionManager {
         _host_primary_agent_id: Option<String>,
     ) -> RpcResponse {
         let session_id = Uuid::new_v4().to_string();
-        let session_type = match r.session_type {
-            x if x == teamclaw::SessionType::Control as i32 => "control",
-            _ => "collab",
-        };
 
         let session = StoredSession {
             session_id: session_id.clone(),
-            session_type: session_type.to_string(),
             team_id: r.team_id.clone(),
             title: r.title.clone(),
             created_by: if !r.sender_actor_id.is_empty() {
@@ -569,11 +564,6 @@ impl SessionManager {
         session: &crate::supabase::SupabaseSessionRow,
         participants: &[crate::supabase::SupabaseParticipantRow],
     ) -> crate::error::Result<()> {
-        let session_type = match session.mode.as_str() {
-            "control" => "control",
-            _ => "collab",
-        };
-
         let local_actor_id = self.actor_id.as_deref();
         let stored_participants: Vec<StoredParticipant> = participants
             .iter()
@@ -594,7 +584,6 @@ impl SessionManager {
 
         let stored = StoredSession {
             session_id: session.id.clone(),
-            session_type: session_type.to_string(),
             team_id: session.team_id.clone(),
             title: session.title.clone(),
             created_by: session.created_by_actor_id.clone().unwrap_or_default(),
@@ -1450,14 +1439,6 @@ fn canonical_idea_store_key(session_id: &str) -> &str {
     if session_id.is_empty() { "global" } else { session_id }
 }
 
-fn session_type_to_proto(s: &str) -> teamclaw::SessionType {
-    match s {
-        "control" => teamclaw::SessionType::Control,
-        "collab" => teamclaw::SessionType::Collab,
-        _ => teamclaw::SessionType::Unknown,
-    }
-}
-
 pub(crate) fn message_kind_to_string(kind: i32) -> String {
     match teamclaw::MessageKind::try_from(kind).unwrap_or(teamclaw::MessageKind::Unknown) {
         teamclaw::MessageKind::Text => "text",
@@ -1510,7 +1491,6 @@ mod tests {
     fn make_session(id: &str) -> StoredSession {
         StoredSession {
             session_id: id.to_string(),
-            session_type: "collab".to_string(),
             team_id: "team1".to_string(),
             title: format!("Session {}", id),
             created_by: "user1".to_string(),
