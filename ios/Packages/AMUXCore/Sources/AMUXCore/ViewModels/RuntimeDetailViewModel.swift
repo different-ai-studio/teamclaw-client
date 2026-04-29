@@ -677,6 +677,7 @@ public final class RuntimeDetailViewModel {
         let seenIDs = Set(alreadySeeded.compactMap(\.supabaseMessageId))
 
         var inserted: [AgentEvent] = []
+        var backfilled = false
         for record in messages {
             guard !seenIDs.contains(record.id) else { continue }
             let eventType: String
@@ -685,6 +686,24 @@ public final class RuntimeDetailViewModel {
             case "user_message", "user_prompt": eventType = "user_prompt"
             default: continue
             }
+
+            // Cross-source dedupe: if the same turn was already inserted by
+            // the live ACP path (streaming output landing as an `output`
+            // event, or the local user_prompt added by `sendPrompt`), backfill
+            // its `supabaseMessageId` instead of inserting a duplicate. The
+            // existing event keeps its real sequence/timestamp; future reopens
+            // skip it via the `supabaseMessageId` filter above.
+            if let existing = events.first(where: {
+                $0.supabaseMessageId == nil
+                    && $0.eventType == eventType
+                    && $0.text == record.content
+            }) {
+                existing.supabaseMessageId = record.id
+                if existing.model == nil { existing.model = record.model }
+                backfilled = true
+                continue
+            }
+
             let event = AgentEvent(agentId: scope, sequence: 0, eventType: eventType)
             event.supabaseMessageId = record.id
             event.text = record.content
@@ -695,7 +714,11 @@ public final class RuntimeDetailViewModel {
             inserted.append(event)
         }
 
-        guard !inserted.isEmpty else { return }
+        if backfilled { try? modelContext.save() }
+        guard !inserted.isEmpty else {
+            if backfilled { recomputeGroups() }
+            return
+        }
         try? modelContext.save()
 
         // Splice into the in-memory list at the right timestamp slots so
