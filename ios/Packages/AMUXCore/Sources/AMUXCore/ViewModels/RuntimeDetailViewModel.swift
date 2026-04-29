@@ -123,10 +123,11 @@ public final class RuntimeDetailViewModel {
     /// updated `agent_runtimes` row for this session, then look up the
     /// matching `Runtime` by `runtimeId`.
     ///
-    /// Returns nil when no bridge is available yet (no cached runtime row,
-    /// or its `runtimeId` is empty). Callers that publish ACP commands
-    /// gate on a non-nil runtime so we don't post to a phantom
-    /// `runtime/{full-uuid}/commands` topic the daemon can't route.
+    /// When no live Runtime row exists yet (just-spawned, daemon offline,
+    /// or the cached row predates the runtime_id column), synthesize a
+    /// placeholder seeded from `cached.backendType` so the composer's
+    /// model picker still renders. Returns nil only when there's no
+    /// session at all (collab-only flows pre-create-session).
     private func resolveRuntime(modelContext: ModelContext) -> Runtime? {
         if let runtime { return runtime }
         guard let session else { return nil }
@@ -137,25 +138,77 @@ public final class RuntimeDetailViewModel {
         )
         let cachedRows = (try? modelContext.fetch(cachedDescriptor)) ?? []
         let cached = cachedRows.max(by: { $0.updatedAt < $1.updatedAt })
-        guard let bridge = cached?.runtimeId, !bridge.isEmpty else {
-            return nil
+
+        // Prefer the 8-char runtime_id (correct topic segment for
+        // runtime/{id}/commands). Fall back to backend_session_id only as
+        // a last-resort identity for the placeholder when a brand-new
+        // session hasn't been re-fetched from Supabase yet — commands
+        // sent on this id won't route, but the UI renders.
+        let bridge = nonEmpty(cached?.runtimeId) ?? nonEmpty(cached?.backendSessionId) ?? ""
+
+        if !bridge.isEmpty {
+            let runtimeDescriptor = FetchDescriptor<Runtime>(
+                predicate: #Predicate { $0.runtimeId == bridge }
+            )
+            if let resolved = (try? modelContext.fetch(runtimeDescriptor))?.first {
+                runtime = resolved
+                return runtime
+            }
         }
 
-        let runtimeDescriptor = FetchDescriptor<Runtime>(
-            predicate: #Predicate { $0.runtimeId == bridge }
+        // Daemon's published runtime row hasn't reached SwiftData yet
+        // (e.g. just-spawned, daemon offline, or pending Supabase
+        // refresh). Build an in-memory placeholder so the composer can
+        // show the model picker before MQTT or Supabase catches up.
+        let placeholder = Runtime(
+            runtimeId: bridge,
+            agentType: agentTypeRaw(for: cached?.backendType),
+            status: 1
         )
-        if let resolved = (try? modelContext.fetch(runtimeDescriptor))?.first {
-            runtime = resolved
-        } else {
-            // Daemon's published runtime row hasn't reached SwiftData yet
-            // (e.g. just-spawned, or daemon offline). Use a placeholder
-            // keyed on the real 8-char id so commands route correctly.
-            let placeholder = Runtime(runtimeId: bridge, status: 1)
-            placeholder.sessionTitle = session.title
-            placeholder.currentPrompt = session.summary
-            runtime = placeholder
-        }
+        placeholder.sessionTitle = session.title
+        placeholder.currentPrompt = session.summary
+        placeholder.availableModelsJSON = encodedDefaultModels(for: cached?.backendType)
+        if let m = cached?.currentModel, !m.isEmpty { placeholder.currentModel = m }
+        runtime = placeholder
         return runtime
+    }
+
+    private func nonEmpty(_ s: String?) -> String? {
+        guard let s, !s.isEmpty else { return nil }
+        return s
+    }
+
+    private func agentTypeRaw(for backendType: String?) -> Int {
+        switch backendType {
+        case "claude": return 1
+        case "opencode": return 2
+        case "codex": return 3
+        default: return 1
+        }
+    }
+
+    /// Mirrors the daemon's hardcoded `available_models_for(agent_type)` so
+    /// the placeholder Runtime has a populated picker before the live
+    /// MQTT-published Runtime row arrives. Keep these lists in sync with
+    /// `daemon/src/runtime/models.rs`.
+    private func encodedDefaultModels(for backendType: String?) -> String {
+        let models: [AvailableModel]
+        switch backendType {
+        case "claude":
+            models = [
+                AvailableModel(id: "claude-haiku-4-5", displayName: "Claude Haiku 4.5"),
+                AvailableModel(id: "claude-sonnet-4-6", displayName: "Claude Sonnet 4.6"),
+                AvailableModel(id: "claude-opus-4-7", displayName: "Claude Opus 4.7"),
+            ]
+        default:
+            models = []
+        }
+        guard !models.isEmpty,
+              let data = try? JSONEncoder().encode(models),
+              let json = String(data: data, encoding: .utf8) else {
+            return ""
+        }
+        return json
     }
 
     /// Rebuilds `groupedEvents` from `events`. Call after any mutation that
