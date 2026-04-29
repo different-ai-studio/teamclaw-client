@@ -114,21 +114,43 @@ public final class RuntimeDetailViewModel {
         return ""
     }
 
+    /// Resolves the live `Runtime` row that backs this session.
+    ///
+    /// `session.primaryAgentId` is the daemon's full Supabase actor id —
+    /// not the daemon's MQTT runtime id (`Runtime.runtimeId` is 8-char).
+    /// The bridge between the two is `CachedAgentRuntime.backendSessionId`,
+    /// populated by SessionListVM from Supabase. We pick the most-recently-
+    /// updated `agent_runtimes` row for this session, then look up the
+    /// matching `Runtime` by `backendSessionId`.
+    ///
+    /// Returns nil when no bridge is available yet (no cached runtime row,
+    /// or its `backendSessionId` is empty). Callers that publish ACP
+    /// commands gate on a non-nil runtime so we don't post to a phantom
+    /// `runtime/{full-uuid}/commands` topic the daemon can't route.
     private func resolveRuntime(modelContext: ModelContext) -> Runtime? {
-        if let runtime {
-            return runtime
-        }
-        guard let primaryAgentId = session?.primaryAgentId, !primaryAgentId.isEmpty else {
+        if let runtime { return runtime }
+        guard let session else { return nil }
+
+        let sessionId = session.sessionId
+        let cachedDescriptor = FetchDescriptor<CachedAgentRuntime>(
+            predicate: #Predicate { $0.sessionId == sessionId }
+        )
+        let cachedRows = (try? modelContext.fetch(cachedDescriptor)) ?? []
+        let cached = cachedRows.max(by: { $0.updatedAt < $1.updatedAt })
+        guard let bridge = cached?.backendSessionId, !bridge.isEmpty else {
             return nil
         }
-        let descriptor = FetchDescriptor<Runtime>(
-            predicate: #Predicate { $0.runtimeId == primaryAgentId }
+
+        let runtimeDescriptor = FetchDescriptor<Runtime>(
+            predicate: #Predicate { $0.runtimeId == bridge }
         )
-        let resolved = (try? modelContext.fetch(descriptor))?.first
-        if let resolved {
+        if let resolved = (try? modelContext.fetch(runtimeDescriptor))?.first {
             runtime = resolved
-        } else if let session {
-            let placeholder = Runtime(runtimeId: primaryAgentId, status: 1)
+        } else {
+            // Daemon's published runtime row hasn't reached SwiftData yet
+            // (e.g. just-spawned, or daemon offline). Use a placeholder
+            // keyed on the real 8-char id so commands route correctly.
+            let placeholder = Runtime(runtimeId: bridge, status: 1)
             placeholder.sessionTitle = session.title
             placeholder.currentPrompt = session.summary
             runtime = placeholder
@@ -735,6 +757,13 @@ public final class RuntimeDetailViewModel {
         var cmd = Amux_RuntimeCommandEnvelope()
         cmd.runtimeID = runtime.runtimeId; cmd.deviceID = daemonDeviceId; cmd.peerID = peerId
         cmd.commandID = UUID().uuidString; cmd.timestamp = Int64(Date().timeIntervalSince1970)
+        // Stamp the human Supabase actor id so the daemon can resolve the
+        // sender's permission level via `agent_member_access` instead of
+        // falling back to the legacy peer-id lookup. Empty when not yet
+        // bootstrapped (rare, but fail-soft — the daemon denies as Member).
+        if let actorId = teamclawService?.currentHumanActorId, !actorId.isEmpty {
+            cmd.senderActorID = actorId
+        }
         var acpCmd = Amux_AcpCommand()
         makeCommand(&acpCmd)
         cmd.acpCommand = acpCmd
