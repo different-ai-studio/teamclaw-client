@@ -318,22 +318,16 @@ public final class RuntimeDetailViewModel {
 
         recomputeGroups()
 
-        // Two subscription paths:
-        //   - Session-backed (the modern flow): subscribe to
-        //     `amux/{team}/session/{sid}/live` and decode `Amux_Envelope` out
-        //     of LiveEventEnvelope bodies tagged `event_type = "acp.event"`.
-        //     iOS owns the session_id so this avoids the deviceId/runtimeId
-        //     resolution dance that the legacy runtime/{r}/events path needed.
-        //   - Runtime-only (legacy fallback): subscribe to
-        //     `runtime/{r}/events` directly and decode raw envelopes. This
-        //     path stays for now because IdeasTab/SessionsTab still create
-        //     RuntimeDetailView from a Runtime row without a Session.
-        let sessionLiveTopic: String? = session.map {
-            MQTTTopics.sessionLive(teamID: teamID, sessionID: $0.sessionId)
+        // Single subscription path: session/{sid}/live. iOS only ever
+        // resolves a session-backed detail view — bare-runtime navigation
+        // was deleted alongside RuntimeDestinationView. Daemon mirrors this
+        // by fanning all agent envelopes (ACP events + HistoryBatch
+        // replies) onto the same topic.
+        guard let session else {
+            print("[RuntimeDetailVM] no session bound; skipping subscribe")
+            return
         }
-        let resolvedDeviceId = resolveDaemonDeviceId()
-        let runtimeEventsTopic = MQTTTopics.runtimeEvents(teamID: teamID, deviceID: resolvedDeviceId, runtimeID: runtimeId)
-        let subscribeTopic = sessionLiveTopic ?? runtimeEventsTopic
+        let subscribeTopic = MQTTTopics.sessionLive(teamID: teamID, sessionID: session.sessionId)
         task = Task {
             // Outer loop: each iteration represents a fresh MQTT connection lifecycle.
             // When the inner stream finishes (e.g. after disconnect clears continuations),
@@ -371,16 +365,11 @@ public final class RuntimeDetailViewModel {
                 try? await self.requestIncrementalSync(modelContext: modelContext)
 
                 for await msg in stream {
-                    guard msg.topic == subscribeTopic else { continue }
-                    let envelope: Amux_Envelope?
-                    if sessionLiveTopic != nil {
-                        guard let live = try? Teamclaw_LiveEventEnvelope(serializedBytes: msg.payload),
-                              live.eventType == "acp.event" else { continue }
-                        envelope = try? Amux_Envelope(serializedBytes: live.body)
-                    } else {
-                        envelope = try? Amux_Envelope(serializedBytes: msg.payload)
-                    }
-                    guard let envelope else { continue }
+                    guard msg.topic == subscribeTopic,
+                          let live = try? Teamclaw_LiveEventEnvelope(serializedBytes: msg.payload),
+                          live.eventType == "acp.event",
+                          let envelope = try? Amux_Envelope(serializedBytes: live.body)
+                    else { continue }
                     handleEnvelope(envelope, modelContext: modelContext)
                 }
                 // Stream finished — connection likely dropped. Loop and resubscribe.

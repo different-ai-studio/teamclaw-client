@@ -11,14 +11,6 @@ impl<'a> Publisher<'a> {
         Self { client }
     }
 
-    /// Publishes Envelope to runtime/{id}/events. Ephemeral; no retain.
-    pub async fn publish_runtime_event(&self, agent_id: &str, envelope: &amux::Envelope) -> Result<(), rumqttc::ClientError> {
-        let payload = envelope.encode_to_vec();
-        self.client.client
-            .publish(self.client.topics.runtime_events(agent_id), QoS::AtLeastOnce, false, payload)
-            .await
-    }
-
     /// Publishes RuntimeInfo to the retained runtime/{id}/state topic.
     pub async fn publish_runtime_state(&self, agent_id: &str, info: &amux::RuntimeInfo) -> Result<(), rumqttc::ClientError> {
         let payload = info.encode_to_vec();

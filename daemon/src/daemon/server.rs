@@ -499,8 +499,7 @@ impl DaemonServer {
                         payload: Some(amux::envelope::Payload::AcpEvent(update_event)),
                     };
                     self.history.append(agent_id, &envelope);
-                    let publisher = Publisher::new(&self.mqtt);
-                    let _ = publisher.publish_runtime_event(agent_id, &envelope).await;
+                    self.publish_envelope_to_sessions(agent_id, &envelope).await;
                 }
                 return;
             }
@@ -661,25 +660,29 @@ impl DaemonServer {
         if !is_ambient {
             self.history.append(agent_id, &envelope);
         }
-        // Fan out to session/{sid}/live for every session this agent
-        // participates in. Replaces the legacy runtime/{r}/events topic which
-        // required iOS to know the daemon's device_id and the spawn-time
-        // runtime_id — now iOS subscribes by session_id (which it owns).
-        // Untracked agents (e.g. ambient pre-session events) fall back to the
-        // legacy per-runtime topic so the event isn't dropped on the floor.
+        self.publish_envelope_to_sessions(agent_id, &envelope).await;
+    }
+
+    /// Single sink for agent-originated envelopes. Fans out to
+    /// `session/{sid}/live` for every session the agent is bound to.
+    /// Returns silently when the agent has no session — every iOS
+    /// session is session-backed today, so a bound-less agent is a
+    /// legacy bare-runtime spawn whose `runtime/{rid}/events` topic
+    /// has no subscriber. Logs a warn so it shows up if regression
+    /// reintroduces session-less spawns.
+    async fn publish_envelope_to_sessions(&self, agent_id: &str, envelope: &amux::Envelope) {
+        let Some(tc) = self.teamclaw.as_ref() else {
+            warn!(agent_id, "no teamclaw client; dropping envelope");
+            return;
+        };
         let sessions = self.target_sessions(agent_id);
-        if let (false, Some(tc)) = (sessions.is_empty(), self.teamclaw.as_ref()) {
-            // Use the daemon's Supabase actor_id (not the per-spawn 8-char agent_id)
-            // because session participants store Supabase agent UUIDs.
-            let actor_id = self.actor_id.clone();
-            for sid in &sessions {
-                tc.publish_agent_acp_event(sid, &actor_id, &envelope).await;
-            }
-        } else {
-            let publisher = Publisher::new(&self.mqtt);
-            if let Err(e) = publisher.publish_runtime_event(agent_id, &envelope).await {
-                warn!(agent_id, "failed to publish agent event (legacy fallback): {}", e);
-            }
+        if sessions.is_empty() {
+            warn!(agent_id, "agent has no bound session; dropping envelope");
+            return;
+        }
+        let actor_id = self.actor_id.clone();
+        for sid in &sessions {
+            tc.publish_agent_acp_event(sid, &actor_id, envelope).await;
         }
     }
 
@@ -1275,13 +1278,11 @@ impl DaemonServer {
         }
     }
 
-    /// Publish a collab event (e.g. HistoryBatch reply) so iOS can pick it
-    /// up through whichever channel it's subscribed on. Session-backed
-    /// iOS subscribes to `session/{sid}/live` only and never to the legacy
-    /// `runtime/{rid}/events` topic, so we mirror the forward_agent_event
-    /// fanout: prefer the session live topic for runtimes tied to a collab
-    /// session, fall back to the legacy per-runtime events topic for
-    /// session-less spawns.
+    /// Publish a session event (e.g. HistoryBatch reply) onto the same
+    /// canonical sink as agent-originated envelopes. Reuses
+    /// `publish_envelope_to_sessions` so HistoryBatch responses land on
+    /// `session/{sid}/live` next to the streaming output that triggered
+    /// them — iOS subscribes there exclusively.
     async fn publish_session_event(&self, agent_id: &str, event: amux::SessionEvent) {
         let envelope = amux::Envelope {
             runtime_id: agent_id.into(),
@@ -1291,16 +1292,7 @@ impl DaemonServer {
             sequence: 0,
             payload: Some(amux::envelope::Payload::SessionEvent(event)),
         };
-        let sessions = self.target_sessions(agent_id);
-        if let (false, Some(tc)) = (sessions.is_empty(), self.teamclaw.as_ref()) {
-            let actor_id = self.actor_id.clone();
-            for sid in &sessions {
-                tc.publish_agent_acp_event(sid, &actor_id, &envelope).await;
-            }
-        } else {
-            let publisher = Publisher::new(&self.mqtt);
-            let _ = publisher.publish_runtime_event(agent_id, &envelope).await;
-        }
+        self.publish_envelope_to_sessions(agent_id, &envelope).await;
     }
 
     // ─── Non-session RPC handlers ───

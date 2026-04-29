@@ -56,10 +56,6 @@ public enum MQTTTopics {
         "\(deviceBase(teamID: teamID, deviceID: deviceID))/runtime/"
     }
 
-    public static func runtimeEvents(teamID: String, deviceID: String, runtimeID: String) -> String {
-        "\(deviceBase(teamID: teamID, deviceID: deviceID))/runtime/\(runtimeID)/events"
-    }
-
     public static func runtimeCommands(teamID: String, deviceID: String, runtimeID: String) -> String {
         "\(deviceBase(teamID: teamID, deviceID: deviceID))/runtime/\(runtimeID)/commands"
     }
