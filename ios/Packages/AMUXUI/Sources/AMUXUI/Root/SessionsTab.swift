@@ -164,20 +164,21 @@ private struct SessionDestinationView: View {
     var body: some View {
         Group {
             if let session {
-                if session.primaryAgentId == nil || !pairing.isPaired {
-                    SessionView(
-                        session: session,
-                        teamclawService: teamclawService,
-                        currentActorID: currentActorID
-                    )
-                    .id("session:\(session.sessionId)")
-                } else {
-                    RuntimeDetailView(session: session, mqtt: mqtt,
-                                      peerId: "ios-\(pairing.authToken.prefix(6))",
-                                      teamclawService: teamclawService,
-                                      connectedAgentsStore: connectedAgentsStore)
-                    .id("collab-agent:\(session.sessionId)")
-                }
+                // Single detail surface — RuntimeDetailView handles the
+                // session-only case (no runtime yet, no pairing, etc.) by
+                // seeding past messages from Supabase and skipping the
+                // MQTT subscribe / composer-send paths until a runtime
+                // resolves. The previous SessionView/CollabSessionView
+                // branch was a parallel storage backed by SessionMessage;
+                // dropped here as part of the unified detail-view sweep.
+                RuntimeDetailView(
+                    session: session,
+                    mqtt: mqtt,
+                    peerId: "ios-\(pairing.authToken.prefix(6))",
+                    teamclawService: teamclawService,
+                    connectedAgentsStore: connectedAgentsStore
+                )
+                .id("session:\(session.sessionId)")
             } else {
                 // Don't flash "Session not found" while SwiftData /
                 // Supabase round-trip is still in flight (e.g. right

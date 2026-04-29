@@ -256,25 +256,30 @@ public final class RuntimeDetailViewModel {
         task?.cancel()
         startModelContext = modelContext
 
-        guard let runtime = resolveRuntime(modelContext: modelContext) else {
-            // No runtime — collab-only session, nothing to subscribe to yet
-            return
+        // resolveRuntime may return a placeholder for session-with-pending-
+        // primary-agent or nil for collab-only sessions with no agent yet.
+        // Either is fine — the cached event load + Supabase seed work off
+        // session.sessionId scope, and the streaming subscribe block below
+        // gates on `session` not on `runtime`.
+        let runtime = resolveRuntime(modelContext: modelContext)
+
+        if let runtime {
+            // Clear unread badge when user opens the session
+            runtime.hasUnread = false
+            try? modelContext.save()
+
+            // Seed slash commands from the cached state-topic snapshot so
+            // the composer popup is populated before (or even without) a
+            // fresh AvailableCommandsUpdate arriving on the events stream.
+            let cachedCommands = runtime.availableCommands
+            if !cachedCommands.isEmpty && availableCommands.isEmpty {
+                availableCommands = cachedCommands
+            }
         }
 
-        // Clear unread badge when user opens the session
-        runtime.hasUnread = false
-        try? modelContext.save()
-
-        // Seed slash commands from the cached state-topic snapshot so the
-        // composer popup is populated before (or even without) a fresh
-        // AvailableCommandsUpdate arriving on the events stream.
-        let cachedCommands = runtime.availableCommands
-        if !cachedCommands.isEmpty && availableCommands.isEmpty {
-            availableCommands = cachedCommands
-        }
-
-        // Load cached events immediately (works offline)
-        let runtimeId = runtime.runtimeId
+        // Load cached events immediately (works offline). Scope keys on
+        // session_id when present so collab-only sessions (no runtime yet)
+        // still see past Supabase-seeded messages.
         let scope = eventScopeKey
         let descriptor = FetchDescriptor<AgentEvent>(
             predicate: #Predicate { $0.agentId == scope },
@@ -284,13 +289,11 @@ public final class RuntimeDetailViewModel {
         rebuildIndexes()
 
         // Insert initial prompt as first user bubble if not already present
-        let initialPrompt = if let session, !session.summary.isEmpty {
-            session.summary
-        } else if !runtime.currentPrompt.isEmpty {
-            runtime.currentPrompt
-        } else {
-            ""
-        }
+        let initialPrompt: String = {
+            if let session, !session.summary.isEmpty { return session.summary }
+            if let runtime, !runtime.currentPrompt.isEmpty { return runtime.currentPrompt }
+            return ""
+        }()
 
         if !initialPrompt.isEmpty && !events.contains(where: { $0.eventType == "user_prompt" }) {
             let promptEvent = AgentEvent(agentId: scope, sequence: 0, eventType: "user_prompt")
@@ -311,7 +314,7 @@ public final class RuntimeDetailViewModel {
             let lastOutput = events[idx]
             streamingText = lastOutput.text ?? ""
             streamingModel = lastOutput.model
-            isStreaming = runtime.isActive
+            isStreaming = runtime?.isActive ?? false
             modelContext.delete(lastOutput)
             removeEvent(at: idx)
         }

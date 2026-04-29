@@ -71,17 +71,13 @@ public struct IdeasTab: View {
                             predicate: #Predicate { $0.sessionId == sessionId }
                         )
                         if let session = (try? modelContext.fetch(descriptor))?.first {
-                            if session.primaryAgentId == nil || !pairing.isPaired {
-                                SessionView(session: session, teamclawService: teamclawService)
-                            } else {
-                                RuntimeDetailView(
-                                    session: session,
-                                    mqtt: mqtt,
-                                    peerId: "ios-\(pairing.authToken.prefix(6))",
-                                    teamclawService: teamclawService,
-                                    connectedAgentsStore: connectedAgentsStore
-                                )
-                            }
+                            RuntimeDetailView(
+                                session: session,
+                                mqtt: mqtt,
+                                peerId: "ios-\(pairing.authToken.prefix(6))",
+                                teamclawService: teamclawService,
+                                connectedAgentsStore: connectedAgentsStore
+                            )
                         } else {
                             Text("Session not found")
                         }
