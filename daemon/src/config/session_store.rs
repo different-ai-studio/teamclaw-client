@@ -11,9 +11,13 @@ pub struct SessionStore {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredSession {
-    /// Daemon's 8-char runtime/spawn id. Old TOML files used `session_id`
-    /// for this — the alias keeps existing on-disk stores readable.
-    #[serde(alias = "session_id")]
+    /// Daemon's 8-char runtime/spawn id. Pre-rename TOML files used
+    /// `session_id` for this slot, but post-rename TOML carries both
+    /// `runtime_id` (the 8-char) and `session_id` (the Supabase UUID),
+    /// so a `session_id` alias here would collide with the real
+    /// `session_id` field below. Old single-field TOML files now need
+    /// a one-time migration if they exist; in practice the dual-field
+    /// schema has been on disk for everyone.
     pub runtime_id: String,
     #[serde(default)]
     pub acp_session_id: String,
