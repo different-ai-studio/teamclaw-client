@@ -68,23 +68,3 @@ jobs:
       - name: AMUXCore tests
         working-directory: ios/Packages/AMUXCore
         run: swift test
-
-      - name: AMUXMacUI tests
-        working-directory: mac/Packages/AMUXMacUI
-        run: swift test
-
-      - name: Generate AMUXMac Xcode project
-        working-directory: mac
-        run: xcodegen generate
-
-      - name: Build AMUXMac
-        working-directory: mac
-        run: |
-          xcodebuild -project AMUXMac.xcodeproj \
-            -scheme AMUXMac \
-            -destination 'platform=macOS' \
-            -configuration Debug \
-            build \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO

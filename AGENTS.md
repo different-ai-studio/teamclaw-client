@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-AMUX is split across three active areas. `daemon/` contains the Rust daemon (`src/agent`, `src/mqtt`, `src/supabase`, `src/teamclaw`). `ios/` contains the iOS app in `AMUXApp/` plus shared Swift packages in `Packages/AMUXCore`, `Packages/AMUXUI`, and `Packages/AMUXSharedUI`. `mac/` contains the macOS app and `Packages/AMUXMacUI`. Database work lives in `amux-api/` under `supabase/`. Shared schemas live in `proto/`. Treat `mac/build/`, `daemon/target/`, and SwiftPM `.build/` directories as generated output, not source.
+AMUX is split across two active areas. `daemon/` contains the Rust daemon (`src/agent`, `src/mqtt`, `src/supabase`, `src/teamclaw`). `ios/` contains the iOS app in `AMUXApp/` plus shared Swift packages in `Packages/AMUXCore`, `Packages/AMUXUI`, and `Packages/AMUXSharedUI`. Database work lives in `amux-api/` under `supabase/`. Shared schemas live in `proto/`. Treat `daemon/target/` and SwiftPM `.build/` directories as generated output, not source.
 
 ## Build, Test, and Development Commands
 
@@ -11,14 +11,13 @@ Use the smallest command that matches the area you changed:
 - `cd daemon && cargo build` builds the Rust daemon.
 - `cd daemon && cargo test` runs daemon unit and integration tests.
 - `./scripts/proto-gen-swift.sh` regenerates Swift protobuf files from `proto/`.
-- `./scripts/run-mac.sh` rebuilds and launches the macOS app from `mac/AMUXMac.xcodeproj`.
 - `cd amux-api && supabase start && supabase db reset && supabase test db` starts local Supabase, reapplies migrations, and runs DB tests.
 
-For iOS and macOS app work, prefer Xcode for full app runs; package-level Swift tests live under each package’s `Tests/` directory.
+For iOS app work, prefer Xcode for full app runs; package-level Swift tests live under each package’s `Tests/` directory.
 
 ## Coding Style & Naming Conventions
 
-Follow existing language conventions. Rust uses `snake_case` for modules and functions, `PascalCase` for types, and should stay `rustfmt`-clean. Swift uses `UpperCamelCase` for types, `lowerCamelCase` for members, and 4-space indentation. Keep Swift package names aligned with directory names (`AMUXCore`, `AMUXUI`, `AMUXSharedUI`, `AMUXMacUI`). Generated protobuf files in `ios/Packages/AMUXCore/Sources/AMUXCore/Proto/` should only change via the generator script.
+Follow existing language conventions. Rust uses `snake_case` for modules and functions, `PascalCase` for types, and should stay `rustfmt`-clean. Swift uses `UpperCamelCase` for types, `lowerCamelCase` for members, and 4-space indentation. Keep Swift package names aligned with directory names (`AMUXCore`, `AMUXUI`, `AMUXSharedUI`). Generated protobuf files in `ios/Packages/AMUXCore/Sources/AMUXCore/Proto/` should only change via the generator script.
 
 ## Testing Guidelines
 

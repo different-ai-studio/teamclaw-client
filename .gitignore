@@ -38,12 +38,8 @@ ios/fastlane/test_output/
 ios/Gemfile.lock
 .superpowers/
 
-# XcodeGen output
-mac/AMUXMac.xcodeproj/
-
 # Xcode build output
 ios/build/
-mac/build/
 
 # XcodeGen-regenerated schemes (defined in ios/project.yml)
 ios/AMUX.xcodeproj/xcshareddata/
