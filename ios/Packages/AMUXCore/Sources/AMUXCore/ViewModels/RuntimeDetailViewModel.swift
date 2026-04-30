@@ -864,30 +864,18 @@ public final class RuntimeDetailViewModel {
     }
 
     public func sendPrompt(_ text: String, modelId: String? = nil, modelContext: ModelContext? = nil) async throws {
-        let seq = (events.last?.sequence ?? 0) + 1
-        let userEvent = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "user_prompt")
-        userEvent.text = text
-        if let ctx = modelContext ?? startModelContext ?? syncModelContext {
-            ctx.insert(userEvent)
-            try? ctx.save()
-        }
-        appendEvent(userEvent)
-        recomputeGroups()
+        if let session, let teamclawService {
+            // Session-backed chats use the session live stream as the
+            // canonical messaging channel so other collaborators see the
+            // user's prompt too. The daemon subscribes to session/{sid}/live
+            // and forwards each message to its bound ACP runtime.
+            let seq = (events.last?.sequence ?? 0) + 1
+            let userEvent = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "user_prompt")
+            userEvent.text = text
+            if let ctx = modelContext ?? startModelContext { ctx.insert(userEvent); try? ctx.save() }
+            appendEvent(userEvent)
+            recomputeGroups()
 
-        // Prefer the ACP runtime command path when a real runtime is
-        // bound: it publishes to runtime/{rid}/commands which has the
-        // working PUB ACL and the daemon already routes it through ACP.
-        // session/live PUB has been intermittently dropping at the
-        // broker (cause TBD — likely cached EMQX session ACL claims),
-        // so we only use it for pure-collab sessions where there's no
-        // runtime to talk to.
-        if let runtime, !runtime.runtimeId.isEmpty {
-            var p = Amux_AcpSendPrompt(); p.text = text
-            if let modelId, !modelId.isEmpty {
-                p.modelID = modelId
-            }
-            try await sendCommand { $0.command = .sendPrompt(p) }
-        } else if let session, let teamclawService {
             do {
                 _ = try await teamclawService.sendMessage(
                     sessionId: session.sessionId,
@@ -898,6 +886,20 @@ public final class RuntimeDetailViewModel {
                 surfaceSendError(error)
                 throw error
             }
+        } else if runtime != nil {
+            // Legacy runtime-only flow (no session): send via ACP command.
+            let seq = (events.last?.sequence ?? 0) + 1
+            let userEvent = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "user_prompt")
+            userEvent.text = text
+            if let ctx = modelContext ?? syncModelContext { ctx.insert(userEvent); try? ctx.save() }
+            appendEvent(userEvent)
+            recomputeGroups()
+
+            var p = Amux_AcpSendPrompt(); p.text = text
+            if let modelId, !modelId.isEmpty {
+                p.modelID = modelId
+            }
+            try await sendCommand { $0.command = .sendPrompt(p) }
         }
     }
     private enum SendCommandError: LocalizedError {
