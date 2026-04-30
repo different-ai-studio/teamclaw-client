@@ -103,7 +103,16 @@ impl MqttClient {
         );
         opts.set_last_will(lwt);
 
-        let (client, eventloop) = AsyncClient::new(opts, 100);
+        // Channel capacity must exceed the number of subscribe + publish
+        // requests issued back-to-back during startup before the eventloop
+        // is first polled. Today that's ~26 subs (1 runtime/+/commands,
+        // 3 teamclaw base topics, ~22 session/live) plus 1 device-state
+        // publish plus N retained-runtime publishes (one per stored
+        // session). With 100 we deadlocked at ~75 stored sessions because
+        // the channel filled before the main loop could drain it. 1024
+        // gives multi-thousand-session headroom; the buffer is bounded so
+        // there's still backpressure for runaway publish loops.
+        let (client, eventloop) = AsyncClient::new(opts, 1024);
 
         Ok(Self {
             client,
