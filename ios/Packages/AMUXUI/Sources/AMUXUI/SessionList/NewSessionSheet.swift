@@ -79,8 +79,15 @@ public struct NewSessionSheet: View {
     }
 
     private var canSend: Bool {
-        (!shouldShowWorkspaceRow || selectedWorkspaceId != nil) &&
-        !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let textOK = !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        // Single-person sessions are not allowed: the creator alone isn't a
+        // valid session — at least one other actor (agent or human) must be
+        // picked. The creator is added implicitly when persisting.
+        let hasOtherActor = !collaborators.isEmpty
+        // Workspace selection only applies when an agent will spawn; pure
+        // human sessions skip the workspace row entirely.
+        let workspaceOK = primaryAgentID == nil || selectedWorkspaceId != nil
+        return textOK && hasOtherActor && workspaceOK
     }
 
     public var body: some View {
@@ -192,15 +199,6 @@ public struct NewSessionSheet: View {
             }
             if collaborators.isEmpty, !preselectedCollaborators.isEmpty {
                 collaborators = preselectedCollaborators
-            }
-            // Auto-pick the primary agent so the workspace row + agent
-            // picker render without forcing the user (or UI test) to open
-            // the Collaborators sheet first. Single-agent teams are the
-            // common case post-pairing; multi-agent teams still get a
-            // sensible default that the user can change via Collaborators.
-            if primaryAgentID == nil,
-               let first = connectedAgentsStore?.agents.first {
-                primaryAgentID = first.id
             }
         }
         .onChange(of: selectedIdeaId) { _, newIdeaId in
@@ -496,70 +494,7 @@ public struct NewSessionSheet: View {
             createLocalSession(text: text, title: userText)
             return
         }
-
-        // Shared-session path also handles the case where an idea was picked but no
-        // collaborators were added — ACP startAgent has no ideaId field,
-        // so idea linking must flow through CreateSessionRequest.
-        if !collaborators.isEmpty || selectedIdeaId != nil {
-            createSharedSession(text: text, title: userText)
-            return
-        }
-
-        isSending = true
-
-        let titleSeed = String(userText.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
-
-        Task {
-            guard let teamclawService else {
-                await MainActor.run {
-                    isSending = false
-                    errorMessage = "TeamclawService unavailable."
-                }
-                return
-            }
-
-            let routeDevice = effectiveDeviceID
-            guard !routeDevice.isEmpty else {
-                await MainActor.run {
-                    isSending = false
-                    errorMessage = "Daemon device ID is not configured."
-                }
-                return
-            }
-
-            await MainActor.run {
-                debugStatusMessage = "starting runtime…"
-                debugTransportMessage = "team=\(effectiveTeamID) route=\(routeDevice) (RPC)"
-            }
-
-            let outcome = await teamclawService.runtimeStartRpc(
-                targetDeviceID: routeDevice,
-                agentType: selectedAgentType,
-                workspaceId: selectedWorkspaceRecord?.id ?? "",
-                worktree: selectedWorkspaceRecord?.path ?? "",
-                sessionId: "",
-                initialPrompt: text
-            )
-
-            await MainActor.run {
-                isSending = false
-                switch outcome {
-                case .accepted(let runtimeID, _):
-                    persistPlaceholderAgent(
-                        agentID: runtimeID,
-                        title: titleSeed,
-                        prompt: text
-                    )
-                    newSessionLogger.info(
-                        "new-session accepted runtimeID=\(runtimeID, privacy: .public) (lifecycle on runtime/state)"
-                    )
-                    onSessionCreated?(runtimeID)
-                    dismiss()
-                case .rejected(let reason):
-                    errorMessage = reason.isEmpty ? "Agent failed to start. Check daemon logs." : reason
-                }
-            }
-        }
+        createSession(text: text, title: userText)
     }
 
     /// Routing team_id for teamclaw RPCs. Real Supabase team UUID when
@@ -568,36 +503,36 @@ public struct NewSessionSheet: View {
         teamID.isEmpty ? "teamclaw" : teamID
     }
 
-    /// Daemon device UUID to publish MQTT commands at. Resolved from the
-    /// in-memory ConnectedAgentsStore: prefer the picked primary agent's
-    /// `agents.device_id`; otherwise fall back to the most-recently-active
-    /// connected agent's deviceID. Returns "" when no daemon is reachable.
+    /// Daemon device UUID hosting the chosen primary agent. Empty when no
+    /// primary agent is selected (pure human session) or the agent isn't
+    /// online. Resolved strictly from `primaryAgentID` — no fallback to a
+    /// random online daemon, since RPC must target the specific actor the
+    /// user picked.
     private var effectiveDeviceID: String {
-        if let primary = primaryAgentID,
-           let agent = connectedAgentsStore?.agents.first(where: { $0.id == primary }),
-           let id = agent.deviceID, !id.isEmpty {
-            return id
-        }
-
-        let inferredDeviceIDs = connectedAgentsStore?.agents.sorted(by: { lhs, rhs in
-            if lhs.isOnline != rhs.isOnline {
-                return lhs.isOnline && !rhs.isOnline
-            }
-            return (lhs.lastActiveAt ?? .distantPast) > (rhs.lastActiveAt ?? .distantPast)
-        }).compactMap(\.deviceID)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-        if let inferredDeviceID = inferredDeviceIDs?
-            .first(where: { !$0.isEmpty }) {
-            return inferredDeviceID
-        }
-
-        return ""
+        guard let primary = primaryAgentID,
+              let agent = connectedAgentsStore?.agents.first(where: { $0.id == primary }),
+              let id = agent.deviceID, !id.isEmpty
+        else { return "" }
+        return id
     }
 
-    private func createSharedSession(text: String, title: String) {
+    /// Sole new-session path. Always creates a Supabase session row first
+    /// (so the team-wide truth carries idea_id, primary_agent_id, and the
+    /// participants list), then optionally spawns a runtime if the user
+    /// picked a primary agent, and finally publishes the first user message
+    /// on session/live so collaborators (and the daemon, when an agent is
+    /// present) all receive it through the same channel.
+    private func createSession(text: String, title: String) {
         guard let currentActorID else {
             errorMessage = "Current actor is not ready yet."
+            return
+        }
+        // If a primary agent is picked, its daemon must be reachable —
+        // RPC has nowhere to land otherwise. Pure-human sessions skip
+        // this check (no spawn).
+        if let primary = primaryAgentID, !primary.isEmpty,
+           effectiveDeviceID.isEmpty {
+            errorMessage = "Primary agent's daemon is offline. Pick another agent or wait for it to reconnect."
             return
         }
 
@@ -622,10 +557,8 @@ public struct NewSessionSheet: View {
         )
 
         Task {
-            // 1. Supabase create — must await (this is the failure surface
-            //    we report to the user). Once this succeeds, the session
-            //    truly exists for the team; later steps are best-effort
-            //    background work.
+            // 1. Supabase create — must await. Failure surface for the
+            //    user; subsequent steps are best-effort background work.
             do {
                 let repository = try SupabaseSessionRepository()
                 try await repository.createSession(
@@ -648,8 +581,8 @@ public struct NewSessionSheet: View {
                 return
             }
 
-            // 2. iOS-local persist + subscribe so the SessionDetail view
-            //    can resolve the new Session model immediately.
+            // 2. iOS-local persist + subscribe so SessionDetail can
+            //    resolve the new Session model immediately.
             teamclawService?.subscribeToSession(sessionID)
             await MainActor.run {
                 let session = persistSession(info)
@@ -658,31 +591,41 @@ public struct NewSessionSheet: View {
                 viewModel.reloadSessions(modelContext: modelContext)
             }
 
-            // 3. Navigate immediately — don't make the user wait for ACP
-            //    init. The agent spawn + first message are kicked off
-            //    detached; the SessionDetail view streams ACP events as
-            //    they arrive.
+            // 3. Navigate immediately — don't block on ACP init. The
+            //    spawn + first message run detached; SessionDetail
+            //    streams ACP events as they arrive.
             await MainActor.run {
                 isSending = false
                 newSessionLogger.info(
-                    "shared-session success destination=session:\(sessionID, privacy: .public)"
+                    "session created destination=session:\(sessionID, privacy: .public)"
                 )
                 onSessionCreated?("session:\(sessionID)")
                 dismiss()
             }
 
-            // 4. Background: spawn the agent (waits for ACP init), then
-            //    publish the first user message on session/live.
-            //    `try?` swallows errors — they show up as the user not
-            //    seeing a reply, and the daemon log carries the real
-            //    cause. UI is already in SessionDetail, no error sheet to
-            //    surface to.
+            // 4. Background: spawn the agent (if any), persist its
+            //    Runtime row locally so RuntimeDetailViewModel resolves
+            //    the real 8-char runtime id immediately, then publish
+            //    the first user message on session/live. The daemon's
+            //    apply_start_runtime accepts an empty initial_prompt;
+            //    everything (first turn included) flows through
+            //    session/live so there's a single message channel.
             Task {
-                if let primaryAgentID, !primaryAgentID.isEmpty {
-                    _ = try? await startAgentAndWaitForState(
-                        initialPrompt: text,
+                let titleSeed = trimmedTitle
+                if let primary = primaryAgentID, !primary.isEmpty {
+                    let runtimeID = try? await startAgentAndWaitForState(
+                        initialPrompt: "",
                         sessionID: sessionID
                     )
+                    if let runtimeID, !runtimeID.isEmpty {
+                        await MainActor.run {
+                            persistPlaceholderAgent(
+                                agentID: runtimeID,
+                                title: titleSeed,
+                                prompt: text
+                            )
+                        }
+                    }
                 }
                 teamclawService?.sendMessage(sessionId: sessionID, content: text)
             }
