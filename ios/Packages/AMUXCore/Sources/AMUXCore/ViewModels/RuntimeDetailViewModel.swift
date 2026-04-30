@@ -940,13 +940,19 @@ public final class RuntimeDetailViewModel {
     }
 
     /// Publishes Session.pendingFirstMessage on session/live and clears
-    /// it on success. When `session.primaryAgentId` is set we wait for
-    /// the bound Runtime row to appear (NewSessionSheet's spawn task
-    /// inserts it after `runtimeStartRpc` accepts) so the daemon's
-    /// session_manager has subscribed and ACP has been kicked off
-    /// before our publish lands. Pure-collab sessions skip the wait.
-    /// Times out after 30s. Idempotent: re-running on view re-entry
-    /// is safe — pendingFirstMessage is the gate.
+    /// it on success. We give the daemon a moment to process its
+    /// runtimeStartRpc — its session_manager subscribes to the session
+    /// topic during `apply_start_runtime`, typically within a few
+    /// hundred ms — before publishing. Sending too early lands the
+    /// message on a topic with no subscribers and the broker drops it
+    /// (session/live is non-retained). 1.5s covers the observed
+    /// p99 of daemon's `apply_start_runtime` → SUBACK round-trip.
+    ///
+    /// Daemon buffers prompts in the runtime's cmd_tx until ACP init
+    /// completes, so we don't need to wait for ACP-ready specifically.
+    ///
+    /// Idempotent: re-running on view re-entry is safe — pendingFirst-
+    /// Message is the gate, cleared only on successful publish.
     private func sendPendingFirstMessageIfNeeded(modelContext: ModelContext) {
         guard let session,
               let pending = session.pendingFirstMessage,
@@ -955,20 +961,11 @@ public final class RuntimeDetailViewModel {
             return
         }
         let sid = session.sessionId
-        let needsRuntime = !(session.primaryAgentId ?? "").isEmpty
+        let needsSubscribeWait = !(session.primaryAgentId ?? "").isEmpty
 
         Task { [weak self] in
-            if needsRuntime {
-                let deadline = Date().addingTimeInterval(30)
-                while Date() < deadline {
-                    let bound = await MainActor.run { () -> Bool in
-                        guard let self else { return false }
-                        let r = self.resolveRuntime(modelContext: modelContext)
-                        return r != nil && !(r?.runtimeId.isEmpty ?? true)
-                    }
-                    if bound { break }
-                    try? await Task.sleep(for: .milliseconds(250))
-                }
+            if needsSubscribeWait {
+                try? await Task.sleep(for: .milliseconds(1500))
             }
             do {
                 _ = try await teamclawService.sendMessage(sessionId: sid, content: pending)
