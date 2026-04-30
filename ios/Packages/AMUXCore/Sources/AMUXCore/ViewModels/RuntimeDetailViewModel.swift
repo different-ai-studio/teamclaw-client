@@ -414,6 +414,16 @@ public final class RuntimeDetailViewModel {
 
         recomputeGroups()
 
+        // If NewSessionSheet stamped a pendingFirstMessage on the
+        // Session, we own publishing it now — the sheet's detached
+        // Task lost its captures during dismiss in 1.0.32 (banner
+        // showed, but session/live publish never reached the broker).
+        // Doing it here keeps the work inside the detail view's
+        // stable lifecycle and lets a re-entry retry if the publish
+        // fails. The composer is already gated by isFirstMessageLoading
+        // so the user can't race in a second message before this lands.
+        sendPendingFirstMessageIfNeeded(modelContext: modelContext)
+
         // Single subscription path: session/{sid}/live. iOS only ever
         // resolves a session-backed detail view — bare-runtime navigation
         // was deleted alongside RuntimeDestinationView. Daemon mirrors this
@@ -925,6 +935,54 @@ public final class RuntimeDetailViewModel {
                 return "Runtime id missing — daemon hasn't published runtime state yet."
             case .daemonDeviceIdUnresolved:
                 return "Daemon device id not resolved — primary agent may be offline."
+            }
+        }
+    }
+
+    /// Publishes Session.pendingFirstMessage on session/live and clears
+    /// it on success. When `session.primaryAgentId` is set we wait for
+    /// the bound Runtime row to appear (NewSessionSheet's spawn task
+    /// inserts it after `runtimeStartRpc` accepts) so the daemon's
+    /// session_manager has subscribed and ACP has been kicked off
+    /// before our publish lands. Pure-collab sessions skip the wait.
+    /// Times out after 30s. Idempotent: re-running on view re-entry
+    /// is safe — pendingFirstMessage is the gate.
+    private func sendPendingFirstMessageIfNeeded(modelContext: ModelContext) {
+        guard let session,
+              let pending = session.pendingFirstMessage,
+              !pending.isEmpty,
+              let teamclawService else {
+            return
+        }
+        let sid = session.sessionId
+        let needsRuntime = !(session.primaryAgentId ?? "").isEmpty
+
+        Task { [weak self] in
+            if needsRuntime {
+                let deadline = Date().addingTimeInterval(30)
+                while Date() < deadline {
+                    let bound = await MainActor.run { () -> Bool in
+                        guard let self else { return false }
+                        let r = self.resolveRuntime(modelContext: modelContext)
+                        return r != nil && !(r?.runtimeId.isEmpty ?? true)
+                    }
+                    if bound { break }
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+            }
+            do {
+                _ = try await teamclawService.sendMessage(sessionId: sid, content: pending)
+                await MainActor.run {
+                    let descriptor = FetchDescriptor<Session>(
+                        predicate: #Predicate { $0.sessionId == sid }
+                    )
+                    if let s = (try? modelContext.fetch(descriptor))?.first {
+                        s.pendingFirstMessage = nil
+                        try? modelContext.save()
+                    }
+                }
+            } catch {
+                await MainActor.run { self?.surfaceSendError(error) }
             }
         }
     }

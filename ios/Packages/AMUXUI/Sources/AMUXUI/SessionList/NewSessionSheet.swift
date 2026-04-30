@@ -608,24 +608,18 @@ public struct NewSessionSheet: View {
                 dismiss()
             }
 
-            // 4. Background: spawn the agent (if any), persist its
-            //    Runtime row locally so RuntimeDetailViewModel resolves
-            //    the real 8-char runtime id immediately. The first user
-            //    message rides along as `initial_prompt` on the start
-            //    RPC — daemon hands it directly to ACP, no session/live
-            //    publish needed. Subsequent turns go through the runtime
-            //    ACP command path inside RuntimeDetailViewModel.
-            //    Pure-collab sessions (no primary agent) still publish
-            //    via session/live since there's no runtime to route to.
+            // 4. Background: spawn the runtime if a primary agent was
+            //    picked. Persist the resulting Runtime row locally so
+            //    RuntimeDetailViewModel resolves the real 8-char id
+            //    immediately. **Do not** publish the first user message
+            //    here — RuntimeDetailViewModel.start does that after it
+            //    sees the bound Runtime, so the publish runs inside the
+            //    detail view's stable lifecycle (the sheet's captures
+            //    can be torn down on dismiss before this Task finishes,
+            //    which left the message un-sent in 1.0.32).
             Task {
                 let titleSeed = trimmedTitle
                 if let primary = primaryAgentID, !primary.isEmpty {
-                    // Spawn the runtime with no initial_prompt — the first
-                    // user message rides session/live like every later
-                    // turn, so collab subscribers see it too. Detail view
-                    // gates input on Session.pendingFirstMessage so the
-                    // user can't race in a second message before this
-                    // first publish lands.
                     let runtimeID = try? await startAgentAndWaitForState(
                         initialPrompt: "",
                         sessionID: sessionID
@@ -640,32 +634,8 @@ public struct NewSessionSheet: View {
                         }
                     }
                 }
-                // Publish the first user message on session/live (same
-                // path used by every subsequent message + every
-                // collaborator). Pure-human sessions skip the spawn
-                // above and just publish here.
-                do {
-                    _ = try await teamclawService?.sendMessage(sessionId: sessionID, content: text)
-                    await MainActor.run {
-                        clearPendingFirstMessage(sessionID: sessionID)
-                    }
-                } catch {
-                    newSessionLogger.error(
-                        "first-message publish failed sid=\(sessionID, privacy: .public) error=\(String(describing: error), privacy: .public)"
-                    )
-                }
             }
         }
-    }
-
-    @MainActor
-    private func clearPendingFirstMessage(sessionID: String) {
-        let descriptor = FetchDescriptor<Session>(
-            predicate: #Predicate { $0.sessionId == sessionID }
-        )
-        guard let session = (try? modelContext.fetch(descriptor))?.first else { return }
-        session.pendingFirstMessage = nil
-        try? modelContext.save()
     }
 
     private func createLocalSession(text: String, title: String) {
