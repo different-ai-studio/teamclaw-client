@@ -605,16 +605,18 @@ public struct NewSessionSheet: View {
 
             // 4. Background: spawn the agent (if any), persist its
             //    Runtime row locally so RuntimeDetailViewModel resolves
-            //    the real 8-char runtime id immediately, then publish
-            //    the first user message on session/live. The daemon's
-            //    apply_start_runtime accepts an empty initial_prompt;
-            //    everything (first turn included) flows through
-            //    session/live so there's a single message channel.
+            //    the real 8-char runtime id immediately. The first user
+            //    message rides along as `initial_prompt` on the start
+            //    RPC — daemon hands it directly to ACP, no session/live
+            //    publish needed. Subsequent turns go through the runtime
+            //    ACP command path inside RuntimeDetailViewModel.
+            //    Pure-collab sessions (no primary agent) still publish
+            //    via session/live since there's no runtime to route to.
             Task {
                 let titleSeed = trimmedTitle
                 if let primary = primaryAgentID, !primary.isEmpty {
                     let runtimeID = try? await startAgentAndWaitForState(
-                        initialPrompt: "",
+                        initialPrompt: text,
                         sessionID: sessionID
                     )
                     if let runtimeID, !runtimeID.isEmpty {
@@ -626,16 +628,17 @@ public struct NewSessionSheet: View {
                             )
                         }
                     }
-                }
-                do {
-                    _ = try await teamclawService?.sendMessage(sessionId: sessionID, content: text)
-                } catch {
-                    // Sheet is already dismissed by this point so there's
-                    // no UI to surface to here. Log loudly — RuntimeDetailVM
-                    // will surface its own send errors going forward.
-                    newSessionLogger.error(
-                        "first-message publish failed sid=\(sessionID, privacy: .public) error=\(String(describing: error), privacy: .public)"
-                    )
+                } else {
+                    // No primary agent — this is a pure human collab
+                    // session, so the only path that delivers the first
+                    // message to other members is session/live.
+                    do {
+                        _ = try await teamclawService?.sendMessage(sessionId: sessionID, content: text)
+                    } catch {
+                        newSessionLogger.error(
+                            "collab first-message publish failed sid=\(sessionID, privacy: .public) error=\(String(describing: error), privacy: .public)"
+                        )
+                    }
                 }
             }
         }

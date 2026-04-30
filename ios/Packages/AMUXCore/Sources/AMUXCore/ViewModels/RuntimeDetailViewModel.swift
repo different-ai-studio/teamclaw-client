@@ -832,11 +832,19 @@ public final class RuntimeDetailViewModel {
     }
 
     private func sendCommand(_ makeCommand: (inout Amux_AcpCommand) -> Void) async throws {
-        guard let runtime else { return }
+        guard let runtime else {
+            await surfaceSendError(SendCommandError.noRuntime)
+            throw SendCommandError.noRuntime
+        }
+        guard !runtime.runtimeId.isEmpty else {
+            await surfaceSendError(SendCommandError.runtimeIdEmpty)
+            throw SendCommandError.runtimeIdEmpty
+        }
         let daemonDeviceId = resolveDaemonDeviceId()
         guard !daemonDeviceId.isEmpty else {
             print("[RuntimeDetailVM] dropping command — daemon device-id not resolved (primaryAgentId=\(session?.primaryAgentId ?? "nil") runtimeId=\(runtime.runtimeId))")
-            return
+            await surfaceSendError(SendCommandError.daemonDeviceIdUnresolved)
+            throw SendCommandError.daemonDeviceIdUnresolved
         }
         var cmd = Amux_RuntimeCommandEnvelope()
         cmd.runtimeID = runtime.runtimeId; cmd.deviceID = daemonDeviceId; cmd.peerID = peerId
@@ -856,18 +864,30 @@ public final class RuntimeDetailViewModel {
     }
 
     public func sendPrompt(_ text: String, modelId: String? = nil, modelContext: ModelContext? = nil) async throws {
-        if let session, let teamclawService {
-            // Session-backed chats use the session live stream as the source of
-            // truth. `session.primaryAgentId` is a Supabase actor id, not the
-            // daemon's short runtime id, so sending an ACP runtime command here
-            // would route to a non-existent runtime after the first turn.
-            let seq = (events.last?.sequence ?? 0) + 1
-            let userEvent = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "user_prompt")
-            userEvent.text = text
-            if let ctx = modelContext ?? startModelContext { ctx.insert(userEvent); try? ctx.save() }
-            appendEvent(userEvent)
-            recomputeGroups()
+        let seq = (events.last?.sequence ?? 0) + 1
+        let userEvent = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "user_prompt")
+        userEvent.text = text
+        if let ctx = modelContext ?? startModelContext ?? syncModelContext {
+            ctx.insert(userEvent)
+            try? ctx.save()
+        }
+        appendEvent(userEvent)
+        recomputeGroups()
 
+        // Prefer the ACP runtime command path when a real runtime is
+        // bound: it publishes to runtime/{rid}/commands which has the
+        // working PUB ACL and the daemon already routes it through ACP.
+        // session/live PUB has been intermittently dropping at the
+        // broker (cause TBD — likely cached EMQX session ACL claims),
+        // so we only use it for pure-collab sessions where there's no
+        // runtime to talk to.
+        if let runtime, !runtime.runtimeId.isEmpty {
+            var p = Amux_AcpSendPrompt(); p.text = text
+            if let modelId, !modelId.isEmpty {
+                p.modelID = modelId
+            }
+            try await sendCommand { $0.command = .sendPrompt(p) }
+        } else if let session, let teamclawService {
             do {
                 _ = try await teamclawService.sendMessage(
                     sessionId: session.sessionId,
@@ -878,22 +898,25 @@ public final class RuntimeDetailViewModel {
                 surfaceSendError(error)
                 throw error
             }
-        } else if runtime != nil {
-            // Runtime session: send ACP command
-            let seq = (events.last?.sequence ?? 0) + 1
-            let userEvent = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "user_prompt")
-            userEvent.text = text
-            if let ctx = modelContext ?? syncModelContext { ctx.insert(userEvent); try? ctx.save() }
-            appendEvent(userEvent)
-            recomputeGroups()
-
-            var p = Amux_AcpSendPrompt(); p.text = text
-            if let modelId, !modelId.isEmpty {
-                p.modelID = modelId
-            }
-            try await sendCommand { $0.command = .sendPrompt(p) }
         }
     }
+    private enum SendCommandError: LocalizedError {
+        case noRuntime
+        case runtimeIdEmpty
+        case daemonDeviceIdUnresolved
+
+        var errorDescription: String? {
+            switch self {
+            case .noRuntime:
+                return "Runtime not resolved yet — try again in a moment."
+            case .runtimeIdEmpty:
+                return "Runtime id missing — daemon hasn't published runtime state yet."
+            case .daemonDeviceIdUnresolved:
+                return "Daemon device id not resolved — primary agent may be offline."
+            }
+        }
+    }
+
     @MainActor
     private func surfaceSendError(_ error: Error) {
         sendErrorMessage = error.localizedDescription
