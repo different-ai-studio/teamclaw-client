@@ -81,6 +81,19 @@ public struct RuntimeDetailView: View {
                 .liquidGlass(in: Capsule(), tint: .red, interactive: false)
                 .padding(.vertical, 4)
             }
+            if viewModel.isFirstMessageLoading {
+                HStack(spacing: 8) {
+                    ProgressView().scaleEffect(0.7)
+                    Text("Starting session…")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .liquidGlass(in: Capsule(), interactive: false)
+                .padding(.vertical, 4)
+            }
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -208,6 +221,8 @@ public struct RuntimeDetailView: View {
                     Task { try? await viewModel.cancelTask() }
                 }
             )
+            .disabled(viewModel.isFirstMessageLoading)
+            .opacity(viewModel.isFirstMessageLoading ? 0.5 : 1.0)
         }
         .sheet(isPresented: $showSettings) {
             if let runtime = viewModel.runtime {

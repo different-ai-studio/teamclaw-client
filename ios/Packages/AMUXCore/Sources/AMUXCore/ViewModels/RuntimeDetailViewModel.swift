@@ -77,6 +77,16 @@ public final class RuntimeDetailViewModel {
     public var isIdle: Bool { runtime?.isIdle ?? true }
     public var participantCount: Int { session?.participantCount ?? 0 }
     public var hasRuntime: Bool { runtime != nil }
+    /// True while NewSessionSheet's detached Task is still publishing
+    /// the session's first user message on session/live. The detail
+    /// view binds composer interactivity to the negation of this so
+    /// the user can't race in a second message before the first lands
+    /// — that ordering bug was the root cause of "first message
+    /// doesn't get a reply, second one does."
+    public var isFirstMessageLoading: Bool {
+        guard let pending = session?.pendingFirstMessage else { return false }
+        return !pending.isEmpty
+    }
 
     /// Bucket key for AgentEvent storage. Multiple sessions sharing a single
     /// daemon agent identity (Runtime.runtimeId == daemon's Supabase actor_id

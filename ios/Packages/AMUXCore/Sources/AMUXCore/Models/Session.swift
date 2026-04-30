@@ -20,6 +20,11 @@ public final class Session {
     /// User-archived: hidden from the main session list. Soft-delete only;
     /// no unarchive UI yet. Local-only.
     public var isArchived: Bool = false
+    /// Set by NewSessionSheet to the first user message, cleared once the
+    /// session/live publish succeeds. The detail view treats this as a
+    /// "loading" gate: composer disabled while non-nil so the user can't
+    /// race in a second message before the first one has been delivered.
+    public var pendingFirstMessage: String?
 
     public init(
         sessionId: String,
@@ -33,7 +38,8 @@ public final class Session {
         lastMessageAt: Date? = nil,
         ideaId: String = "",
         isPinned: Bool = false,
-        isArchived: Bool = false
+        isArchived: Bool = false,
+        pendingFirstMessage: String? = nil
     ) {
         self.sessionId = sessionId
         self.teamId = teamId
@@ -47,5 +53,6 @@ public final class Session {
         self.ideaId = ideaId
         self.isPinned = isPinned
         self.isArchived = isArchived
+        self.pendingFirstMessage = pendingFirstMessage
     }
 }

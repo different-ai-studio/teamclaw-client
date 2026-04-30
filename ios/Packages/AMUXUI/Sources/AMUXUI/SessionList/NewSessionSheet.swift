@@ -587,6 +587,11 @@ public struct NewSessionSheet: View {
             await MainActor.run {
                 let session = persistSession(info)
                 session.primaryAgentId = primaryAgentID
+                // Set the pending-first-message gate: detail view
+                // disables its composer while this is non-nil, blocking
+                // the user from racing in a second message before the
+                // detached Task below publishes the first one.
+                session.pendingFirstMessage = text
                 try? modelContext.save()
                 viewModel.reloadSessions(modelContext: modelContext)
             }
@@ -615,8 +620,14 @@ public struct NewSessionSheet: View {
             Task {
                 let titleSeed = trimmedTitle
                 if let primary = primaryAgentID, !primary.isEmpty {
+                    // Spawn the runtime with no initial_prompt — the first
+                    // user message rides session/live like every later
+                    // turn, so collab subscribers see it too. Detail view
+                    // gates input on Session.pendingFirstMessage so the
+                    // user can't race in a second message before this
+                    // first publish lands.
                     let runtimeID = try? await startAgentAndWaitForState(
-                        initialPrompt: text,
+                        initialPrompt: "",
                         sessionID: sessionID
                     )
                     if let runtimeID, !runtimeID.isEmpty {
@@ -628,20 +639,33 @@ public struct NewSessionSheet: View {
                             )
                         }
                     }
-                } else {
-                    // No primary agent — this is a pure human collab
-                    // session, so the only path that delivers the first
-                    // message to other members is session/live.
-                    do {
-                        _ = try await teamclawService?.sendMessage(sessionId: sessionID, content: text)
-                    } catch {
-                        newSessionLogger.error(
-                            "collab first-message publish failed sid=\(sessionID, privacy: .public) error=\(String(describing: error), privacy: .public)"
-                        )
+                }
+                // Publish the first user message on session/live (same
+                // path used by every subsequent message + every
+                // collaborator). Pure-human sessions skip the spawn
+                // above and just publish here.
+                do {
+                    _ = try await teamclawService?.sendMessage(sessionId: sessionID, content: text)
+                    await MainActor.run {
+                        clearPendingFirstMessage(sessionID: sessionID)
                     }
+                } catch {
+                    newSessionLogger.error(
+                        "first-message publish failed sid=\(sessionID, privacy: .public) error=\(String(describing: error), privacy: .public)"
+                    )
                 }
             }
         }
+    }
+
+    @MainActor
+    private func clearPendingFirstMessage(sessionID: String) {
+        let descriptor = FetchDescriptor<Session>(
+            predicate: #Predicate { $0.sessionId == sessionID }
+        )
+        guard let session = (try? modelContext.fetch(descriptor))?.first else { return }
+        session.pendingFirstMessage = nil
+        try? modelContext.save()
     }
 
     private func createLocalSession(text: String, title: String) {
