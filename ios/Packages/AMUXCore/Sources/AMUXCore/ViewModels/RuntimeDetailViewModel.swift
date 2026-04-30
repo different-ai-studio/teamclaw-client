@@ -77,16 +77,6 @@ public final class RuntimeDetailViewModel {
     public var isIdle: Bool { runtime?.isIdle ?? true }
     public var participantCount: Int { session?.participantCount ?? 0 }
     public var hasRuntime: Bool { runtime != nil }
-    /// True while NewSessionSheet's detached Task is still publishing
-    /// the session's first user message on session/live. The detail
-    /// view binds composer interactivity to the negation of this so
-    /// the user can't race in a second message before the first lands
-    /// — that ordering bug was the root cause of "first message
-    /// doesn't get a reply, second one does."
-    public var isFirstMessageLoading: Bool {
-        guard let pending = session?.pendingFirstMessage else { return false }
-        return !pending.isEmpty
-    }
 
     /// Bucket key for AgentEvent storage. Multiple sessions sharing a single
     /// daemon agent identity (Runtime.runtimeId == daemon's Supabase actor_id
@@ -413,16 +403,6 @@ public final class RuntimeDetailViewModel {
         }
 
         recomputeGroups()
-
-        // If NewSessionSheet stamped a pendingFirstMessage on the
-        // Session, we own publishing it now — the sheet's detached
-        // Task lost its captures during dismiss in 1.0.32 (banner
-        // showed, but session/live publish never reached the broker).
-        // Doing it here keeps the work inside the detail view's
-        // stable lifecycle and lets a re-entry retry if the publish
-        // fails. The composer is already gated by isFirstMessageLoading
-        // so the user can't race in a second message before this lands.
-        sendPendingFirstMessageIfNeeded(modelContext: modelContext)
 
         // Single subscription path: session/{sid}/live. iOS only ever
         // resolves a session-backed detail view — bare-runtime navigation
@@ -935,51 +915,6 @@ public final class RuntimeDetailViewModel {
                 return "Runtime id missing — daemon hasn't published runtime state yet."
             case .daemonDeviceIdUnresolved:
                 return "Daemon device id not resolved — primary agent may be offline."
-            }
-        }
-    }
-
-    /// Publishes Session.pendingFirstMessage on session/live and clears
-    /// it on success. We give the daemon a moment to process its
-    /// runtimeStartRpc — its session_manager subscribes to the session
-    /// topic during `apply_start_runtime`, typically within a few
-    /// hundred ms — before publishing. Sending too early lands the
-    /// message on a topic with no subscribers and the broker drops it
-    /// (session/live is non-retained). 1.5s covers the observed
-    /// p99 of daemon's `apply_start_runtime` → SUBACK round-trip.
-    ///
-    /// Daemon buffers prompts in the runtime's cmd_tx until ACP init
-    /// completes, so we don't need to wait for ACP-ready specifically.
-    ///
-    /// Idempotent: re-running on view re-entry is safe — pendingFirst-
-    /// Message is the gate, cleared only on successful publish.
-    private func sendPendingFirstMessageIfNeeded(modelContext: ModelContext) {
-        guard let session,
-              let pending = session.pendingFirstMessage,
-              !pending.isEmpty,
-              let teamclawService else {
-            return
-        }
-        let sid = session.sessionId
-        let needsSubscribeWait = !(session.primaryAgentId ?? "").isEmpty
-
-        Task { [weak self] in
-            if needsSubscribeWait {
-                try? await Task.sleep(for: .milliseconds(1500))
-            }
-            do {
-                _ = try await teamclawService.sendMessage(sessionId: sid, content: pending)
-                await MainActor.run {
-                    let descriptor = FetchDescriptor<Session>(
-                        predicate: #Predicate { $0.sessionId == sid }
-                    )
-                    if let s = (try? modelContext.fetch(descriptor))?.first {
-                        s.pendingFirstMessage = nil
-                        try? modelContext.save()
-                    }
-                }
-            } catch {
-                await MainActor.run { self?.surfaceSendError(error) }
             }
         }
     }

@@ -145,6 +145,12 @@ public struct NewSessionSheet: View {
                         Image(systemName: "xmark")
                     }
                     .buttonStyle(.plain)
+                    // Block dismissal while the session is bootstrapping
+                    // — Supabase create / runtimeStartRpc / sendMessage
+                    // run sequentially with no cancellation hook, so
+                    // letting the user dismiss mid-flight would leave a
+                    // half-started runtime on the daemon.
+                    .disabled(isSending)
                 }
             }
         }
@@ -557,8 +563,7 @@ public struct NewSessionSheet: View {
         )
 
         Task {
-            // 1. Supabase create — must await. Failure surface for the
-            //    user; subsequent steps are best-effort background work.
+            // 1. Supabase create
             do {
                 let repository = try SupabaseSessionRepository()
                 try await repository.createSession(
@@ -581,24 +586,75 @@ public struct NewSessionSheet: View {
                 return
             }
 
-            // 2. iOS-local persist + subscribe so SessionDetail can
-            //    resolve the new Session model immediately.
+            // 2. iOS subscribes to session/{sid}/live first so we don't
+            //    miss any ACP events that daemon will fan out after spawn.
             teamclawService?.subscribeToSession(sessionID)
+
+            // 3. Persist the Session row locally.
             await MainActor.run {
                 let session = persistSession(info)
                 session.primaryAgentId = primaryAgentID
-                // Set the pending-first-message gate: detail view
-                // disables its composer while this is non-nil, blocking
-                // the user from racing in a second message before the
-                // detached Task below publishes the first one.
-                session.pendingFirstMessage = text
                 try? modelContext.save()
                 viewModel.reloadSessions(modelContext: modelContext)
             }
 
-            // 3. Navigate immediately — don't block on ACP init. The
-            //    spawn + first message run detached; SessionDetail
-            //    streams ACP events as they arrive.
+            // 4. Spawn the runtime if a primary agent was picked. We
+            //    await runtimeStartRpc here (not in a detached task) so
+            //    the sheet stays open with its ProgressView until the
+            //    daemon side is fully ready: spawn complete, session/live
+            //    subscribed, ACP init done. RPC ack is the "daemon ready"
+            //    signal — sending the first message before this lands
+            //    in a window where broker has no daemon subscriber.
+            var spawnedRuntimeID: String?
+            if let primary = primaryAgentID, !primary.isEmpty {
+                do {
+                    spawnedRuntimeID = try await startAgentAndWaitForState(
+                        initialPrompt: "",
+                        sessionID: sessionID
+                    )
+                } catch {
+                    await MainActor.run {
+                        isSending = false
+                        errorMessage = error.localizedDescription
+                    }
+                    return
+                }
+            }
+
+            // 5. Persist the Runtime row locally so
+            //    RuntimeDetailViewModel.resolveRuntime finds the real
+            //    8-char id on first render — no placeholder.
+            if let runtimeID = spawnedRuntimeID, !runtimeID.isEmpty {
+                await MainActor.run {
+                    persistPlaceholderAgent(
+                        agentID: runtimeID,
+                        title: trimmedTitle,
+                        prompt: text
+                    )
+                }
+            }
+
+            // 6. Publish the first user message on session/live. Daemon
+            //    is subscribed (RPC ack is contract that subscribe was
+            //    established before ack); broker delivers; daemon's
+            //    session_manager forwards to ACP via the runtime's
+            //    cmd_tx, which exists from spawn time.
+            do {
+                _ = try await teamclawService?.sendMessage(sessionId: sessionID, content: text)
+            } catch {
+                await MainActor.run {
+                    isSending = false
+                    errorMessage = error.localizedDescription
+                }
+                return
+            }
+
+            // 7. Navigate to the detail view + dismiss the sheet. By
+            //    this point the session is fully bootstrapped and the
+            //    detail view enters a stable state: Runtime row in
+            //    SwiftData, daemon ACP awaiting the first prompt
+            //    (already on the wire), session/live subscription on
+            //    both ends.
             await MainActor.run {
                 isSending = false
                 newSessionLogger.info(
@@ -606,34 +662,6 @@ public struct NewSessionSheet: View {
                 )
                 onSessionCreated?("session:\(sessionID)")
                 dismiss()
-            }
-
-            // 4. Background: spawn the runtime if a primary agent was
-            //    picked. Persist the resulting Runtime row locally so
-            //    RuntimeDetailViewModel resolves the real 8-char id
-            //    immediately. **Do not** publish the first user message
-            //    here — RuntimeDetailViewModel.start does that after it
-            //    sees the bound Runtime, so the publish runs inside the
-            //    detail view's stable lifecycle (the sheet's captures
-            //    can be torn down on dismiss before this Task finishes,
-            //    which left the message un-sent in 1.0.32).
-            Task {
-                let titleSeed = trimmedTitle
-                if let primary = primaryAgentID, !primary.isEmpty {
-                    let runtimeID = try? await startAgentAndWaitForState(
-                        initialPrompt: "",
-                        sessionID: sessionID
-                    )
-                    if let runtimeID, !runtimeID.isEmpty {
-                        await MainActor.run {
-                            persistPlaceholderAgent(
-                                agentID: runtimeID,
-                                title: titleSeed,
-                                prompt: text
-                            )
-                        }
-                    }
-                }
             }
         }
     }
