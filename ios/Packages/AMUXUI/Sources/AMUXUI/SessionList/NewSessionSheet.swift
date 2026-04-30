@@ -627,7 +627,16 @@ public struct NewSessionSheet: View {
                         }
                     }
                 }
-                teamclawService?.sendMessage(sessionId: sessionID, content: text)
+                do {
+                    _ = try await teamclawService?.sendMessage(sessionId: sessionID, content: text)
+                } catch {
+                    // Sheet is already dismissed by this point so there's
+                    // no UI to surface to here. Log loudly — RuntimeDetailVM
+                    // will surface its own send errors going forward.
+                    newSessionLogger.error(
+                        "first-message publish failed sid=\(sessionID, privacy: .public) error=\(String(describing: error), privacy: .public)"
+                    )
+                }
             }
         }
     }

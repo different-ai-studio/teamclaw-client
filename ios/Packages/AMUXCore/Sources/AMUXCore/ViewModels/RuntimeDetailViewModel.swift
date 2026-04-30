@@ -33,6 +33,14 @@ public final class RuntimeDetailViewModel {
     /// so the synthesized event in stop()/idle flush carries the model too.
     private var streamingModel: String?
     public var isDaemonOnline = true
+    /// User-visible transient error from the most recent send-prompt
+    /// attempt. Set by `sendPrompt` when `TeamclawService.sendMessage`
+    /// throws; auto-cleared after `errorMessageTTL` seconds. The UI binds
+    /// to this for an inline banner so silent publish failures stop being
+    /// invisible.
+    public var sendErrorMessage: String?
+    private var errorClearTask: Task<Void, Never>?
+    private let errorMessageTTL: TimeInterval = 5
     public var runtime: Runtime?
     public let session: Session?
     private let mqtt: MQTTService
@@ -860,11 +868,16 @@ public final class RuntimeDetailViewModel {
             appendEvent(userEvent)
             recomputeGroups()
 
-            teamclawService.sendMessage(
-                sessionId: session.sessionId,
-                content: text,
-                modelId: modelId
-            )
+            do {
+                _ = try await teamclawService.sendMessage(
+                    sessionId: session.sessionId,
+                    content: text,
+                    modelId: modelId
+                )
+            } catch {
+                surfaceSendError(error)
+                throw error
+            }
         } else if runtime != nil {
             // Runtime session: send ACP command
             let seq = (events.last?.sequence ?? 0) + 1
@@ -881,6 +894,17 @@ public final class RuntimeDetailViewModel {
             try await sendCommand { $0.command = .sendPrompt(p) }
         }
     }
+    @MainActor
+    private func surfaceSendError(_ error: Error) {
+        sendErrorMessage = error.localizedDescription
+        errorClearTask?.cancel()
+        errorClearTask = Task { [weak self, errorMessageTTL] in
+            try? await Task.sleep(for: .seconds(errorMessageTTL))
+            guard let self, !Task.isCancelled else { return }
+            self.sendErrorMessage = nil
+        }
+    }
+
     public func cancelTask() async throws {
         try await sendCommand { $0.command = .cancel(Amux_AcpCancel()) }
     }

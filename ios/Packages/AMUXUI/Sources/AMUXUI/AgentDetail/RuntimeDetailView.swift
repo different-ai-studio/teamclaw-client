@@ -70,6 +70,17 @@ public struct RuntimeDetailView: View {
                 .liquidGlass(in: Capsule(), tint: .orange, interactive: false)
                 .padding(.vertical, 4)
             }
+            if let sendError = viewModel.sendErrorMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill").font(.caption)
+                    Text(sendError).font(.caption).fontWeight(.medium)
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .liquidGlass(in: Capsule(), tint: .red, interactive: false)
+                .padding(.vertical, 4)
+            }
 
             ScrollViewReader { proxy in
                 ScrollView {

@@ -453,15 +453,48 @@ public final class TeamclawService {
     ///   Forwarded via ``Teamclaw_Message/model`` and proxied to the agent's session by
     ///   the daemon's collab→agent dispatch path, which calls `send_set_model` before
     ///   `send_prompt` when the model differs from the agent's current model.
-    public func sendMessage(sessionId: String, content: String, modelId: String? = nil) {
+    public enum SendMessageError: LocalizedError, Sendable {
+        case mqttUnavailable
+        case actorNotResolved
+        case encodingFailed
+        case publishFailed(String)
+        case mqttNotConnected(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .mqttUnavailable:
+                return "MQTT client not initialised."
+            case .actorNotResolved:
+                return "Local member id not resolved yet — sign-in may still be in flight."
+            case .encodingFailed:
+                return "Failed to serialise message envelope."
+            case .publishFailed(let detail):
+                return "MQTT publish failed: \(detail)"
+            case .mqttNotConnected(let state):
+                return "MQTT not connected (state=\(state))."
+            }
+        }
+    }
+
+    /// Publishes a `message.created` LiveEventEnvelope to
+    /// `amux/{team}/session/{sid}/live`. Throws on guard failures and
+    /// publish errors so the caller can surface them in the UI — silent
+    /// drops were the source of the recurring "second message no
+    /// response" mystery.
+    @discardableResult
+    public func sendMessage(
+        sessionId: String,
+        content: String,
+        modelId: String? = nil
+    ) async throws -> String {
         let sidPrefix = String(sessionId.prefix(8))
         guard let mqtt else {
             teamclawLogger.warning("sendMessage[\(sidPrefix, privacy: .public)] aborted: mqtt nil")
-            return
+            throw SendMessageError.mqttUnavailable
         }
         guard let actorId = currentHumanActorId else {
             teamclawLogger.warning("sendMessage[\(sidPrefix, privacy: .public)] refusing: localMemberId not resolved")
-            return
+            throw SendMessageError.actorNotResolved
         }
         var message = Teamclaw_Message()
         message.messageID = UUID().uuidString
@@ -482,7 +515,7 @@ public final class TeamclawService {
             body = try messageEnvelope.serializedData()
         } catch {
             teamclawLogger.error("sendMessage[\(sidPrefix, privacy: .public)] failed to serialize SessionMessageEnvelope")
-            return
+            throw SendMessageError.encodingFailed
         }
 
         var live = Teamclaw_LiveEventEnvelope()
@@ -493,25 +526,33 @@ public final class TeamclawService {
         live.sentAt = Int64(Date().timeIntervalSince1970)
         live.body = body
 
-        guard let data = try? live.serializedData() else {
+        let data: Data
+        do {
+            data = try live.serializedData()
+        } catch {
             teamclawLogger.error("sendMessage[\(sidPrefix, privacy: .public)] failed to serialize LiveEventEnvelope")
-            return
+            throw SendMessageError.encodingFailed
+        }
+
+        let connState = mqtt.connectionState
+        if connState != .connected {
+            teamclawLogger.warning("sendMessage[\(sidPrefix, privacy: .public)] mqtt not connected (state=\(connState.rawValue, privacy: .public))")
+            throw SendMessageError.mqttNotConnected(connState.rawValue)
         }
 
         let topic = MQTTTopics.sessionLive(teamID: teamId, sessionID: sessionId)
         let msgIdPrefix = String(message.messageID.prefix(8))
         let actorPrefix = String(actorId.prefix(8))
-        let connState = mqtt.connectionState.rawValue
         let bytes = data.count
-        teamclawLogger.notice("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) actor=\(actorPrefix, privacy: .public) bytes=\(bytes, privacy: .public) topic=\(topic, privacy: .public) mqtt=\(connState, privacy: .public)")
-        Task {
-            do {
-                try await mqtt.publish(topic: topic, payload: data, retain: false)
-                teamclawLogger.notice("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) publish OK")
-            } catch {
-                teamclawLogger.error("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) publish FAILED: \(String(describing: error), privacy: .public)")
-            }
+        teamclawLogger.notice("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) actor=\(actorPrefix, privacy: .public) bytes=\(bytes, privacy: .public) topic=\(topic, privacy: .public) mqtt=\(connState.rawValue, privacy: .public)")
+        do {
+            try await mqtt.publish(topic: topic, payload: data, retain: false)
+        } catch {
+            teamclawLogger.error("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) publish FAILED: \(String(describing: error), privacy: .public)")
+            throw SendMessageError.publishFailed(String(describing: error))
         }
+        teamclawLogger.notice("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) publish OK")
+        return message.messageID
     }
 
     public func makeCreateSessionRequest(
