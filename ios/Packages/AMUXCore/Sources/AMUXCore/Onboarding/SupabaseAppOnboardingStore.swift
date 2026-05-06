@@ -115,24 +115,30 @@ public actor SupabaseAppOnboardingStore: AppOnboardingStore {
         let session = try await client.auth.session
         let userID = session.user.id.uuidString.lowercased()
 
+        // Fetch every member-actor row for the user — a user has one
+        // member-actor per team they belong to (auto-created on team join /
+        // claim-invite). The previous `limit(1)` only ever surfaced one
+        // team, so a user who joined a team via invite stayed pinned to
+        // their original auto-created team.
         let actors: [MemberRow] = try await client
             .from("actors")
             .select("id")
             .eq("user_id", value: userID)
             .eq("actor_type", value: "member")
-            .limit(1)
             .execute()
             .value
 
-        guard let member = actors.first else {
-            return AppBootstrap(memberActorID: nil, teams: [])
+        guard !actors.isEmpty else {
+            return AppBootstrap(memberActorID: nil, teams: [], memberActorIDByTeam: [:])
         }
 
+        let actorIDs = actors.map(\.id)
         let memberships: [MembershipRow] = try await client
             .from("team_members")
             .select(
                 """
                 role,
+                member_id,
                 teams!inner (
                   id,
                   name,
@@ -140,20 +146,33 @@ public actor SupabaseAppOnboardingStore: AppOnboardingStore {
                 )
                 """
             )
-            .eq("member_id", value: member.id)
+            .in("member_id", values: actorIDs)
             .execute()
             .value
 
-        let teams = memberships.map {
-            TeamSummary(
-                id: $0.teams.id,
-                name: $0.teams.name,
-                slug: $0.teams.slug,
-                role: $0.role
-            )
+        // De-duplicate teams by id while preserving the first-seen membership
+        // (role + the actor id that membership was attached to).
+        var teamByID: [String: TeamSummary] = [:]
+        var memberByTeam: [String: String] = [:]
+        var orderedTeams: [TeamSummary] = []
+        for m in memberships {
+            if teamByID[m.teams.id] == nil {
+                let t = TeamSummary(id: m.teams.id, name: m.teams.name, slug: m.teams.slug, role: m.role)
+                teamByID[m.teams.id] = t
+                orderedTeams.append(t)
+            }
+            // Last writer wins is fine here — the same team won't have two
+            // distinct member-actor rows for the same user under normal
+            // flows; the pre-existing data invariant is one-actor-per-team.
+            memberByTeam[m.teams.id] = m.memberID
         }
 
-        return AppBootstrap(memberActorID: member.id, teams: teams)
+        let primaryActorID = orderedTeams.first.flatMap { memberByTeam[$0.id] }
+        return AppBootstrap(
+            memberActorID: primaryActorID,
+            teams: orderedTeams,
+            memberActorIDByTeam: memberByTeam
+        )
     }
 
     public func createTeam(named name: String) async throws -> CreatedTeam {
@@ -241,6 +260,42 @@ public actor SupabaseAppOnboardingStore: AppOnboardingStore {
     public func signOut() async throws {
         try await client.auth.signOut()
     }
+
+    public func claimInvite(token: String) async throws -> ClaimResult {
+        // Same `claim_team_invite` RPC SupabaseActorRepository uses; surfaced
+        // here so coordinator.bootstrap can claim before auto-creating an
+        // anonymous team and stranding the user with an orphan workspace.
+        let rows: [BootstrapClaimResultRow] = try await client
+            .rpc("claim_team_invite", params: BootstrapClaimInviteParams(token: token))
+            .execute()
+            .value
+        guard let row = rows.first else {
+            throw NSError(domain: "AMUX.Onboarding", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "claim_team_invite returned no rows"])
+        }
+        return row.asClaimResult
+    }
+}
+
+private struct BootstrapClaimInviteParams: Encodable {
+    let token: String
+    enum CodingKeys: String, CodingKey { case token = "p_token" }
+}
+
+private struct BootstrapClaimResultRow: Decodable, Sendable {
+    let actorID: String; let teamID: String
+    let actorType: String; let displayName: String
+    let refreshToken: String?
+    enum CodingKeys: String, CodingKey {
+        case actorID = "actor_id", teamID = "team_id"
+        case actorType = "actor_type", displayName = "display_name"
+        case refreshToken = "refresh_token"
+    }
+    var asClaimResult: ClaimResult {
+        ClaimResult(actorID: actorID, teamID: teamID,
+                    actorType: actorType, displayName: displayName,
+                    refreshToken: refreshToken)
+    }
 }
 
 private struct MemberRow: Decodable, Sendable {
@@ -249,7 +304,14 @@ private struct MemberRow: Decodable, Sendable {
 
 private struct MembershipRow: Decodable, Sendable {
     let role: String
+    let memberID: String
     let teams: TeamRow
+
+    enum CodingKeys: String, CodingKey {
+        case role
+        case memberID = "member_id"
+        case teams
+    }
 }
 
 private struct TeamRow: Decodable, Sendable {

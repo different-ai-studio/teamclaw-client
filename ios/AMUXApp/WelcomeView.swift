@@ -25,6 +25,23 @@ struct WelcomeView: View {
 
                 Spacer()
 
+                if let err = coordinator.errorMessage, !err.isEmpty {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(err)
+                            .font(.footnote)
+                            .foregroundStyle(.primary)
+                    }
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.orange.opacity(0.10))
+                    )
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 8)
+                }
+
                 Button {
                     showChoose = true
                 } label: {

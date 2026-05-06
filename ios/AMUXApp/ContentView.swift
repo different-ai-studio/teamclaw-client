@@ -101,9 +101,33 @@ struct ContentView: View {
     private func signOut() {
         connectTask?.cancel()
         isConnecting = false
+        // Wipe the SwiftData cache before invalidating the session — every
+        // model in the container is just a snapshot of remote state for the
+        // signed-in user, and leaving rows around lets the next signed-in
+        // user (or the same user after switching teams via invite) see stale
+        // actors / sessions / workspaces until a per-team reload overwrites
+        // them. The ones we don't actively reload (other-team rows) never get
+        // cleared otherwise.
+        wipeLocalCache()
         Task {
             await mqtt.disconnect()
             await onboarding.signOut()
+        }
+    }
+
+    private func wipeLocalCache() {
+        do {
+            try modelContext.delete(model: Runtime.self)
+            try modelContext.delete(model: AgentEvent.self)
+            try modelContext.delete(model: CachedActor.self)
+            try modelContext.delete(model: CachedAgentRuntime.self)
+            try modelContext.delete(model: Workspace.self)
+            try modelContext.delete(model: Session.self)
+            try modelContext.delete(model: SessionMessage.self)
+            try modelContext.delete(model: SessionIdea.self)
+            try modelContext.save()
+        } catch {
+            logger.error("Failed to wipe local cache on sign-out: \(error)")
         }
     }
 
@@ -182,4 +206,5 @@ private actor FailingOnboardingStore: AppOnboardingStore {
     func isAnonymous() async -> Bool { false }
     func upgradeWithPassword(email: String, password: String) async throws { throw error }
     func upgradeWithAppleCredential(idToken: String, nonce: String) async throws { throw error }
+    func claimInvite(token: String) async throws -> ClaimResult { throw error }
 }

@@ -11,6 +11,7 @@ public struct RootTabView: View {
     var onSignOut: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppOnboardingCoordinator.self) private var coordinator: AppOnboardingCoordinator?
     @State private var viewModel = SessionListViewModel()
     @SceneStorage("rootTab") private var selection: AppTab = .sessions
     @State private var sessionsPath: [String] = []
@@ -79,6 +80,7 @@ public struct RootTabView: View {
                                sessionViewModel: viewModel,
                                teamclawService: teamclawService,
                                activeTeam: activeTeam,
+                               currentActorID: currentActorID,
                                store: actorStore,
                                connectedAgentsStore: connectedAgentsStore,
                                showInvite: $showInviteAfterReminder)
@@ -118,7 +120,14 @@ public struct RootTabView: View {
         .onReceive(NotificationCenter.default.publisher(for: .amuxInviteTokenReceived)) { note in
             guard let token = note.userInfo?["token"] as? String,
                   let store = actorStore else { return }
-            Task { _ = await store.claimInvite(token: token) }
+            Task { await claimAndSwitch(token: token, store: store) }
+        }
+        .onChange(of: actorStore != nil) { _, ready in
+            // Replay a token captured by ChooseAuthView (pre-auth) once the
+            // post-auth ActorStore is alive — without it the existing
+            // notification path doesn't fire (ChooseAuthView posts the token
+            // before this view is mounted).
+            if ready { replayPendingInviteIfNeeded() }
         }
         .sheet(isPresented: $showFirstAgentReminder) {
             ZeroAgentReminderSheet {
@@ -210,6 +219,34 @@ public struct RootTabView: View {
         } catch {
             // Soft prompt; failure to count is not user-visible.
         }
+    }
+
+    private func replayPendingInviteIfNeeded() {
+        guard let coordinator,
+              let token = coordinator.pendingInviteToken,
+              !token.isEmpty,
+              let store = actorStore else { return }
+        // Clear first so a transient store re-creation can't trigger a second
+        // claim against the same token.
+        coordinator.pendingInviteToken = nil
+        Task { await claimAndSwitch(token: token, store: store) }
+    }
+
+    /// Single entry point used by every flow that ends in a claim:
+    ///   - the `amux://invite?token=…` deeplink (NotificationCenter)
+    ///   - the pre-auth paste path on ChooseAuthView (`pendingInviteToken`)
+    ///
+    /// On success we re-bootstrap with `preferringTeamID:` so the active
+    /// team — and everything that derives from it (settings team name, MQTT
+    /// scope, ActorStore's queries) — flips to the team the user actually
+    /// joined instead of staying pinned to whatever team was active when
+    /// the claim fired.
+    private func claimAndSwitch(token: String, store: ActorStore) async {
+        guard let result = await store.claimInvite(token: token) else { return }
+        // The same team — no switch needed; ActorStore.reload() already ran
+        // inside claimInvite and the active context is correct.
+        if let activeID = activeTeam?.id, activeID == result.teamID { return }
+        await coordinator?.bootstrap(preferringTeamID: result.teamID)
     }
 
     @MainActor

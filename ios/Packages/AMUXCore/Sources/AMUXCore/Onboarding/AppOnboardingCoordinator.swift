@@ -18,10 +18,19 @@ public struct TeamSummary: Codable, Equatable, Sendable, Identifiable {
 public struct AppBootstrap: Equatable, Sendable {
     public let memberActorID: String?
     public let teams: [TeamSummary]
+    /// Map of team id → the user's member-actor id within that team. A user
+    /// has a distinct actor row per team they belong to, so this lets the
+    /// coordinator switch the active context to a specific team (e.g. the
+    /// one a freshly-claimed invite landed in) without re-querying the
+    /// backend.
+    public let memberActorIDByTeam: [String: String]
 
-    public init(memberActorID: String?, teams: [TeamSummary]) {
+    public init(memberActorID: String?,
+                teams: [TeamSummary],
+                memberActorIDByTeam: [String: String] = [:]) {
         self.memberActorID = memberActorID
         self.teams = teams
+        self.memberActorIDByTeam = memberActorIDByTeam
     }
 }
 
@@ -65,6 +74,11 @@ public protocol AppOnboardingStore: Sendable {
     func ensureSession() async throws
     func loadBootstrap() async throws -> AppBootstrap
     func createTeam(named name: String) async throws -> CreatedTeam
+    /// Direct invite-claim entry used by bootstrap so a freshly-anonymous
+    /// user can join the inviter's team before the auto-create-team branch
+    /// fires (otherwise they end up with an orphan team alongside the one
+    /// they actually wanted to join).
+    func claimInvite(token: String) async throws -> ClaimResult
 
     // Auth sign-in methods
     func signIn(email: String, password: String) async throws
@@ -100,6 +114,10 @@ public final class AppOnboardingCoordinator {
     /// True iff the current session is an anonymous Supabase user. UI uses
     /// this to surface the "upgrade your account" affordance.
     public var isAnonymous: Bool = false
+    /// Invite token captured pre-auth (e.g. user pasted a link on the
+    /// onboarding screen). Stashed here so it can replay through the
+    /// existing `amuxInviteTokenReceived` pipeline after sign-in.
+    public var pendingInviteToken: String?
 
     private let store: AppOnboardingStore
 
@@ -107,7 +125,7 @@ public final class AppOnboardingCoordinator {
         self.store = store
     }
 
-    public func bootstrap() async {
+    public func bootstrap(preferringTeamID: String? = nil) async {
         guard !isBusy else { return }
         isBusy = true
         route = .loading
@@ -117,11 +135,57 @@ public final class AppOnboardingCoordinator {
         do {
             try await store.ensureSession()
             isAnonymous = await store.isAnonymous()
-            let bootstrap = try await store.loadBootstrap()
+            var bootstrap = try await store.loadBootstrap()
             pendingCreatedTeam = nil
+            var preferred = preferringTeamID
 
-            if let team = bootstrap.teams.first,
-               let memberActorID = bootstrap.memberActorID {
+            // If a pending invite token is sitting on the coordinator (the
+            // user pasted it in ChooseAuthView before sign-in), claim it
+            // now — BEFORE the anonymous auto-create branch — so we never
+            // strand the user with an orphan workspace alongside the team
+            // they actually wanted to join. After claim, re-load bootstrap
+            // and prefer the claimed team for the active context.
+            if let token = pendingInviteToken, !token.isEmpty {
+                do {
+                    let result = try await store.claimInvite(token: token)
+                    pendingInviteToken = nil
+                    preferred = preferred ?? result.teamID
+                    bootstrap = try await store.loadBootstrap()
+                } catch {
+                    // Claim failed (expired/consumed token, network blip,
+                    // etc.). The user explicitly asked to join via invite —
+                    // falling through to the anonymous auto-create branch
+                    // would silently strand them in a fresh orphan team
+                    // alongside an ambiguous error. Roll back the just-
+                    // created anonymous session and bounce back to needsAuth
+                    // with the error message so they can paste a new token.
+                    pendingInviteToken = nil
+                    errorMessage = error.localizedDescription
+                    try? await store.signOut()
+                    currentContext = nil
+                    isAnonymous = false
+                    route = .needsAuth
+                    return
+                }
+            }
+
+            // Pick the active team: when a preferred team is requested (e.g.
+            // right after claimInvite) and the user actually belongs to it,
+            // honor the request so the UI lands on that team instead of the
+            // arbitrary first one. Fall back to the first team otherwise.
+            let pickedTeam: TeamSummary? = {
+                if let preferred,
+                   let match = bootstrap.teams.first(where: { $0.id == preferred }) {
+                    return match
+                }
+                return bootstrap.teams.first
+            }()
+            let pickedActorID: String? = {
+                guard let team = pickedTeam else { return nil }
+                return bootstrap.memberActorIDByTeam[team.id] ?? bootstrap.memberActorID
+            }()
+
+            if let team = pickedTeam, let memberActorID = pickedActorID {
                 currentContext = AppContext(team: team, memberActorID: memberActorID)
                 route = .ready
                 return
@@ -215,6 +279,45 @@ public final class AppOnboardingCoordinator {
 
     public func signInAnonymously() async {
         await performAuth { try await self.store.signInAnonymously() }
+    }
+
+    /// Sign in anonymously and immediately claim an invite token in one go,
+    /// keeping the UI on the current screen on failure. The default
+    /// `signInAnonymously` → `bootstrap` path transitions `route` through
+    /// `.loading`, which rebuilds the whole onboarding view tree (including
+    /// any sheet that was open) — bad UX when the user wants to retry the
+    /// paste without re-navigating. This method only flips `route` once,
+    /// on success, and leaves it unchanged on failure so the calling sheet
+    /// can stay open and surface `errorMessage` inline.
+    public func signInAnonymouslyAndClaim(token: String) async {
+        guard !isBusy else { return }
+        isBusy = true
+        errorMessage = nil
+
+        do {
+            try await store.signInAnonymously()
+        } catch {
+            errorMessage = error.localizedDescription
+            isBusy = false
+            return
+        }
+
+        do {
+            let result = try await store.claimInvite(token: token)
+            // Success → run bootstrap with the joined team preferred. The
+            // transient `.loading` flicker here is fine because the sheet
+            // is about to be dismissed by the caller anyway.
+            isBusy = false
+            await bootstrap(preferringTeamID: result.teamID)
+        } catch {
+            // Roll back the just-created anonymous session so we don't
+            // strand the user with an authenticated-but-team-less Supabase
+            // user. Critically we DON'T touch `route` here — the calling
+            // sheet stays mounted and re-renders with the new errorMessage.
+            errorMessage = error.localizedDescription
+            try? await store.signOut()
+            isBusy = false
+        }
     }
 
     // MARK: - Anonymous account upgrade

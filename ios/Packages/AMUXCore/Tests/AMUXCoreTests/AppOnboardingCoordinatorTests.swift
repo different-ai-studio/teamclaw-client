@@ -164,7 +164,12 @@ private actor InMemoryOnboardingStore: AppOnboardingStore {
         // no-op
     }
 
+    func claimInvite(token: String) async throws -> ClaimResult {
+        throw InMemoryError.claimNotConfigured
+    }
+
     enum InMemoryError: Error {
         case missingCreatedTeam
+        case claimNotConfigured
     }
 }
