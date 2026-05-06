@@ -7,6 +7,7 @@ public struct MembersTab: View {
     let sessionViewModel: SessionListViewModel
     let teamclawService: TeamclawService?
     let activeTeam: TeamSummary?
+    let currentActorID: String?
     let store: ActorStore
     let connectedAgentsStore: ConnectedAgentsStore?
     /// One-shot trigger from the parent (e.g. the zero-agent reminder) to
@@ -21,6 +22,7 @@ public struct MembersTab: View {
                 sessionViewModel: SessionListViewModel,
                 teamclawService: TeamclawService?,
                 activeTeam: TeamSummary?,
+                currentActorID: String? = nil,
                 store: ActorStore,
                 connectedAgentsStore: ConnectedAgentsStore? = nil,
                 showInvite: Binding<Bool> = .constant(false)) {
@@ -29,6 +31,7 @@ public struct MembersTab: View {
         self.sessionViewModel = sessionViewModel
         self.teamclawService = teamclawService
         self.activeTeam = activeTeam
+        self.currentActorID = currentActorID
         self.store = store
         self.connectedAgentsStore = connectedAgentsStore
         self._externalInviteTrigger = showInvite
@@ -42,6 +45,7 @@ public struct MembersTab: View {
                 mqtt: mqtt,
                 sessionViewModel: sessionViewModel,
                 teamclawService: teamclawService,
+                currentActorID: currentActorID,
                 connectedAgentsStore: connectedAgentsStore,
                 onAddYourAgent: { showInvite = true }
             )

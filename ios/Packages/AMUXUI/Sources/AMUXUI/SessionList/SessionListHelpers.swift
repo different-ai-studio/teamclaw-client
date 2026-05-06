@@ -184,49 +184,89 @@ struct AgentRowView: View {
         self.workspaceName = workspaceName
     }
 
-    // Supabase-first row resolution. The MQTT live `Runtime` is consulted
-    // ONLY for the breathing-dot running state and the unread hint — every
-    // other field reads off `Session` + `CachedAgentRuntime` so the row is
-    // stable when the daemon is offline.
-
     private var displayTitle: String {
         session.title.isEmpty ? "Untitled Session" : session.title
     }
 
     private var lastMessage: String { session.lastMessagePreview }
-
     private var isUnread: Bool { runtime?.hasUnread ?? false }
 
-    /// Live MQTT status (== 2) wins; otherwise the Supabase-cached row's
-    /// status drives the breathing dot when the daemon is offline.
     private var isRunning: Bool {
         if let runtime { return runtime.status == 2 }
         return cachedRuntime?.status == "running"
     }
-
-    private var avatarSeed: String { session.primaryAgentId ?? session.sessionId }
-
-    private var avatarInitial: String {
-        let source = session.title.isEmpty ? session.sessionId : session.title
-        let lastComponent = source.split(separator: "/").last.map(String.init) ?? source
-        return lastComponent.isEmpty ? "·" : String(lastComponent.prefix(1)).uppercased()
+    private var isStarting: Bool {
+        if let runtime { return runtime.status == 1 }
+        return cachedRuntime?.status == "starting"
+    }
+    private var isStopped: Bool {
+        if let runtime { return runtime.status == 5 }
+        return cachedRuntime?.status == "stopped" || cachedRuntime?.status == "failed"
     }
 
-    /// Lower-saturation palette: each base color is mixed with white to
-    /// reduce vibrance so the avatar doesn't dominate the row.
-    private var avatarColor: Color {
-        let palette: [Color] = [.blue, .purple, .orange, .green, .pink, .teal, .indigo, .mint]
-        let hash = avatarSeed.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
-        return palette[abs(hash) % palette.count].mix(with: .white, by: 0.30)
-    }
-
-    private var agentLogoName: String? {
-        switch cachedRuntime?.backendType {
-        case "claude": return "ClaudeLogo"
-        case "opencode": return "OpenCodeLogo"
-        case "codex": return "CodexLogo"
-        default: return nil
+    private var statusLabel: String {
+        if let runtime, runtime.status != 0 { return runtime.statusLabel }
+        if let raw = cachedRuntime?.status, !raw.isEmpty {
+            return raw.prefix(1).uppercased() + raw.dropFirst()
         }
+        return ""
+    }
+
+    private var statusForeground: Color {
+        if isRunning  { return Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255) }
+        if isStarting { return Color(red: 0xA2/255, green: 0x58/255, blue: 0x0B/255) }
+        return .secondary
+    }
+
+    private var statusDotColor: Color {
+        if isRunning  { return Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255) }
+        if isStarting { return Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255) }
+        if isStopped  { return Color.black.opacity(0.25) }
+        return Color(.systemGray)
+    }
+
+    /// Tinted background + foreground + 2-letter glyph keyed off the daemon
+    /// backend type. Falls back to a neutral chip with the title's initial
+    /// when the row hasn't resolved a CachedAgentRuntime yet.
+    private struct AgentBadge {
+        let background: Color
+        let foreground: Color
+        let glyph: String
+    }
+
+    private var agentBadge: AgentBadge {
+        switch cachedRuntime?.backendType {
+        case "claude":
+            return AgentBadge(
+                background: Color(red: 0xFC/255, green: 0xED/255, blue: 0xE3/255),
+                foreground: Color(red: 0xC2/255, green: 0x4F/255, blue: 0x1F/255),
+                glyph: "CC"
+            )
+        case "opencode":
+            return AgentBadge(
+                background: Color(red: 0xE4/255, green: 0xF1/255, blue: 0xFB/255),
+                foreground: Color(red: 0x1B/255, green: 0x6B/255, blue: 0xB8/255),
+                glyph: "OC"
+            )
+        case "codex":
+            return AgentBadge(
+                background: Color(red: 0xEF/255, green: 0xEA/255, blue: 0xFB/255),
+                foreground: Color(red: 0x5B/255, green: 0x45/255, blue: 0xA8/255),
+                glyph: "CX"
+            )
+        default:
+            return AgentBadge(
+                background: Color(.tertiarySystemFill),
+                foreground: .secondary,
+                glyph: fallbackGlyph
+            )
+        }
+    }
+
+    private var fallbackGlyph: String {
+        let source = session.title.isEmpty ? session.sessionId : session.title
+        let last = source.split(separator: "/").last.map(String.init) ?? source
+        return last.isEmpty ? "·" : String(last.prefix(1)).uppercased()
     }
 
     private var rowTimestamp: Date {
@@ -235,94 +275,117 @@ struct AgentRowView: View {
 
     private func formatTime(_ date: Date) -> String {
         let seconds = Int(-date.timeIntervalSinceNow)
-        if seconds < 60 { return "Just now" }
-        if seconds < 3600 { return "\(seconds / 60)m" }
-        if seconds < 86400 { return "\(seconds / 3600)h" }
+        if seconds < 60     { return "now" }
+        if seconds < 3600   { return "\(seconds / 60)m" }
+        if seconds < 86400  { return "\(seconds / 3600)h" }
         if seconds < 604800 { return "\(seconds / 86400)d" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MM/dd"
-        return formatter.string(from: date)
+        let f = DateFormatter()
+        f.dateFormat = "MM/dd"
+        return f.string(from: date)
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(isRunning ? Color.red : isUnread ? Color.blue : Color.clear)
-                    .frame(width: 8, height: 8)
-                    .opacity(isRunning ? (breathe ? 0.3 : 1.0) : 1.0)
-                    .animation(
-                        isRunning
-                            ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
-                            : .default,
-                        value: breathe
-                    )
-                    .onAppear { breathe = true }
-
-                ZStack {
-                    Circle()
-                        .fill(avatarColor)
-                        .frame(width: 40, height: 40)
-                    Text(avatarInitial)
-                        .font(.callout)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.white)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
+                badgeView
                 Text(displayTitle)
                     .font(.body)
                     .fontWeight(.semibold)
                     .lineLimit(1)
-
-                if !lastMessage.isEmpty {
-                    Text(lastMessage)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                    .foregroundStyle(isStopped ? .secondary : .primary)
+                Spacer(minLength: 4)
+                if isUnread {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 7, height: 7)
                 }
-
-                HStack(spacing: 4) {
-                    let hasLeadingChip = agentLogoName != nil || !workspaceName.isEmpty
-
-                    if let logo = agentLogoName {
-                        Image(logo, bundle: .module)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 14, height: 14)
-                    }
-
-                    if !workspaceName.isEmpty {
-                        Text(workspaceName)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if session.participantCount > 1 {
-                        if hasLeadingChip {
-                            Text("·")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        Image(systemName: "person.2")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("\(session.participantCount)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    Text(formatTime(rowTimestamp))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                Text(formatTime(rowTimestamp))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .alignmentGuide(.listRowSeparatorLeading) { d in d[.leading] }
+
+            if !lastMessage.isEmpty {
+                Text(lastMessage)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .padding(.leading, badgeIndent)
+            }
+
+            metaStrip
+                .padding(.leading, badgeIndent)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
+        .alignmentGuide(.listRowSeparatorLeading) { _ in Self.badgeIndent }
+    }
+
+    private static let badgeIndent: CGFloat = 38
+    private var badgeIndent: CGFloat { Self.badgeIndent }
+
+    private var badgeView: some View {
+        let badge = agentBadge
+        return HStack(spacing: 5) {
+            Circle()
+                .fill(statusDotColor)
+                .frame(width: 5, height: 5)
+                .opacity(isRunning ? (breathe ? 0.35 : 1.0) : 1.0)
+                .animation(
+                    isRunning
+                        ? .easeInOut(duration: 1.4).repeatForever(autoreverses: true)
+                        : .default,
+                    value: breathe
+                )
+                .onAppear { if isRunning { breathe = true } }
+            Text(badge.glyph)
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.2)
+                .foregroundStyle(badge.foreground)
+        }
+        .padding(.horizontal, 7)
+        .frame(height: 22)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(badge.background)
+        )
+    }
+
+    @ViewBuilder
+    private var metaStrip: some View {
+        HStack(spacing: 8) {
+            if !workspaceName.isEmpty {
+                Text(workspaceName)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            if !workspaceName.isEmpty && !statusLabel.isEmpty {
+                Circle()
+                    .fill(Color.secondary.opacity(0.3))
+                    .frame(width: 3, height: 3)
+            }
+
+            if !statusLabel.isEmpty {
+                Text(statusLabel)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(statusForeground)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            if session.participantCount > 1 {
+                HStack(spacing: 3) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 10))
+                    Text("\(session.participantCount)")
+                        .font(.caption)
+                        .monospacedDigit()
+                }
+                .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 

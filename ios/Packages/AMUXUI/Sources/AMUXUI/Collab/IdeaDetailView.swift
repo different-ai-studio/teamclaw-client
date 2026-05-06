@@ -12,11 +12,10 @@ public struct IdeaDetailView: View {
     @Binding var navigationPath: [String]
 
     @Environment(\.dismiss) private var dismiss
-    @Query(filter: #Predicate<CachedActor> { $0.actorType == "member" },
-           sort: \CachedActor.displayName)
-    private var members: [CachedActor]
+    @Query(sort: \CachedActor.displayName) private var allActors: [CachedActor]
     @Query(sort: \Session.lastMessageAt, order: .reverse)
     private var allSessions: [Session]
+    @Query(sort: \Workspace.displayName) private var workspaces: [Workspace]
 
     @State private var localTitle: String = ""
     @State private var localDescription: String = ""
@@ -24,6 +23,7 @@ public struct IdeaDetailView: View {
     @State private var showArchiveConfirm = false
     @State private var isArchiving = false
     @State private var didSeedLocals = false
+    @State private var composerText: String = ""
     @FocusState private var titleFocused: Bool
     @FocusState private var descriptionFocused: Bool
 
@@ -45,21 +45,71 @@ public struct IdeaDetailView: View {
         self._navigationPath = navigationPath
     }
 
-    private var item: IdeaRecord? {
-        ideaStore.idea(id: ideaID)
+    private var item: IdeaRecord? { ideaStore.idea(id: ideaID) }
+
+    private var creator: CachedActor? {
+        guard let item, !item.createdByActorID.isEmpty else { return nil }
+        return allActors.first { $0.actorId == item.createdByActorID }
     }
 
-    private var creatorLabel: String {
-        guard let item else { return "—" }
-        guard !item.createdByActorID.isEmpty else { return "—" }
-        if let member = members.first(where: { $0.actorId == item.createdByActorID }) {
-            return member.displayName
-        }
-        return "Unknown"
+    private var workspaceName: String? {
+        guard let item, !item.workspaceID.isEmpty else { return nil }
+        return workspaces.first { $0.workspaceId == item.workspaceID }?.displayName
     }
 
     private var relatedSessions: [Session] {
         allSessions.filter { $0.ideaId == ideaID }
+    }
+
+    /// Deterministic mock agent picked from the team's agents — used to
+    /// populate the "Claimed by" card for `in_progress` ideas while a real
+    /// claim aggregate doesn't exist yet.
+    private var mockClaimedAgent: CachedActor? {
+        let agents = allActors.filter(\.isAgent)
+        guard !agents.isEmpty else { return nil }
+        let hash = abs(ideaID.unicodeScalars.reduce(0) { $0 &+ Int($1.value) })
+        return agents[hash % agents.count]
+    }
+
+    /// Deterministic placeholder submissions until a real submissions feed
+    /// lands. Stable per idea so the list doesn't reshuffle.
+    fileprivate struct MockSubmission: Identifiable {
+        let id: Int
+        let actor: CachedActor
+        let when: Date
+        let content: String
+        let attachment: String?
+    }
+
+    fileprivate var mockSubmissions: [MockSubmission] {
+        guard let item else { return [] }
+        let pool = allActors
+        guard !pool.isEmpty else { return [] }
+        let h = abs(item.id.unicodeScalars.reduce(0) { $0 &+ Int($1.value) })
+        let count = item.isOpen ? 0 : (item.isDone ? 4 : (h % 3 + 1))
+        if count == 0 { return [] }
+
+        let templates: [(String, String?)] = [
+            ("Drafted the initial implementation. Opened a PR for review — feedback welcome.",
+             "PR #214 · daemon/src/cron/sweep.rs"),
+            ("Reviewed the proposal. The unsubscribe path needs to flush retained state before the broker drops the connection.",
+             nil),
+            ("Initial proposal: 24h idle threshold, 6h sweep cadence, configurable via daemon.toml. Will add a regression test.",
+             nil),
+            ("Sketched a quick prototype to validate the approach. Looks promising on the happy path.",
+             nil),
+        ]
+        var out: [MockSubmission] = []
+        for i in 0..<count {
+            let actor = pool[(h &+ i) % pool.count]
+            let template = templates[i % templates.count]
+            let when = item.updatedAt.addingTimeInterval(-Double(i) * 3600)
+            out.append(MockSubmission(
+                id: i, actor: actor, when: when,
+                content: template.0, attachment: template.1
+            ))
+        }
+        return out
     }
 
     public var body: some View {
@@ -77,79 +127,26 @@ public struct IdeaDetailView: View {
     @ViewBuilder
     private func content(for item: IdeaRecord) -> some View {
         List {
-            Section("Title") {
-                TextField("Title", text: $localTitle, axis: .vertical)
-                    .lineLimit(1...3)
-                    .focused($titleFocused)
-                    .onSubmit { commitTitle(for: item) }
-                    .onChange(of: titleFocused) { _, focused in
-                        if !focused { commitTitle(for: item) }
-                    }
+            heroSection(item)
+            if item.isInProgress, let agent = mockClaimedAgent {
+                claimCardSection(agent: agent)
             }
-
-            Section("Status") {
-                HStack(spacing: 8) {
-                    statusPill("Open", value: "open", item: item)
-                    statusPill("In Progress", value: "in_progress", item: item)
-                    statusPill("Done", value: "done", item: item)
-                }
-                .padding(.vertical, 4)
-            }
-
-            Section("Description") {
-                TextField("Add details…", text: $localDescription, axis: .vertical)
-                    .lineLimit(3...10)
-                    .focused($descriptionFocused)
-                    .onChange(of: descriptionFocused) { _, focused in
-                        if !focused { commitDescription(for: item) }
-                    }
-            }
-
-            Section("Sessions") {
-                if relatedSessions.isEmpty {
-                    Text("No sessions linked yet.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(relatedSessions, id: \.sessionId) { session in
-                        Button {
-                            navigationPath.append("session:\(session.sessionId)")
-                        } label: {
-                            SessionLinkRow(session: session)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            Section("Info") {
-                LabeledContent("Created by", value: creatorLabel)
-                LabeledContent("Created", value: item.createdAt.formatted(date: .abbreviated, time: .shortened))
-            }
-
-            Section {
-                Button(role: .destructive) {
-                    showArchiveConfirm = true
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isArchiving {
-                            ProgressView()
-                        } else {
-                            Text(item.archived ? "Unarchive" : "Archive")
-                                .fontWeight(.medium)
-                        }
-                        Spacer()
-                    }
-                }
-                .disabled(isArchiving)
-            }
-
+            submissionsSection(item)
+            sessionsSection(item)
+            archiveSection(item)
             if let err = ideaStore.errorMessage {
                 Section {
                     Text(err).font(.footnote).foregroundStyle(.red)
                 }
             }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(.systemGroupedBackground))
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            composerCapsule
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
         }
         .navigationTitle(IdeaUIPresentation.singularTitle)
         .navigationBarTitleDisplayMode(.inline)
@@ -197,6 +194,274 @@ public struct IdeaDetailView: View {
                  ? "The idea will reappear in the main list."
                  : "Archived ideas are hidden from the main list but can be restored later.")
         }
+    }
+
+    // MARK: Hero
+
+    @ViewBuilder
+    private func heroSection(_ item: IdeaRecord) -> some View {
+        Section {
+            VStack(alignment: .leading, spacing: 12) {
+                statusPillMenu(for: item)
+
+                TextField("Title", text: $localTitle, axis: .vertical)
+                    .font(.system(size: 26, weight: .bold))
+                    .lineLimit(1...3)
+                    .focused($titleFocused)
+                    .onSubmit { commitTitle(for: item) }
+                    .onChange(of: titleFocused) { _, focused in
+                        if !focused { commitTitle(for: item) }
+                    }
+
+                TextField("Add details…", text: $localDescription, axis: .vertical)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2...10)
+                    .focused($descriptionFocused)
+                    .onChange(of: descriptionFocused) { _, focused in
+                        if !focused { commitDescription(for: item) }
+                    }
+
+                heroMetaStrip(item)
+            }
+            .padding(.vertical, 4)
+        }
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 4, trailing: 16))
+    }
+
+    private func statusPillMenu(for item: IdeaRecord) -> some View {
+        let fg: Color = item.isDone
+            ? Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255)
+            : item.isInProgress
+                ? Color(red: 0xA2/255, green: 0x58/255, blue: 0x0B/255)
+                : Color(red: 0x00/255, green: 0x64/255, blue: 0xD8/255)
+        let bg: Color = item.isDone
+            ? Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255).opacity(0.10)
+            : item.isInProgress
+                ? Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255).opacity(0.12)
+                : Color(red: 0x00/255, green: 0x7A/255, blue: 0xFF/255).opacity(0.10)
+        return Menu {
+            Picker("Status", selection: statusBinding(for: item)) {
+                Text("Open").tag("open")
+                Text("In Progress").tag("in_progress")
+                Text("Done").tag("done")
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(fg)
+                    .frame(width: 6, height: 6)
+                    .modifier(BreathingDot(active: item.isInProgress))
+                Text(item.statusLabel.uppercased())
+                    .font(.system(size: 10.5, weight: .bold))
+                    .tracking(0.3)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .foregroundStyle(fg)
+            .padding(.horizontal, 9)
+            .frame(height: 22)
+            .background(Capsule().fill(bg))
+        }
+    }
+
+    private func statusBinding(for item: IdeaRecord) -> Binding<String> {
+        Binding(
+            get: { item.status },
+            set: { newValue in
+                guard newValue != item.status else { return }
+                Task {
+                    await ideaStore.updateIdea(
+                        ideaID: item.id,
+                        title: item.title,
+                        description: item.description,
+                        status: newValue,
+                        workspaceID: item.workspaceID
+                    )
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func heroMetaStrip(_ item: IdeaRecord) -> some View {
+        HStack(spacing: 6) {
+            if let name = workspaceName, !name.isEmpty {
+                Text(name)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color(.systemFill)))
+            }
+            if let creator {
+                Text("Created by \(creator.displayName) · \(item.createdAt.relativeShort)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color(.systemFill)))
+            } else {
+                Text(item.createdAt.relativeShort)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 2)
+    }
+
+    // MARK: Claim card
+
+    @ViewBuilder
+    private func claimCardSection(agent: CachedActor) -> some View {
+        Section {
+            HStack(spacing: 12) {
+                AgentAvatar(actor: agent, size: 36, cornerRadius: 9)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(agent.displayName)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Text(agentSubtitle(agent))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    showNewSession = true
+                } label: {
+                    Text("Open session")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 6)
+                        .background(Color.accentColor.opacity(0.10))
+                        .clipShape(Capsule())
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
+            }
+        } header: {
+            sectionHeader("Claimed by")
+        }
+    }
+
+    private func agentSubtitle(_ a: CachedActor) -> String {
+        let kind = a.agentKind?.capitalized ?? "Agent"
+        if let s = a.agentStatus, !s.isEmpty {
+            return "\(kind) · \(s)"
+        }
+        return kind
+    }
+
+    // MARK: Submissions
+
+    @ViewBuilder
+    private func submissionsSection(_ item: IdeaRecord) -> some View {
+        let subs = mockSubmissions
+        if subs.isEmpty {
+            EmptyView()
+        } else {
+            Section {
+                ForEach(subs) { s in
+                    SubmissionRow(submission: s)
+                }
+            } header: {
+                sectionHeader("Submissions · \(subs.count)")
+            }
+        }
+    }
+
+    // MARK: Sessions
+
+    @ViewBuilder
+    private func sessionsSection(_ item: IdeaRecord) -> some View {
+        Section {
+            if relatedSessions.isEmpty {
+                Text("No sessions linked yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(relatedSessions, id: \.sessionId) { session in
+                    Button {
+                        navigationPath.append("session:\(session.sessionId)")
+                    } label: {
+                        SessionLinkRow(session: session)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        } header: {
+            sectionHeader("Sessions")
+        }
+    }
+
+    // MARK: Archive
+
+    @ViewBuilder
+    private func archiveSection(_ item: IdeaRecord) -> some View {
+        Section {
+            Button(role: .destructive) {
+                showArchiveConfirm = true
+            } label: {
+                HStack {
+                    Spacer()
+                    if isArchiving {
+                        ProgressView()
+                    } else {
+                        Text(item.archived ? "Unarchive" : "Archive")
+                            .fontWeight(.medium)
+                    }
+                    Spacer()
+                }
+            }
+            .disabled(isArchiving)
+        }
+    }
+
+    // MARK: Composer
+
+    private var composerCapsule: some View {
+        HStack(spacing: 8) {
+            TextField("Submit progress, or @mention an agent…", text: $composerText, axis: .vertical)
+                .lineLimit(1...3)
+                .font(.subheadline)
+                .padding(.leading, 14)
+            Button {
+                composerText = ""  // wire to a real submissions endpoint when available
+            } label: {
+                Text("Submit")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color.black, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .opacity(composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
+        }
+        .padding(6)
+        .background(
+            Capsule()
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            Capsule().strokeBorder(Color.black.opacity(0.06), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 18, y: 6)
+    }
+
+    // MARK: Helpers
+
+    private func sectionHeader(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.caption)
+            .fontWeight(.semibold)
+            .tracking(0.3)
+            .foregroundStyle(.secondary)
+            .textCase(nil)
     }
 
     private func seedLocals() {
@@ -249,34 +514,68 @@ public struct IdeaDetailView: View {
             }
         }
     }
+}
 
-    private func statusPill(_ label: String, value: String, item: IdeaRecord) -> some View {
-        let selected = item.status == value
-        return Button {
-            Task {
-                await ideaStore.updateIdea(
-                    ideaID: item.id,
-                    title: item.title,
-                    description: item.description,
-                    status: value,
-                    workspaceID: item.workspaceID
+// MARK: - Submission row
+
+private struct SubmissionRow: View {
+    let submission: IdeaDetailView.MockSubmission
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                AgentAvatar(actor: submission.actor, size: 22, cornerRadius: 6)
+                Text(submission.actor.displayName)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                if submission.actor.isAgent {
+                    Text("AGENT")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(0.3)
+                        .foregroundStyle(Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255))
+                        .padding(.horizontal, 5)
+                        .frame(height: 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255).opacity(0.14))
+                        )
+                }
+                Spacer()
+                Text(submission.when.relativeShort)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(submission.content)
+                .font(.subheadline)
+                .foregroundStyle(.primary.opacity(0.85))
+                .lineLimit(nil)
+
+            if let attach = submission.attachment {
+                HStack(spacing: 6) {
+                    Image(systemName: "link")
+                        .font(.system(size: 10, weight: .medium))
+                    Text(attach)
+                        .font(.system(.caption, design: .monospaced))
+                }
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(Color.accentColor.opacity(0.2), lineWidth: 0.5)
                 )
             }
-        } label: {
-            Text(label)
-                .font(.caption.weight(.medium))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .foregroundStyle(selected ? Color.white : Color.primary)
-                .background(selected ? Color.accentColor : Color.clear)
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule().strokeBorder(selected ? Color.clear : Color.secondary.opacity(0.4), lineWidth: 1)
-                )
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 4)
     }
 }
+
+// MARK: - Session link row
 
 private struct SessionLinkRow: View {
     let session: Session
@@ -311,5 +610,96 @@ private struct SessionLinkRow: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
+    }
+}
+
+// MARK: - Shared helpers used across detail surfaces
+
+/// Avatar tile reused across detail surfaces. Mirrors the palette logic in
+/// the Actors list so an actor reads as the "same" person across views.
+struct AgentAvatar: View {
+    let actor: CachedActor
+    var size: CGFloat = 40
+    var cornerRadius: CGFloat = 10
+
+    private var initials: String {
+        let parts = actor.displayName
+            .split(whereSeparator: { $0.isWhitespace || $0 == "·" })
+            .prefix(2)
+        let s = parts.compactMap { $0.first }.map(String.init).joined().uppercased()
+        return s.isEmpty ? String(actor.displayName.prefix(1)).uppercased() : s
+    }
+
+    private struct Style { let bg: Color; let fg: Color }
+
+    private var style: Style {
+        let humanPalette: [Color] = [
+            Color(red: 0x00/255, green: 0x7A/255, blue: 0xFF/255),
+            Color(red: 0x58/255, green: 0x56/255, blue: 0xD6/255),
+            Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255),
+            Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255),
+            Color(red: 0xFF/255, green: 0x2D/255, blue: 0x55/255),
+            Color(red: 0x5A/255, green: 0xC8/255, blue: 0xFA/255),
+        ]
+        let agentPalette: [(Color, Color)] = [
+            (Color(red: 0xFC/255, green: 0xED/255, blue: 0xE3/255),
+             Color(red: 0xC2/255, green: 0x4F/255, blue: 0x1F/255)),
+            (Color(red: 0xE4/255, green: 0xF1/255, blue: 0xFB/255),
+             Color(red: 0x1B/255, green: 0x6B/255, blue: 0xB8/255)),
+            (Color(red: 0xEF/255, green: 0xEA/255, blue: 0xFB/255),
+             Color(red: 0x5B/255, green: 0x45/255, blue: 0xA8/255)),
+            (Color(red: 0xE3/255, green: 0xF8/255, blue: 0xEA/255),
+             Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255)),
+        ]
+        let h = abs(actor.actorId.unicodeScalars.reduce(0) { $0 &+ Int($1.value) })
+        if actor.isAgent {
+            let p = agentPalette[h % agentPalette.count]
+            return Style(bg: p.0, fg: p.1)
+        } else {
+            return Style(bg: humanPalette[h % humanPalette.count], fg: .white)
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            if actor.isAgent {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(style.bg)
+            } else {
+                Circle().fill(style.bg)
+            }
+            Text(initials)
+                .font(.system(size: size * 0.36, weight: .bold))
+                .tracking(-0.3)
+                .foregroundStyle(style.fg)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+/// Reusable breathing-opacity modifier so status dots and online rings stay
+/// visually consistent across detail and list surfaces.
+struct BreathingDot: ViewModifier {
+    let active: Bool
+    @State private var on = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(active ? (on ? 0.4 : 1) : 1)
+            .animation(active
+                ? .easeInOut(duration: 1.4).repeatForever(autoreverses: true)
+                : .default,
+                value: on)
+            .onAppear { if active { on = true } }
+    }
+}
+
+private extension Date {
+    /// Short relative date string ("2h", "3d", "now") — matches the listed
+    /// Sessions row format so detail surfaces feel consistent.
+    var relativeShort: String {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .short
+        return f.localizedString(for: self, relativeTo: .now)
     }
 }

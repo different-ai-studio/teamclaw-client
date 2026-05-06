@@ -9,8 +9,14 @@ public struct IdeaListView: View {
            sort: \CachedActor.displayName)
     private var members: [CachedActor]
 
-    private var memberNameById: [String: String] {
-        Dictionary(uniqueKeysWithValues: members.map { ($0.actorId, $0.displayName) })
+    @Query(sort: \Workspace.displayName) private var workspaces: [Workspace]
+
+    private var memberById: [String: CachedActor] {
+        Dictionary(uniqueKeysWithValues: members.map { ($0.actorId, $0) })
+    }
+
+    private var workspaceNameById: [String: String] {
+        Dictionary(uniqueKeysWithValues: workspaces.map { ($0.workspaceId, $0.displayName) })
     }
 
     @Binding var showCreate: Bool
@@ -42,7 +48,11 @@ public struct IdeaListView: View {
                 List {
                     ForEach(ideaStore.ideas) { item in
                         NavigationLink(value: "idea:\(item.id)") {
-                            IdeaRow(item: item, creatorName: creatorLabel(for: item))
+                            IdeaRow(
+                                item: item,
+                                creator: memberById[item.createdByActorID],
+                                workspaceName: workspaceNameById[item.workspaceID]
+                            )
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button {
@@ -92,8 +102,4 @@ public struct IdeaListView: View {
         }
     }
 
-    private func creatorLabel(for item: IdeaRecord) -> String? {
-        guard !item.createdByActorID.isEmpty else { return nil }
-        return memberNameById[item.createdByActorID]
-    }
 }

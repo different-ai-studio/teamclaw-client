@@ -14,6 +14,9 @@ public struct MemberListContent: View {
     let mqtt: MQTTService
     let sessionViewModel: SessionListViewModel
     let teamclawService: TeamclawService?
+    /// Actor id of the signed-in user. Drives the "YOU" badge on their row.
+    /// `nil` hides the badge.
+    let currentActorID: String?
     /// Source of truth for the "current user has no accessible agent" notice.
     /// `nil` keeps the notice hidden (e.g. before the team is configured).
     let connectedAgentsStore: ConnectedAgentsStore?
@@ -27,6 +30,7 @@ public struct MemberListContent: View {
         mqtt: MQTTService,
         sessionViewModel: SessionListViewModel,
         teamclawService: TeamclawService?,
+        currentActorID: String? = nil,
         connectedAgentsStore: ConnectedAgentsStore? = nil,
         onAddYourAgent: (() -> Void)? = nil
     ) {
@@ -35,6 +39,7 @@ public struct MemberListContent: View {
         self.mqtt = mqtt
         self.sessionViewModel = sessionViewModel
         self.teamclawService = teamclawService
+        self.currentActorID = currentActorID
         self.connectedAgentsStore = connectedAgentsStore
         self.onAddYourAgent = onAddYourAgent
     }
@@ -59,6 +64,9 @@ public struct MemberListContent: View {
         }
     }
 
+    private var humans: [CachedActor] { filtered.filter(\.isMember) }
+    private var agents: [CachedActor] { filtered.filter(\.isAgent) }
+
     public var body: some View {
         Group {
             if actors.isEmpty {
@@ -76,19 +84,18 @@ public struct MemberListContent: View {
                                 .listRowSeparator(.hidden)
                         }
                     }
-                    ForEach(filtered, id: \.actorId) { a in
-                        NavigationLink {
-                            ActorDetailView(
-                                actor: a,
-                                pairing: pairing,
-                                mqtt: mqtt,
-                                sessionViewModel: sessionViewModel,
-                                store: store,
-                                teamclawService: teamclawService,
-                                connectedAgentsStore: connectedAgentsStore
-                            )
-                        } label: {
-                            ActorRow(actor: a)
+                    if !humans.isEmpty {
+                        Section {
+                            ForEach(humans, id: \.actorId, content: detailLink)
+                        } header: {
+                            sectionHeader(title: "Humans", count: humans.count)
+                        }
+                    }
+                    if !agents.isEmpty {
+                        Section {
+                            ForEach(agents, id: \.actorId, content: detailLink)
+                        } header: {
+                            sectionHeader(title: "Agent actors", count: agents.count)
                         }
                     }
                 }
@@ -97,6 +104,38 @@ public struct MemberListContent: View {
         .searchable(text: $searchText, prompt: "Search actors")
         .task { await store.reload(); await store.heartbeat() }
         .refreshable { await store.reload() }
+    }
+
+    @ViewBuilder
+    private func detailLink(_ a: CachedActor) -> some View {
+        NavigationLink {
+            ActorDetailView(
+                actor: a,
+                pairing: pairing,
+                mqtt: mqtt,
+                sessionViewModel: sessionViewModel,
+                store: store,
+                teamclawService: teamclawService,
+                connectedAgentsStore: connectedAgentsStore
+            )
+        } label: {
+            ActorRow(actor: a, isMe: a.actorId == currentActorID)
+        }
+    }
+
+    private func sectionHeader(title: String, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Text(title.uppercased())
+                .tracking(0.4)
+            Text("·")
+                .foregroundStyle(.tertiary)
+            Text("\(count)")
+                .monospacedDigit()
+        }
+        .font(.caption)
+        .fontWeight(.semibold)
+        .foregroundStyle(.secondary)
+        .textCase(nil)
     }
 
     private var ownAgentNotice: some View {
@@ -129,33 +168,205 @@ public struct MemberListContent: View {
 
 private struct ActorRow: View {
     let actor: CachedActor
-    var body: some View {
-        HStack {
-            Circle().fill(actor.isOnline ? Color.green : Color.secondary.opacity(0.4))
-                    .frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(actor.displayName).font(.body)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text(actor.isOnline ? "Online" : "Offline")
-                .font(.caption)
-                .foregroundStyle(actor.isOnline ? .green : .secondary)
-            if actor.isOwner {
-                Image(systemName: "crown.fill").foregroundStyle(.orange).font(.caption)
-            }
+    var isMe: Bool = false
+
+    @State private var breathe = false
+
+    private var avatarInitials: String {
+        let parts = actor.displayName
+            .split(whereSeparator: { $0.isWhitespace || $0 == "·" })
+            .prefix(2)
+        let initials = parts.compactMap { $0.first }.map(String.init).joined().uppercased()
+        if !initials.isEmpty { return initials }
+        return String(actor.displayName.prefix(1)).uppercased()
+    }
+
+    /// Two distinct palettes:
+    ///   - Humans: vivid solid bg + white fg (matches the design's YT/AM/KN/PS chips)
+    ///   - Agents: soft tinted bg + saturated fg (matches the CC/OC/CX brand families)
+    private struct AvatarStyle {
+        let background: Color
+        let foreground: Color
+    }
+
+    private var avatarStyle: AvatarStyle {
+        let humanPalette: [Color] = [
+            Color(red: 0x00/255, green: 0x7A/255, blue: 0xFF/255),  // blue
+            Color(red: 0x58/255, green: 0x56/255, blue: 0xD6/255),  // purple
+            Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255),  // orange
+            Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255),  // green
+            Color(red: 0xFF/255, green: 0x2D/255, blue: 0x55/255),  // pink
+            Color(red: 0x5A/255, green: 0xC8/255, blue: 0xFA/255),  // teal
+        ]
+        let agentPalette: [(bg: Color, fg: Color)] = [
+            (Color(red: 0xFC/255, green: 0xED/255, blue: 0xE3/255),
+             Color(red: 0xC2/255, green: 0x4F/255, blue: 0x1F/255)),  // claude
+            (Color(red: 0xE4/255, green: 0xF1/255, blue: 0xFB/255),
+             Color(red: 0x1B/255, green: 0x6B/255, blue: 0xB8/255)),  // opencode
+            (Color(red: 0xEF/255, green: 0xEA/255, blue: 0xFB/255),
+             Color(red: 0x5B/255, green: 0x45/255, blue: 0xA8/255)),  // codex
+            (Color(red: 0xE3/255, green: 0xF8/255, blue: 0xEA/255),
+             Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255)),  // mint
+        ]
+        let hash = actor.actorId.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
+        if actor.isAgent {
+            let pair = agentPalette[abs(hash) % agentPalette.count]
+            return AvatarStyle(background: pair.bg, foreground: pair.fg)
+        } else {
+            let bg = humanPalette[abs(hash) % humanPalette.count]
+            return AvatarStyle(background: bg, foreground: .white)
         }
     }
+
     private var subtitle: String {
         if actor.isMember { return actor.roleLabel }
         let kind = actor.agentKind?.capitalized ?? "Agent"
         let status = actor.agentStatus ?? ""
         return status.isEmpty ? kind : "\(kind) · \(status)"
     }
+
+    /// Deterministic placeholder while a real per-actor session aggregate
+    /// lands. Stable per actor so the value doesn't churn between rebuilds.
+    /// Online actors skew higher than offline ones to match the design intent.
+    private var mockActiveSessions: Int {
+        let h = abs(actor.actorId.unicodeScalars.reduce(0) { $0 &+ Int($1.value) })
+        let onlineBuckets:  [Int] = [0, 1, 1, 1, 2, 2, 3]
+        let offlineBuckets: [Int] = [0, 0, 0, 0, 1, 1]
+        let bucket = actor.isOnline ? onlineBuckets : offlineBuckets
+        return bucket[h % bucket.count]
+    }
+
+    private struct Tag {
+        let text: String
+        let foreground: Color
+        let background: Color
+    }
+
+    private var tag: Tag? {
+        if isMe {
+            return Tag(
+                text: "YOU",
+                foreground: Color(red: 0x00/255, green: 0x64/255, blue: 0xD8/255),
+                background: Color(red: 0x00/255, green: 0x7A/255, blue: 0xFF/255).opacity(0.10)
+            )
+        }
+        if actor.isOwner {
+            return Tag(
+                text: "OWNER",
+                foreground: Color(red: 0xA2/255, green: 0x58/255, blue: 0x0B/255),
+                background: Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255).opacity(0.14)
+            )
+        }
+        if actor.isAgent {
+            return Tag(
+                text: "AGENT",
+                foreground: Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255),
+                background: Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255).opacity(0.14)
+            )
+        }
+        return nil
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            avatarTile
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(actor.displayName)
+                        .font(.body)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                    if let tag {
+                        Text(tag.text)
+                            .font(.system(size: 9.5, weight: .bold))
+                            .tracking(0.3)
+                            .foregroundStyle(tag.foreground)
+                            .padding(.horizontal, 6)
+                            .frame(height: 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    .fill(tag.background)
+                            )
+                    }
+                }
+                Text(subtitle)
+                    .font(actor.isAgent
+                          ? .system(.caption, design: .monospaced)
+                          : .caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            if mockActiveSessions > 0 {
+                activeSessionsChip
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var activeSessionsChip: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(actor.isOnline
+                      ? Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255)
+                      : Color(.systemGray3))
+                .frame(width: 6, height: 6)
+                .opacity(actor.isOnline && breathe ? 0.5 : 1.0)
+                .animation(actor.isOnline
+                           ? .easeInOut(duration: 1.4).repeatForever(autoreverses: true)
+                           : .default,
+                           value: breathe)
+            Text("\(mockActiveSessions)")
+                .font(.caption)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var avatarTile: some View {
+        let style = avatarStyle
+        return ZStack(alignment: .bottomTrailing) {
+            Group {
+                if actor.isAgent {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(style.background)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(Color.black.opacity(0.04), lineWidth: 0.5)
+                        )
+                } else {
+                    Circle().fill(style.background)
+                }
+            }
+            .frame(width: 40, height: 40)
+            .overlay {
+                Text(avatarInitials)
+                    .font(.system(size: 14, weight: .bold))
+                    .tracking(-0.3)
+                    .foregroundStyle(style.foreground)
+            }
+
+            if actor.isOnline {
+                Circle()
+                    .fill(Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255))
+                    .frame(width: 11, height: 11)
+                    .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 2.5))
+                    .opacity(breathe ? 0.55 : 1.0)
+                    .animation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true),
+                               value: breathe)
+                    .onAppear { breathe = true }
+                    .offset(x: 1, y: 1)
+            }
+        }
+    }
 }
 
 private struct ActorDetailView: View {
     @Query(sort: \CachedActor.displayName) private var cachedActors: [CachedActor]
+    @Query(sort: \Session.lastMessageAt, order: .reverse) private var allSessions: [Session]
+    @Query private var allMessages: [SessionMessage]
+    @Query(sort: \CachedAgentRuntime.updatedAt, order: .reverse) private var cachedAgentRuntimes: [CachedAgentRuntime]
     let actor: CachedActor
     let pairing: PairingManager
     let mqtt: MQTTService
@@ -178,6 +389,7 @@ private struct ActorDetailView: View {
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
     @State private var deleteErrorMessage: String?
+    @State private var autoApprovedOverrides: [String: Bool] = [:]
 
     /// Daemon `device_id` for the agent being viewed — only meaningful when
     /// `actor` is itself an agent. Empty for humans (where workspace
@@ -212,6 +424,11 @@ private struct ActorDetailView: View {
 
     var body: some View {
         List {
+            heroSection
+            statsSection
+            if actor.isAgent { toolsUsedSection }
+            recentSessionsSection
+            if actor.isAgent { autoApprovedToolsSection }
             Section("Info") {
                 LabeledContent("Name", value: actor.displayName)
                 LabeledContent("Kind", value: actor.isMember ? "Human" : "Agent")
@@ -530,6 +747,368 @@ private struct ActorDetailView: View {
                     authorizedHumansStore.errorMessage = firstFailure
                 }
             }
+        }
+    }
+
+    // MARK: - Hero / stats / tools / sessions / auto-approve sections
+
+    private var actorRecentSessions: [Session] {
+        if actor.isAgent {
+            return allSessions.filter { $0.primaryAgentId == actor.actorId }
+        }
+        let sessionIds = Set(
+            allMessages
+                .filter { $0.senderActorId == actor.actorId }
+                .map(\.sessionId)
+        )
+        return allSessions.filter { sessionIds.contains($0.sessionId) }
+    }
+
+    /// Deterministic placeholder counts so the stat row, tools chart, and
+    /// auto-approve list look populated until real aggregates land. Stable
+    /// per actor so they don't churn between rebuilds.
+    private var mockHash: Int {
+        abs(actor.actorId.unicodeScalars.reduce(0) { $0 &+ Int($1.value) })
+    }
+
+    private var mockSessionCount: Int {
+        let real = actorRecentSessions.count
+        if real > 0 { return real }
+        return [4, 7, 12, 14, 21][mockHash % 5]
+    }
+
+    private var mockSubmissionCount: Int { [12, 28, 38, 56, 84][mockHash % 5] }
+    private var mockToolCallCount: Int   { [88, 142, 224, 318, 502][mockHash % 5] }
+
+    private struct ToolBar { let name: String; let count: Int }
+    private var mockTools: [ToolBar] {
+        let base = [142, 38, 24, 12, 8]
+        let names = ["Read", "Edit", "Bash", "Write", "Grep"]
+        return zip(names, base).enumerated().map { i, pair in
+            // Slight per-actor jitter so the chart isn't identical across agents.
+            let delta = (mockHash &+ i) % 7
+            return ToolBar(name: pair.0, count: max(1, pair.1 + delta - 3))
+        }
+    }
+
+    private struct AutoApprovedRow { let name: String; let defaultOn: Bool }
+    private static let autoApprovedRows: [AutoApprovedRow] = [
+        AutoApprovedRow(name: "Read · any path", defaultOn: true),
+        AutoApprovedRow(name: "Edit · within worktree", defaultOn: true),
+        AutoApprovedRow(name: "Bash · npm test, cargo test", defaultOn: true),
+        AutoApprovedRow(name: "Write · new files only", defaultOn: false),
+    ]
+
+    @ViewBuilder
+    private var heroSection: some View {
+        Section {
+            VStack(spacing: 10) {
+                heroAvatar
+                Text(actor.displayName)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                Text(heroIdLine)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                heroTagRow
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+        }
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+    }
+
+    private var heroAvatar: some View {
+        ZStack(alignment: .bottomTrailing) {
+            AgentAvatar(actor: actor, size: 72, cornerRadius: 18)
+                .shadow(color: heroAvatarShadow.opacity(0.18), radius: 14, y: 4)
+            if actor.isOnline {
+                ZStack {
+                    Circle()
+                        .fill(Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255))
+                        .frame(width: 18, height: 18)
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 6, height: 6)
+                        .modifier(BreathingDot(active: true))
+                }
+                .overlay(
+                    Circle().stroke(Color(.systemGroupedBackground), lineWidth: 3)
+                )
+                .offset(x: 2, y: 2)
+            }
+        }
+    }
+
+    private var heroAvatarShadow: Color {
+        // Same hash as AgentAvatar's palette so the glow matches the tile fg.
+        let agentTints: [Color] = [
+            Color(red: 0xC2/255, green: 0x4F/255, blue: 0x1F/255),
+            Color(red: 0x1B/255, green: 0x6B/255, blue: 0xB8/255),
+            Color(red: 0x5B/255, green: 0x45/255, blue: 0xA8/255),
+            Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255),
+        ]
+        if actor.isAgent { return agentTints[mockHash % agentTints.count] }
+        return .black
+    }
+
+    private var heroIdLine: String {
+        if actor.isAgent {
+            let kind = actor.agentKind ?? "agent"
+            let shortID = String(actor.actorId.prefix(8))
+            return "actor_\(shortID) · \(kind) agent"
+        }
+        let role = actor.roleLabel.lowercased()
+        return "\(actor.actorId) · \(role)"
+    }
+
+    @ViewBuilder
+    private var heroTagRow: some View {
+        let tags = heroTags
+        if !tags.isEmpty {
+            HStack(spacing: 6) {
+                ForEach(Array(tags.enumerated()), id: \.offset) { _, tag in
+                    Text(tag.text)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(tag.fg)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(tag.bg))
+                }
+            }
+        }
+    }
+
+    private struct HeroTag { let text: String; let fg: Color; let bg: Color }
+
+    private var heroTags: [HeroTag] {
+        var out: [HeroTag] = []
+        if actor.isAgent {
+            let kind = (actor.agentKind ?? "agent").capitalized
+            out.append(HeroTag(
+                text: "\(kind) agent",
+                fg: Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255),
+                bg: Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255).opacity(0.14)
+            ))
+            if let model = currentAgentModel {
+                out.append(HeroTag(
+                    text: model,
+                    fg: .secondary,
+                    bg: Color(.systemFill)
+                ))
+            }
+        }
+        if actor.isOwner {
+            out.append(HeroTag(
+                text: "Owner",
+                fg: Color(red: 0xA2/255, green: 0x58/255, blue: 0x0B/255),
+                bg: Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255).opacity(0.14)
+            ))
+        }
+        return out
+    }
+
+    /// Most recent CachedAgentRuntime model name surfaced for an agent so the
+    /// hero shows e.g. "claude-sonnet-4.5" in line with the prototype. Falls
+    /// back to nil when no runtime has reported a model yet.
+    private var currentAgentModel: String? {
+        guard actor.isAgent else { return nil }
+        return cachedAgentRuntimes
+            .first { $0.agentId == actor.actorId && ($0.currentModel ?? "").isEmpty == false }?
+            .currentModel
+    }
+
+    @ViewBuilder
+    private var statsSection: some View {
+        Section {
+            HStack(spacing: 0) {
+                statBlock(label: "Sessions",    value: mockSessionCount)
+                statDivider
+                statBlock(label: "Submissions", value: mockSubmissionCount)
+                statDivider
+                statBlock(label: "Tool calls",  value: mockToolCallCount)
+            }
+            .padding(.vertical, 8)
+            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+        }
+    }
+
+    private func statBlock(label: String, value: Int) -> some View {
+        VStack(spacing: 2) {
+            Text("\(value)")
+                .font(.system(size: 22, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+            Text(label.uppercased())
+                .font(.caption2.weight(.semibold))
+                .tracking(0.2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var statDivider: some View {
+        Rectangle()
+            .fill(Color.secondary.opacity(0.15))
+            .frame(width: 0.5, height: 28)
+    }
+
+    @ViewBuilder
+    private var toolsUsedSection: some View {
+        Section {
+            ForEach(Array(mockTools.enumerated()), id: \.offset) { _, t in
+                ToolUsageRow(name: t.name, count: t.count, max: maxToolCount)
+            }
+        } header: {
+            Text("Tools used".uppercased())
+                .font(.caption.weight(.semibold))
+                .tracking(0.3)
+                .foregroundStyle(.secondary)
+                .textCase(nil)
+        }
+    }
+
+    private var maxToolCount: Int {
+        max(1, mockTools.map(\.count).max() ?? 1)
+    }
+
+    @ViewBuilder
+    private var recentSessionsSection: some View {
+        Section {
+            if actorRecentSessions.isEmpty {
+                Text("No recent sessions yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(actorRecentSessions.prefix(5), id: \.sessionId) { s in
+                    RecentSessionRow(session: s)
+                }
+            }
+        } header: {
+            Text("Recent sessions".uppercased())
+                .font(.caption.weight(.semibold))
+                .tracking(0.3)
+                .foregroundStyle(.secondary)
+                .textCase(nil)
+        }
+    }
+
+    @ViewBuilder
+    private var autoApprovedToolsSection: some View {
+        Section {
+            ForEach(Self.autoApprovedRows, id: \.name) { row in
+                Toggle(isOn: autoApprovedBinding(for: row)) {
+                    Text(row.name)
+                        .font(.subheadline)
+                }
+                .tint(Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255))
+            }
+        } header: {
+            Text("Auto-approved tools".uppercased())
+                .font(.caption.weight(.semibold))
+                .tracking(0.3)
+                .foregroundStyle(.secondary)
+                .textCase(nil)
+        } footer: {
+            Text("These tools run without a prompt. Real persistence will land alongside the per-agent permission spec.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func autoApprovedBinding(for row: AutoApprovedRow) -> Binding<Bool> {
+        Binding(
+            get: { autoApprovedOverrides[row.name] ?? row.defaultOn },
+            set: { autoApprovedOverrides[row.name] = $0 }
+        )
+    }
+}
+
+private struct ToolUsageRow: View {
+    let name: String
+    let count: Int
+    let max: Int
+
+    private var ratio: CGFloat {
+        max <= 0 ? 0 : CGFloat(count) / CGFloat(max)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(name)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("\(count)")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color(.tertiarySystemFill))
+                    Capsule()
+                        .fill(LinearGradient(
+                            colors: [
+                                Color(red: 0xFC/255, green: 0xED/255, blue: 0xE3/255),
+                                Color(red: 0xC2/255, green: 0x4F/255, blue: 0x1F/255),
+                            ],
+                            startPoint: .leading, endPoint: .trailing
+                        ))
+                        .frame(width: proxy.size.width * ratio)
+                }
+            }
+            .frame(height: 4)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct RecentSessionRow: View {
+    let session: Session
+
+    private var dotColor: Color {
+        // No live runtime in scope here; rely on lastMessageAt freshness as a
+        // cheap proxy until the actor-detail view holds a live runtime store.
+        let staleSeconds: TimeInterval = 300
+        if let last = session.lastMessageAt,
+           Date().timeIntervalSince(last) < staleSeconds {
+            return Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255)
+        }
+        return Color(.systemGray3)
+    }
+
+    private var when: Date { session.lastMessageAt ?? session.createdAt }
+
+    private func formatted(_ date: Date) -> String {
+        let s = Int(-date.timeIntervalSinceNow)
+        if s < 60     { return "now" }
+        if s < 3600   { return "\(s/60)m" }
+        if s < 86400  { return "\(s/3600)h" }
+        if s < 604800 { return "\(s/86400)d" }
+        let f = DateFormatter(); f.dateFormat = "MM/dd"
+        return f.string(from: date)
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(dotColor)
+                .frame(width: 8, height: 8)
+            Text(session.title.isEmpty ? "Untitled session" : session.title)
+                .font(.subheadline)
+                .lineLimit(1)
+            Spacer()
+            Text(formatted(when))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
     }
 }
