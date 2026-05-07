@@ -140,6 +140,13 @@ public final class RuntimeDetailViewModel {
         if let runtime { return runtime }
         guard let session else { return nil }
 
+        // Human-only sessions never spawn a runtime — building a placeholder
+        // here causes downstream paths (requestIncrementalSync, sendCommand)
+        // to surface "Runtime id missing" errors for sessions where there's
+        // legitimately no agent to talk to.
+        let primaryAgentID = session.primaryAgentId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let primaryAgentID, !primaryAgentID.isEmpty else { return nil }
+
         let sessionId = session.sessionId
         let cachedDescriptor = FetchDescriptor<CachedAgentRuntime>(
             predicate: #Predicate { $0.sessionId == sessionId }
@@ -452,11 +459,20 @@ public final class RuntimeDetailViewModel {
 
                 for await msg in stream {
                     guard msg.topic == subscribeTopic,
-                          let live = try? Teamclaw_LiveEventEnvelope(serializedBytes: msg.payload),
-                          live.eventType == "acp.event",
-                          let envelope = try? Amux_Envelope(serializedBytes: live.body)
+                          let live = try? Teamclaw_LiveEventEnvelope(serializedBytes: msg.payload)
                     else { continue }
-                    handleEnvelope(envelope, modelContext: modelContext)
+
+                    if live.eventType == "acp.event",
+                       let envelope = try? Amux_Envelope(serializedBytes: live.body) {
+                        handleEnvelope(envelope, modelContext: modelContext)
+                    } else if live.eventType.hasPrefix("message."),
+                              let msgEnv = try? Teamclaw_SessionMessageEnvelope(serializedBytes: live.body),
+                              msgEnv.hasMessage {
+                        // Other collaborators' chat messages — convert to a
+                        // user_prompt AgentEvent so EventFeedView renders
+                        // them. Loopback / dedupe handled inside.
+                        handleIncomingChatMessage(msgEnv.message, modelContext: modelContext)
+                    }
                 }
                 // Stream finished — connection likely dropped. Loop and resubscribe.
                 if Task.isCancelled { return }
@@ -497,6 +513,43 @@ public final class RuntimeDetailViewModel {
         case .sessionEvent(let evt): handleSessionEvent(evt, sequence: Int(env.sequence))
         case .none: break
         }
+    }
+
+    /// Handles a `message.created` live envelope (chat message from another
+    /// collaborator, or a loopback of our own send). For pure-human sessions
+    /// this is the only inbound source — there's no daemon fanning ACP
+    /// events. We convert the proto message into a `user_prompt` AgentEvent
+    /// so EventFeedView renders it the same way as the local user's typed
+    /// prompts.
+    ///
+    /// Loopback dedupe is two-layer: senderActorID match against the local
+    /// human actor catches the common case; a content+type fallback covers
+    /// older actors that haven't resolved currentHumanActorId yet, and
+    /// re-arrivals during reconnect.
+    private func handleIncomingChatMessage(_ message: Teamclaw_Message, modelContext: ModelContext) {
+        let myActorID = teamclawService?.currentHumanActorId ?? ""
+        if !myActorID.isEmpty, message.senderActorID == myActorID {
+            return
+        }
+        let content = message.content
+        if events.contains(where: {
+            $0.eventType == "user_prompt" && ($0.text ?? "") == content
+        }) {
+            return
+        }
+
+        let scope = eventScopeKey
+        let seq = (events.last?.sequence ?? 0) + 1
+        let event = AgentEvent(agentId: scope, sequence: seq, eventType: "user_prompt")
+        event.text = content
+        event.timestamp = message.createdAt > 0
+            ? Date(timeIntervalSince1970: TimeInterval(message.createdAt))
+            : .now
+        event.isComplete = true
+        modelContext.insert(event)
+        try? modelContext.save()
+        appendEvent(event)
+        recomputeGroups()
     }
 
     /// Applies one ACP event to in-memory + SwiftData state. Returns `true`
