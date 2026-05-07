@@ -814,7 +814,10 @@ public final class RuntimeDetailViewModel {
             let eventType: String
             switch record.kind {
             case "agent_reply": eventType = "output"
-            case "user_message", "user_prompt": eventType = "user_prompt"
+            // "text" is the legacy iOS write spelling — kept here so rows
+            // that landed in Supabase before the writer switched to
+            // "user_message" still rehydrate. Drop once those rows age out.
+            case "user_message", "user_prompt", "text": eventType = "user_prompt"
             default: continue
             }
 

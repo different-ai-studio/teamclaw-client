@@ -592,12 +592,19 @@ public final class TeamclawService {
             return
         }
         do {
+            // `kind: "user_message"` matches the value
+            // RuntimeDetailViewModel.seedFromSupabaseMessages recognizes for
+            // the user_prompt branch. Earlier code wrote "text" here, which
+            // the seed's switch dropped via `default: continue` — re-opening
+            // a session showed only the agent's reply and any fresh prompt
+            // landed below it. The seed accepts both spellings now for
+            // backwards compatibility with rows already in the wild.
             try await repo.insert(MessageInsertInput(
                 id: messageID,
                 teamID: teamID,
                 sessionID: sessionID,
                 senderActorID: senderActorID,
-                kind: "text",
+                kind: "user_message",
                 content: content
             ))
             teamclawLogger.notice("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) supabase persist OK")
