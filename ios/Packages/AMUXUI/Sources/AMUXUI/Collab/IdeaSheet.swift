@@ -37,13 +37,25 @@ public struct IdeaSheet: View {
     }
 }
 
+/// Hai-styled "New Idea" sheet. Mirrors the prototype: Pebble surface,
+/// Cinnabar Cancel / Post header, large editorial title field with a
+/// description textarea stacked underneath in a single Paper card,
+/// followed by a Workspace section card. Routing / labels / tool chips
+/// from the prototype are intentionally not wired — they have no backing
+/// model today, and putting in inert affordances would lie about
+/// behaviour.
 struct CreateIdeaSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppOnboardingCoordinator.self) private var coordinator: AppOnboardingCoordinator?
 
     @Bindable var ideaStore: IdeaStore
     let onCreated: () -> Void
 
+    @Query(sort: \Workspace.displayName) private var workspaces: [Workspace]
+
     @State private var title = ""
+    @State private var description = ""
+    @State private var workspaceID: String = ""
     @State private var isSaving = false
     @FocusState private var titleFocused: Bool
 
@@ -52,44 +64,140 @@ struct CreateIdeaSheet: View {
             && !isSaving
     }
 
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Title") {
-                    TextField("Capture an idea", text: $title, axis: .vertical)
-                        .focused($titleFocused)
-                        .lineLimit(2...5)
-                }
+    private var workspaceLabel: String {
+        if workspaceID.isEmpty { return "None" }
+        return workspaces.first(where: { $0.workspaceId == workspaceID })?.displayName ?? "—"
+    }
 
-                if let errorMessage = ideaStore.errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .font(.footnote)
-                            .foregroundStyle(Color.amux.cinnabarDeep)
+    private var teamName: String {
+        coordinator?.currentContext?.team.name ?? "this team"
+    }
+
+    var body: some View {
+        ZStack {
+            Color.amux.pebble.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                header
+                ScrollView {
+                    VStack(spacing: 16) {
+                        composerCard
+                        workspaceSection
+                        if let errorMessage = ideaStore.errorMessage {
+                            Text(errorMessage)
+                                .font(.footnote)
+                                .foregroundStyle(Color.amux.cinnabarDeep)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 24)
+                        }
+                        footerCaption
                     }
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
                 }
             }
-            .navigationTitle("New Idea")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                    }
+        }
+        .presentationDragIndicator(.visible)
+        .onAppear { titleFocused = true }
+    }
+
+    private var header: some View {
+        HStack {
+            Button("Cancel") { dismiss() }
+                .font(.system(size: 17))
+                .foregroundStyle(Color.amux.cinnabar)
+
+            Spacer()
+            Text("New Idea")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color.amux.onyx)
+            Spacer()
+
+            Button {
+                save()
+            } label: {
+                if isSaving {
+                    ProgressView().tint(Color.amux.cinnabar)
+                } else {
+                    Text("Post")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(canSave ? Color.amux.cinnabar : Color.amux.slate)
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { save() } label: {
-                        if isSaving {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "checkmark")
+            }
+            .disabled(!canSave)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.amux.pebble)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color.amux.hairline).frame(height: 0.5)
+        }
+    }
+
+    private var composerCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Idea title", text: $title, axis: .vertical)
+                .focused($titleFocused)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(Color.amux.onyx)
+                .lineLimit(1...3)
+
+            TextField(
+                "Add context — what's the constraint, what's the win?",
+                text: $description,
+                axis: .vertical
+            )
+            .font(.system(size: 15))
+            .foregroundStyle(Color.amux.basalt)
+            .lineLimit(3...10)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.amux.paper)
+        )
+        .padding(.horizontal, 16)
+    }
+
+    private var workspaceSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            IdeaSectionLabel("Workspace")
+            VStack(spacing: 0) {
+                Menu {
+                    Button("None") { workspaceID = "" }
+                    if !workspaces.isEmpty {
+                        Divider()
+                        ForEach(workspaces, id: \.workspaceId) { ws in
+                            Button(ws.displayName) { workspaceID = ws.workspaceId }
                         }
                     }
-                    .disabled(!canSave)
+                } label: {
+                    IdeaSheetRowLabel(
+                        label: "Repository",
+                        value: workspaceLabel,
+                        valueIsMonospaced: !workspaceID.isEmpty,
+                        showsChevron: true
+                    )
                 }
+                .buttonStyle(.plain)
             }
-            .onAppear { titleFocused = true }
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.amux.paper)
+            )
+            .padding(.horizontal, 16)
         }
+    }
+
+    private var footerCaption: some View {
+        Text(.init(
+            "Posted to **Team · \(teamName)**. Anyone can submit progress."
+        ))
+        .font(.system(size: 12))
+        .foregroundStyle(Color.amux.basalt.opacity(0.75))
+        .padding(.horizontal, 24)
+        .padding(.top, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func save() {
@@ -98,8 +206,8 @@ struct CreateIdeaSheet: View {
         Task {
             let ok = await ideaStore.createIdea(
                 title: title,
-                description: "",
-                workspaceID: ""
+                description: description,
+                workspaceID: workspaceID
             )
             isSaving = false
             if ok {
@@ -107,6 +215,63 @@ struct CreateIdeaSheet: View {
                 dismiss()
             }
         }
+    }
+}
+
+/// Tiny header label used between Hai sheet cards. Matches the design's
+/// `SectionLabel` (uppercased Basalt).
+private struct IdeaSectionLabel: View {
+    let title: String
+    init(_ title: String) { self.title = title }
+    var body: some View {
+        Text(title.uppercased())
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(0.6)
+            .foregroundStyle(Color.amux.basalt.opacity(0.7))
+            .padding(.horizontal, 24)
+    }
+}
+
+/// Reusable Hai sheet row body — left label, right value, optional
+/// chevron. Plain layout (no surrounding card) so callers can stack
+/// multiple in one Paper card with hairline dividers.
+private struct IdeaSheetRowLabel: View {
+    let label: String
+    let value: String?
+    let valueIsMonospaced: Bool
+    let showsChevron: Bool
+
+    init(label: String,
+         value: String? = nil,
+         valueIsMonospaced: Bool = false,
+         showsChevron: Bool = false) {
+        self.label = label
+        self.value = value
+        self.valueIsMonospaced = valueIsMonospaced
+        self.showsChevron = showsChevron
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.system(size: 14.5))
+                .foregroundStyle(Color.amux.onyx)
+            Spacer(minLength: 8)
+            if let value {
+                Text(value)
+                    .font(.system(size: 14, design: valueIsMonospaced ? .monospaced : .default))
+                    .foregroundStyle(Color.amux.basalt)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.amux.slate)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
     }
 }
 
