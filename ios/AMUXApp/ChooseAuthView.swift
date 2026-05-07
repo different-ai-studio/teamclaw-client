@@ -1,5 +1,6 @@
 import SwiftUI
 import AMUXCore
+import AMUXSharedUI
 
 /// Sits between WelcomeView and LoginView. Three paths:
 ///   - "Try it first" → anonymous Supabase sign-in + auto-created random team
@@ -16,12 +17,13 @@ struct ChooseAuthView: View {
             VStack(spacing: 12) {
                 Image(systemName: "rectangle.3.group")
                     .font(.system(size: 44))
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(Color.amux.cinnabar)
                 Text("Welcome to AMUX")
-                    .font(.title.bold())
+                    .font(.amuxSerif(28, weight: .regular))
+                    .foregroundStyle(Color.amux.onyx)
                 Text("Pick how you want to start.")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.amux.basalt)
             }
             .padding(.top, 32)
 
@@ -56,7 +58,7 @@ struct ChooseAuthView: View {
             if let err = coordinator.errorMessage {
                 Text(err)
                     .font(.footnote)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.amux.cinnabarDeep)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 28)
             }
@@ -64,6 +66,7 @@ struct ChooseAuthView: View {
             Spacer(minLength: 0)
         }
         .padding(.bottom, 32)
+        .background(Color.amux.mist)
         .navigationDestination(isPresented: $showLogin) {
             LoginView(coordinator: coordinator)
         }
@@ -176,7 +179,7 @@ private struct InviteJoinSheet: View {
                     .padding(12)
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color(.secondarySystemBackground))
+                            .fill(Color.amux.pebble)
                     )
                     .onChange(of: raw) { _, _ in
                         // Clear stale errors as soon as the user edits the
@@ -188,16 +191,16 @@ private struct InviteJoinSheet: View {
                 if let inlineError {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Color.amux.cinnabar)
                         Text(inlineError)
                             .font(.footnote)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(Color.amux.onyx)
                     }
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.orange.opacity(0.10))
+                            .fill(Color.amux.cinnabar.opacity(0.10))
                     )
                 }
 

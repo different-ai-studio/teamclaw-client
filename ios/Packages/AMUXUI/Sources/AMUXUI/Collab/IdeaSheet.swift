@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
+import AMUXSharedUI
 
 #if os(iOS)
 
@@ -234,16 +235,17 @@ struct IdeaRow: View {
         self.workspaceName = workspaceName
     }
 
+    /// Hai keeps the status pill quiet: only `Done` earns Sage; the other
+    /// two states sit in Basalt on Pebble (no orange / blue from earlier
+    /// rounds — that would have violated "spare the vermillion").
     private var pillForeground: Color {
-        if item.isDone       { return Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255) }
-        if item.isInProgress { return Color(red: 0xA2/255, green: 0x58/255, blue: 0x0B/255) }
-        return Color(red: 0x00/255, green: 0x64/255, blue: 0xD8/255)
+        if item.isDone       { return Color.amux.sage }
+        return Color.amux.basalt
     }
 
     private var pillBackground: Color {
-        if item.isDone       { return Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255).opacity(0.10) }
-        if item.isInProgress { return Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255).opacity(0.12) }
-        return Color(red: 0x00/255, green: 0x7A/255, blue: 0xFF/255).opacity(0.10)
+        if item.isDone       { return Color.amux.sage.opacity(0.12) }
+        return Color.amux.pebble
     }
 
     private var creatorInitial: String {
@@ -260,19 +262,12 @@ struct IdeaRow: View {
         return buckets[h % buckets.count]
     }
 
-    /// Mirrors the human-avatar palette used in the Actors list so the same
-    /// teammate carries the same color across surfaces.
+    /// All creator avatars sit in Hai grays — the previous rainbow palette
+    /// is gone. Cinnabar is reserved for the active session, not for
+    /// decorating creator chips.
     private var creatorAvatarColor: Color {
-        guard let id = creator?.actorId, !id.isEmpty else { return .secondary }
-        let palette: [Color] = [
-            Color(red: 0x00/255, green: 0x7A/255, blue: 0xFF/255),
-            Color(red: 0x58/255, green: 0x56/255, blue: 0xD6/255),
-            Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255),
-            Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255),
-            Color(red: 0xFF/255, green: 0x2D/255, blue: 0x55/255),
-            Color(red: 0x5A/255, green: 0xC8/255, blue: 0xFA/255),
-            Color(red: 0x5A/255, green: 0xC8/255, blue: 0xFA/255),
-        ]
+        guard let id = creator?.actorId, !id.isEmpty else { return Color.amux.slate }
+        let palette: [Color] = [Color.amux.basalt, Color.amux.slate]
         let hash = id.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
         return palette[abs(hash) % palette.count]
     }

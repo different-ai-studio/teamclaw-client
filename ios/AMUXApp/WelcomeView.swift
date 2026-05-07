@@ -1,5 +1,6 @@
 import SwiftUI
 import AMUXCore
+import AMUXSharedUI
 
 struct WelcomeView: View {
     @Bindable var coordinator: AppOnboardingCoordinator
@@ -13,12 +14,16 @@ struct WelcomeView: View {
                 VStack(spacing: 16) {
                     Image(systemName: "rectangle.3.group")
                         .font(.system(size: 64))
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(Color.amux.cinnabar)
+                    // Serif italic for the wordmark — wabi-sabi voice. The
+                    // tagline drops to Basalt so the lobster/Cinnabar accent
+                    // is the only intentional color on the screen.
                     Text("AMUX")
-                        .font(.largeTitle.bold())
+                        .font(.amuxSerif(44, weight: .regular))
+                        .foregroundStyle(Color.amux.onyx)
                     Text("Monitor and control your AI coding agents from anywhere.")
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.amux.basalt)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
                 }
@@ -28,15 +33,15 @@ struct WelcomeView: View {
                 if let err = coordinator.errorMessage, !err.isEmpty {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Color.amux.cinnabar)
                         Text(err)
                             .font(.footnote)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(Color.amux.onyx)
                     }
                     .padding(12)
                     .background(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.orange.opacity(0.10))
+                            .fill(Color.amux.pebble)
                     )
                     .padding(.horizontal, 24)
                     .padding(.bottom, 8)
@@ -55,6 +60,7 @@ struct WelcomeView: View {
                 .padding(.bottom, 48)
                 .accessibilityIdentifier("welcome.getStartedButton")
             }
+            .background(Color.amux.mist)
             .navigationDestination(isPresented: $showChoose) {
                 ChooseAuthView(coordinator: coordinator)
             }

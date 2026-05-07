@@ -62,24 +62,30 @@ public struct EventBubbleView: View {
         }
     }
 
-    // MARK: - User Bubble (blue, right-aligned)
+    // MARK: - User Bubble (Cinnabar, right-aligned)
 
     private var userBubble: some View {
         VStack(alignment: .trailing, spacing: 2) {
             Text("You")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.amux.basalt)
                 .padding(.trailing, 4)
 
             HStack {
                 Spacer()
                 Text(event.text ?? "")
                     .font(.subheadline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.amux.mist)
                     .textSelection(.enabled)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .liquidGlass(in: RoundedRectangle(cornerRadius: 18), tint: .blue, interactive: false)
+                    // Liquid glass tinted with the Hai accent — keeps the
+                    // iOS 26 material behaviour, swaps the iOS-blue tint
+                    // for Cinnabar so user bubbles read as the design's
+                    // "spare the vermillion" intent moments.
+                    .liquidGlass(in: RoundedRectangle(cornerRadius: 18),
+                                 tint: Color.amux.cinnabar,
+                                 interactive: false)
                     .frame(maxWidth: sizeClass == .regular ? 500 : 260, alignment: .trailing)
                     .contextMenu {
                         MessageContextMenu(text: event.text ?? "")

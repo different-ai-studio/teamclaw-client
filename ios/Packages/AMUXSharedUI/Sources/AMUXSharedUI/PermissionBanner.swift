@@ -20,33 +20,39 @@ public struct PermissionBannerView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "lock.shield").foregroundStyle(.orange)
+                // Cinnabar shield in place of the iOS-orange lock — the
+                // permission banner is the canonical "intent moment" where
+                // the design language allows the vermillion seal.
+                Image(systemName: "lock.shield").foregroundStyle(Color.amux.cinnabar)
                 Text("Permission Request").font(.subheadline).fontWeight(.semibold)
+                    .foregroundStyle(Color.amux.onyx)
             }
-            Text("\(toolName): \(description)").font(.caption).foregroundStyle(.secondary)
+            Text("\(toolName): \(description)")
+                .font(.caption)
+                .foregroundStyle(Color.amux.basalt)
 
             if isResolved {
                 HStack(spacing: 6) {
                     Image(systemName: wasGranted == true ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundStyle(wasGranted == true ? .green : .red)
+                        .foregroundStyle(wasGranted == true ? Color.amux.sage : Color.amux.cinnabarDeep)
                     Text(wasGranted == true ? "Allowed" : "Denied")
                         .font(.subheadline).fontWeight(.medium)
-                        .foregroundStyle(wasGranted == true ? .green : .red)
+                        .foregroundStyle(wasGranted == true ? Color.amux.sage : Color.amux.cinnabarDeep)
                 }
             } else {
                 HStack(spacing: 12) {
                     Button { onDeny?(requestId) } label: {
                         Text("Deny").font(.subheadline).fontWeight(.medium).frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
-                            .foregroundStyle(.primary)
-                            .background(Color.red.opacity(0.15), in: Capsule())
+                            .foregroundStyle(Color.amux.cinnabarDeep)
+                            .background(Color.amux.cinnabarDeep.opacity(0.10), in: Capsule())
                     }
                     .buttonStyle(.plain)
                     Button { onGrant?(requestId) } label: {
                         Text("Allow").font(.subheadline).fontWeight(.medium).frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
-                            .foregroundStyle(.primary)
-                            .background(Color.green.opacity(0.15), in: Capsule())
+                            .foregroundStyle(Color.amux.sage)
+                            .background(Color.amux.sage.opacity(0.18), in: Capsule())
                     }
                     .buttonStyle(.plain)
                 }
@@ -56,7 +62,7 @@ public struct PermissionBannerView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.orange.opacity(0.25), lineWidth: 1)
+                .strokeBorder(Color.amux.cinnabar.opacity(0.30), lineWidth: 1)
         )
     }
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
+import AMUXSharedUI
 
 #if os(iOS)
 
@@ -181,41 +182,28 @@ private struct ActorRow: View {
         return String(actor.displayName.prefix(1)).uppercased()
     }
 
-    /// Two distinct palettes:
-    ///   - Humans: vivid solid bg + white fg (matches the design's YT/AM/KN/PS chips)
-    ///   - Agents: soft tinted bg + saturated fg (matches the CC/OC/CX brand families)
+    /// Hai avatar style — every tile sits on Pebble. Foregrounds are
+    /// rationed: the "you" actor gets Cinnabar (the only call-out worth a
+    /// vermillion seal in the list), every other actor reads in Onyx /
+    /// Basalt / Slate. Agent vs human is signalled by tile shape (rounded
+    /// square vs circle), not by color.
     private struct AvatarStyle {
         let background: Color
         let foreground: Color
     }
 
     private var avatarStyle: AvatarStyle {
-        let humanPalette: [Color] = [
-            Color(red: 0x00/255, green: 0x7A/255, blue: 0xFF/255),  // blue
-            Color(red: 0x58/255, green: 0x56/255, blue: 0xD6/255),  // purple
-            Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255),  // orange
-            Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255),  // green
-            Color(red: 0xFF/255, green: 0x2D/255, blue: 0x55/255),  // pink
-            Color(red: 0x5A/255, green: 0xC8/255, blue: 0xFA/255),  // teal
-        ]
-        let agentPalette: [(bg: Color, fg: Color)] = [
-            (Color(red: 0xFC/255, green: 0xED/255, blue: 0xE3/255),
-             Color(red: 0xC2/255, green: 0x4F/255, blue: 0x1F/255)),  // claude
-            (Color(red: 0xE4/255, green: 0xF1/255, blue: 0xFB/255),
-             Color(red: 0x1B/255, green: 0x6B/255, blue: 0xB8/255)),  // opencode
-            (Color(red: 0xEF/255, green: 0xEA/255, blue: 0xFB/255),
-             Color(red: 0x5B/255, green: 0x45/255, blue: 0xA8/255)),  // codex
-            (Color(red: 0xE3/255, green: 0xF8/255, blue: 0xEA/255),
-             Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255)),  // mint
+        if isMe {
+            return AvatarStyle(background: Color.amux.pebble, foreground: Color.amux.cinnabar)
+        }
+        let palette: [Color] = [
+            Color.amux.onyx,
+            Color.amux.basalt,
+            Color.amux.slate,
         ]
         let hash = actor.actorId.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
-        if actor.isAgent {
-            let pair = agentPalette[abs(hash) % agentPalette.count]
-            return AvatarStyle(background: pair.bg, foreground: pair.fg)
-        } else {
-            let bg = humanPalette[abs(hash) % humanPalette.count]
-            return AvatarStyle(background: bg, foreground: .white)
-        }
+        return AvatarStyle(background: Color.amux.pebble,
+                           foreground: palette[abs(hash) % palette.count])
     }
 
     private var subtitle: String {
@@ -243,26 +231,23 @@ private struct ActorRow: View {
     }
 
     private var tag: Tag? {
+        // YOU is the only tag that earns Cinnabar — it answers "is this me?"
+        // which is the most important call-out in the list. Owner/Agent
+        // step back into Basalt-on-Pebble per the wabi-sabi quietness rule.
         if isMe {
-            return Tag(
-                text: "YOU",
-                foreground: Color(red: 0x00/255, green: 0x64/255, blue: 0xD8/255),
-                background: Color(red: 0x00/255, green: 0x7A/255, blue: 0xFF/255).opacity(0.10)
-            )
+            return Tag(text: "YOU",
+                       foreground: Color.amux.cinnabar,
+                       background: Color.amux.cinnabar.opacity(0.10))
         }
         if actor.isOwner {
-            return Tag(
-                text: "OWNER",
-                foreground: Color(red: 0xA2/255, green: 0x58/255, blue: 0x0B/255),
-                background: Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255).opacity(0.14)
-            )
+            return Tag(text: "OWNER",
+                       foreground: Color.amux.basalt,
+                       background: Color.amux.pebble)
         }
         if actor.isAgent {
-            return Tag(
-                text: "AGENT",
-                foreground: Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255),
-                background: Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255).opacity(0.14)
-            )
+            return Tag(text: "AGENT",
+                       foreground: Color.amux.basalt,
+                       background: Color.amux.pebble)
         }
         return nil
     }
@@ -308,9 +293,7 @@ private struct ActorRow: View {
     private var activeSessionsChip: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(actor.isOnline
-                      ? Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255)
-                      : Color(.systemGray3))
+                .fill(actor.isOnline ? Color.amux.sage : Color.amux.slate)
                 .frame(width: 6, height: 6)
                 .opacity(actor.isOnline && breathe ? 0.5 : 1.0)
                 .animation(actor.isOnline
@@ -320,7 +303,7 @@ private struct ActorRow: View {
             Text("\(mockActiveSessions)")
                 .font(.caption)
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.amux.basalt)
         }
     }
 
@@ -333,7 +316,7 @@ private struct ActorRow: View {
                         .fill(style.background)
                         .overlay(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(Color.black.opacity(0.04), lineWidth: 0.5)
+                                .stroke(Color.amux.hairline, lineWidth: 0.5)
                         )
                 } else {
                     Circle().fill(style.background)
@@ -349,7 +332,7 @@ private struct ActorRow: View {
 
             if actor.isOnline {
                 Circle()
-                    .fill(Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255))
+                    .fill(Color.amux.sage)
                     .frame(width: 11, height: 11)
                     .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 2.5))
                     .opacity(breathe ? 0.55 : 1.0)
@@ -829,10 +812,10 @@ private struct ActorDetailView: View {
             if actor.isOnline {
                 ZStack {
                     Circle()
-                        .fill(Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255))
+                        .fill(Color.amux.sage)
                         .frame(width: 18, height: 18)
                     Circle()
-                        .fill(Color.white)
+                        .fill(Color.amux.mist)
                         .frame(width: 6, height: 6)
                         .modifier(BreathingDot(active: true))
                 }
@@ -845,15 +828,10 @@ private struct ActorDetailView: View {
     }
 
     private var heroAvatarShadow: Color {
-        // Same hash as AgentAvatar's palette so the glow matches the tile fg.
-        let agentTints: [Color] = [
-            Color(red: 0xC2/255, green: 0x4F/255, blue: 0x1F/255),
-            Color(red: 0x1B/255, green: 0x6B/255, blue: 0xB8/255),
-            Color(red: 0x5B/255, green: 0x45/255, blue: 0xA8/255),
-            Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255),
-        ]
-        if actor.isAgent { return agentTints[mockHash % agentTints.count] }
-        return .black
+        // Hai keeps every avatar glow in the ink-and-stone family — a soft
+        // Onyx shadow that just deepens the paper. The previous brand-tint
+        // glow has been retired with the rest of the rainbow.
+        Color.amux.onyx
     }
 
     private var heroIdLine: String {
@@ -889,25 +867,19 @@ private struct ActorDetailView: View {
         var out: [HeroTag] = []
         if actor.isAgent {
             let kind = (actor.agentKind ?? "agent").capitalized
-            out.append(HeroTag(
-                text: "\(kind) agent",
-                fg: Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255),
-                bg: Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255).opacity(0.14)
-            ))
+            out.append(HeroTag(text: "\(kind) agent",
+                               fg: Color.amux.basalt,
+                               bg: Color.amux.pebble))
             if let model = currentAgentModel {
-                out.append(HeroTag(
-                    text: model,
-                    fg: .secondary,
-                    bg: Color(.systemFill)
-                ))
+                out.append(HeroTag(text: model,
+                                   fg: Color.amux.basalt,
+                                   bg: Color.amux.pebble))
             }
         }
         if actor.isOwner {
-            out.append(HeroTag(
-                text: "Owner",
-                fg: Color(red: 0xA2/255, green: 0x58/255, blue: 0x0B/255),
-                bg: Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255).opacity(0.14)
-            ))
+            out.append(HeroTag(text: "Owner",
+                               fg: Color.amux.basalt,
+                               bg: Color.amux.pebble))
         }
         return out
     }
@@ -1005,7 +977,7 @@ private struct ActorDetailView: View {
                     Text(row.name)
                         .font(.subheadline)
                 }
-                .tint(Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255))
+                .tint(Color.amux.cinnabar)
             }
         } header: {
             Text("Auto-approved tools".uppercased())
@@ -1050,13 +1022,10 @@ private struct ToolUsageRow: View {
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(Color(.tertiarySystemFill))
+                        .fill(Color.amux.pebble)
                     Capsule()
                         .fill(LinearGradient(
-                            colors: [
-                                Color(red: 0xFC/255, green: 0xED/255, blue: 0xE3/255),
-                                Color(red: 0xC2/255, green: 0x4F/255, blue: 0x1F/255),
-                            ],
+                            colors: [Color.amux.pebble, Color.amux.cinnabar],
                             startPoint: .leading, endPoint: .trailing
                         ))
                         .frame(width: proxy.size.width * ratio)
@@ -1077,9 +1046,9 @@ private struct RecentSessionRow: View {
         let staleSeconds: TimeInterval = 300
         if let last = session.lastMessageAt,
            Date().timeIntervalSince(last) < staleSeconds {
-            return Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255)
+            return Color.amux.sage
         }
-        return Color(.systemGray3)
+        return Color.amux.slate
     }
 
     private var when: Date { session.lastMessageAt ?? session.createdAt }

@@ -12,11 +12,11 @@ public struct ConnectionStatusBadge: View {
     public var body: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(isOnline ? Color.green : Color.red)
+                .fill(isOnline ? Color.amux.sage : Color.amux.cinnabarDeep)
                 .frame(width: 8, height: 8)
             Text(isOnline ? (deviceName ?? "Daemon Online") : "Daemon Offline")
                 .font(.caption2)
-                .foregroundStyle(isOnline ? Color.secondary : Color.red)
+                .foregroundStyle(isOnline ? Color.amux.basalt : Color.amux.cinnabarDeep)
         }
     }
 }

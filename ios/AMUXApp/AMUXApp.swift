@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
+import AMUXSharedUI
 import Sentry
 
 @main
@@ -43,6 +44,10 @@ struct AMUXApp: App {
         WindowGroup {
             ContentView(pairing: pairing)
                 .onOpenURL { url in handle(url) }
+                // App-wide tint flips iOS 26 glass buttons, tab-bar selection,
+                // toggle accents, and other system tinted surfaces to the Hai
+                // Cinnabar accent without disturbing liquid-glass behaviour.
+                .tint(Color.amux.cinnabar)
         }
         .modelContainer(modelContainer)
     }

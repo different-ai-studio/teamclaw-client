@@ -213,21 +213,23 @@ struct AgentRowView: View {
     }
 
     private var statusForeground: Color {
-        if isRunning  { return Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255) }
-        if isStarting { return Color(red: 0xA2/255, green: 0x58/255, blue: 0x0B/255) }
-        return .secondary
+        if isRunning  { return Color.amux.sage }
+        if isStarting { return Color.amux.basalt }
+        return Color.amux.basalt
     }
 
     private var statusDotColor: Color {
-        if isRunning  { return Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255) }
-        if isStarting { return Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255) }
-        if isStopped  { return Color.black.opacity(0.25) }
-        return Color(.systemGray)
+        if isRunning  { return Color.amux.sage }
+        if isStarting { return Color.amux.slate }
+        if isStopped  { return Color.amux.onyx.opacity(0.25) }
+        return Color.amux.slate
     }
 
-    /// Tinted background + foreground + 2-letter glyph keyed off the daemon
-    /// backend type. Falls back to a neutral chip with the title's initial
-    /// when the row hasn't resolved a CachedAgentRuntime yet.
+    /// Pebble-tinted badge with a backend-keyed foreground. Per the Hai
+    /// principle of "spare the vermillion", only the Claude variant gets
+    /// Cinnabar; OpenCode/Codex sit in Basalt. Stopped sessions drop to
+    /// Slate. Background is always Pebble — the brand-color rainbow from
+    /// earlier rounds has been retired.
     private struct AgentBadge {
         let background: Color
         let foreground: Color
@@ -235,31 +237,16 @@ struct AgentRowView: View {
     }
 
     private var agentBadge: AgentBadge {
+        let bg = Color.amux.pebble
         switch cachedRuntime?.backendType {
         case "claude":
-            return AgentBadge(
-                background: Color(red: 0xFC/255, green: 0xED/255, blue: 0xE3/255),
-                foreground: Color(red: 0xC2/255, green: 0x4F/255, blue: 0x1F/255),
-                glyph: "CC"
-            )
+            return AgentBadge(background: bg, foreground: Color.amux.cinnabar, glyph: "CC")
         case "opencode":
-            return AgentBadge(
-                background: Color(red: 0xE4/255, green: 0xF1/255, blue: 0xFB/255),
-                foreground: Color(red: 0x1B/255, green: 0x6B/255, blue: 0xB8/255),
-                glyph: "OC"
-            )
+            return AgentBadge(background: bg, foreground: Color.amux.basalt, glyph: "OC")
         case "codex":
-            return AgentBadge(
-                background: Color(red: 0xEF/255, green: 0xEA/255, blue: 0xFB/255),
-                foreground: Color(red: 0x5B/255, green: 0x45/255, blue: 0xA8/255),
-                glyph: "CX"
-            )
+            return AgentBadge(background: bg, foreground: Color.amux.basalt, glyph: "CX")
         default:
-            return AgentBadge(
-                background: Color(.tertiarySystemFill),
-                foreground: .secondary,
-                glyph: fallbackGlyph
-            )
+            return AgentBadge(background: bg, foreground: Color.amux.slate, glyph: fallbackGlyph)
         }
     }
 
@@ -292,22 +279,22 @@ struct AgentRowView: View {
                     .font(.body)
                     .fontWeight(.semibold)
                     .lineLimit(1)
-                    .foregroundStyle(isStopped ? .secondary : .primary)
+                    .foregroundStyle(isStopped ? Color.amux.basalt : Color.amux.onyx)
                 Spacer(minLength: 4)
                 if isUnread {
                     Circle()
-                        .fill(Color.accentColor)
+                        .fill(Color.amux.cinnabar)
                         .frame(width: 7, height: 7)
                 }
                 Text(formatTime(rowTimestamp))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.amux.slate)
             }
 
             if !lastMessage.isEmpty {
                 Text(lastMessage)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.amux.basalt)
                     .lineLimit(1)
                     .padding(.leading, badgeIndent)
             }
@@ -355,13 +342,13 @@ struct AgentRowView: View {
             if !workspaceName.isEmpty {
                 Text(workspaceName)
                     .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.amux.slate)
                     .lineLimit(1)
             }
 
             if !workspaceName.isEmpty && !statusLabel.isEmpty {
                 Circle()
-                    .fill(Color.secondary.opacity(0.3))
+                    .fill(Color.amux.slate.opacity(0.5))
                     .frame(width: 3, height: 3)
             }
 
@@ -383,7 +370,7 @@ struct AgentRowView: View {
                         .font(.caption)
                         .monospacedDigit()
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.amux.basalt)
             }
         }
     }

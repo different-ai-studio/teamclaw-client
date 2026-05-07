@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
+import AMUXSharedUI
 
 public struct IdeaDetailView: View {
     let ideaID: String
@@ -232,16 +233,10 @@ public struct IdeaDetailView: View {
     }
 
     private func statusPillMenu(for item: IdeaRecord) -> some View {
-        let fg: Color = item.isDone
-            ? Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255)
-            : item.isInProgress
-                ? Color(red: 0xA2/255, green: 0x58/255, blue: 0x0B/255)
-                : Color(red: 0x00/255, green: 0x64/255, blue: 0xD8/255)
-        let bg: Color = item.isDone
-            ? Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255).opacity(0.10)
-            : item.isInProgress
-                ? Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255).opacity(0.12)
-                : Color(red: 0x00/255, green: 0x7A/255, blue: 0xFF/255).opacity(0.10)
+        // Hai keeps the pill quiet: only `Done` earns Sage; the other states
+        // sit in Basalt on Pebble. Cinnabar is reserved for active sessions.
+        let fg: Color = item.isDone ? Color.amux.sage : Color.amux.basalt
+        let bg: Color = item.isDone ? Color.amux.sage.opacity(0.12) : Color.amux.pebble
         return Menu {
             Picker("Status", selection: statusBinding(for: item)) {
                 Text("Open").tag("open")
@@ -336,9 +331,9 @@ public struct IdeaDetailView: View {
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 11)
                         .padding(.vertical, 6)
-                        .background(Color.accentColor.opacity(0.10))
+                        .background(Color.amux.cinnabar.opacity(0.10))
                         .clipShape(Capsule())
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(Color.amux.cinnabar)
                 }
                 .buttonStyle(.plain)
             }
@@ -433,10 +428,10 @@ public struct IdeaDetailView: View {
             } label: {
                 Text("Submit")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.amux.mist)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(Color.black, in: Capsule())
+                    .background(Color.amux.onyx, in: Capsule())
             }
             .buttonStyle(.plain)
             .disabled(composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -448,9 +443,9 @@ public struct IdeaDetailView: View {
                 .fill(.ultraThinMaterial)
         )
         .overlay(
-            Capsule().strokeBorder(Color.black.opacity(0.06), lineWidth: 0.5)
+            Capsule().strokeBorder(Color.amux.hairline, lineWidth: 0.5)
         )
-        .shadow(color: Color.black.opacity(0.08), radius: 18, y: 6)
+        .shadow(color: Color.amux.onyx.opacity(0.08), radius: 18, y: 6)
     }
 
     // MARK: Helpers
@@ -532,42 +527,46 @@ private struct SubmissionRow: View {
                     Text("AGENT")
                         .font(.system(size: 9, weight: .bold))
                         .tracking(0.3)
-                        .foregroundStyle(Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255))
+                        .foregroundStyle(Color.amux.basalt)
                         .padding(.horizontal, 5)
                         .frame(height: 14)
                         .background(
                             RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255).opacity(0.14))
+                                .fill(Color.amux.pebble)
                         )
                 }
                 Spacer()
                 Text(submission.when.relativeShort)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.amux.slate)
             }
 
             Text(submission.content)
                 .font(.subheadline)
-                .foregroundStyle(.primary.opacity(0.85))
+                .foregroundStyle(Color.amux.onyx.opacity(0.85))
                 .lineLimit(nil)
 
             if let attach = submission.attachment {
+                // Attachment chip uses Cinnabar so PRs/links read as the
+                // single semantic accent of the design — Hai's "spare the
+                // vermillion" allows it here because attachments are an
+                // intentional, infrequent affordance.
                 HStack(spacing: 6) {
                     Image(systemName: "link")
                         .font(.system(size: 10, weight: .medium))
                     Text(attach)
                         .font(.system(.caption, design: .monospaced))
                 }
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Color.amux.cinnabar)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 5)
                 .background(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.08))
+                        .fill(Color.amux.cinnabar.opacity(0.08))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(Color.accentColor.opacity(0.2), lineWidth: 0.5)
+                        .strokeBorder(Color.amux.cinnabar.opacity(0.2), lineWidth: 0.5)
                 )
             }
         }
@@ -633,31 +632,19 @@ struct AgentAvatar: View {
     private struct Style { let bg: Color; let fg: Color }
 
     private var style: Style {
-        let humanPalette: [Color] = [
-            Color(red: 0x00/255, green: 0x7A/255, blue: 0xFF/255),
-            Color(red: 0x58/255, green: 0x56/255, blue: 0xD6/255),
-            Color(red: 0xFF/255, green: 0x95/255, blue: 0x00/255),
-            Color(red: 0x34/255, green: 0xC7/255, blue: 0x59/255),
-            Color(red: 0xFF/255, green: 0x2D/255, blue: 0x55/255),
-            Color(red: 0x5A/255, green: 0xC8/255, blue: 0xFA/255),
-        ]
-        let agentPalette: [(Color, Color)] = [
-            (Color(red: 0xFC/255, green: 0xED/255, blue: 0xE3/255),
-             Color(red: 0xC2/255, green: 0x4F/255, blue: 0x1F/255)),
-            (Color(red: 0xE4/255, green: 0xF1/255, blue: 0xFB/255),
-             Color(red: 0x1B/255, green: 0x6B/255, blue: 0xB8/255)),
-            (Color(red: 0xEF/255, green: 0xEA/255, blue: 0xFB/255),
-             Color(red: 0x5B/255, green: 0x45/255, blue: 0xA8/255)),
-            (Color(red: 0xE3/255, green: 0xF8/255, blue: 0xEA/255),
-             Color(red: 0x1B/255, green: 0x7A/255, blue: 0x3D/255)),
+        // Hai palette — every avatar background is Pebble. Foregrounds are
+        // chosen from the ink-and-stone family: Cinnabar is rationed for a
+        // single hash slot (one variant per actor stays warm, all others
+        // sit in Basalt or Slate). The previous brand rainbow has been
+        // retired per the "spare the vermillion" principle.
+        let palette: [Color] = [
+            Color.amux.basalt,
+            Color.amux.slate,
+            Color.amux.cinnabar,
+            Color.amux.basalt,
         ]
         let h = abs(actor.actorId.unicodeScalars.reduce(0) { $0 &+ Int($1.value) })
-        if actor.isAgent {
-            let p = agentPalette[h % agentPalette.count]
-            return Style(bg: p.0, fg: p.1)
-        } else {
-            return Style(bg: humanPalette[h % humanPalette.count], fg: .white)
-        }
+        return Style(bg: Color.amux.pebble, fg: palette[h % palette.count])
     }
 
     var body: some View {

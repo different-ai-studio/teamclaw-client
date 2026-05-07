@@ -161,10 +161,10 @@ public struct RuntimeDetailView: View {
                             if memberBadgeCount > 0 {
                                 Text("\(memberBadgeCount)")
                                     .font(.caption2.weight(.bold))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(Color.amux.mist)
                                     .padding(.horizontal, 5)
                                     .padding(.vertical, 1)
-                                    .background(.blue, in: Capsule())
+                                    .background(Color.amux.cinnabar, in: Capsule())
                             }
                         }
                 }
