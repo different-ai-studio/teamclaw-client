@@ -564,7 +564,7 @@ public final class RuntimeDetailViewModel {
     /// agent's display name above output / thinking bubbles instead of
     /// always saying "You" or leaving them anonymous.
     private func makeAgentSideEvent(sequence: Int, eventType: String) -> AgentEvent {
-        let event = makeAgentSideEvent(sequence: sequence, eventType: eventType)
+        let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: eventType)
         event.senderActorID = session?.primaryAgentId
         return event
     }
