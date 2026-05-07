@@ -1,4 +1,5 @@
 import SwiftUI
+import AMUXSharedUI
 import AMUXCore
 import AMUXSharedUI
 
@@ -90,7 +91,7 @@ public struct SettingsView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     } else if let err = teamLoadError {
-                        Text(err).font(.footnote).foregroundStyle(.red)
+                        Text(err).font(.footnote).foregroundStyle(Color.amux.cinnabarDeep)
                     } else {
                         ProgressView().frame(maxWidth: .infinity)
                     }
@@ -113,7 +114,7 @@ public struct SettingsView: View {
                             }
                         }
                         if let err = store.errorMessage {
-                            Text(err).font(.footnote).foregroundStyle(.red)
+                            Text(err).font(.footnote).foregroundStyle(Color.amux.cinnabarDeep)
                         }
                     } else {
                         Text("Agent list unavailable.")

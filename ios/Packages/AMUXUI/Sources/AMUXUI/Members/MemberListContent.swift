@@ -146,20 +146,20 @@ public struct MemberListContent: View {
             HStack(spacing: 8) {
                 Image(systemName: "lightbulb")
                     .font(.footnote)
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(Color.amux.cinnabar)
                 Text("Add your own agent")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.amux.onyx)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.amux.slate)
             }
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.accentColor.opacity(0.10))
+                    .fill(Color.amux.cinnabar.opacity(0.10))
             )
         }
         .buttonStyle(.plain)
@@ -464,7 +464,7 @@ private struct ActorDetailView: View {
                     }
 
                     if let err = store.errorMessage {
-                        Text(err).font(.footnote).foregroundStyle(.red)
+                        Text(err).font(.footnote).foregroundStyle(Color.amux.cinnabarDeep)
                     }
                 }
             }
@@ -498,7 +498,7 @@ private struct ActorDetailView: View {
                     if let workspaceStore, let workspaceLoadError = workspaceStore.errorMessage {
                         Text(workspaceLoadError)
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.amux.cinnabarDeep)
                     }
 
                     HStack(spacing: 8) {
@@ -534,7 +534,7 @@ private struct ActorDetailView: View {
                     if let workspaceErrorMessage {
                         Text(workspaceErrorMessage)
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.amux.cinnabarDeep)
                     }
                 }
             }
@@ -561,12 +561,12 @@ private struct ActorDetailView: View {
                 if let inviteErrorMessage {
                     Text(inviteErrorMessage)
                         .font(.footnote)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.amux.cinnabarDeep)
                 }
                 if let deleteErrorMessage {
                     Text(deleteErrorMessage)
                         .font(.footnote)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.amux.cinnabarDeep)
                 }
             }
         }
@@ -1125,17 +1125,17 @@ private struct AuthorizedHumanRow: View {
     let human: AgentAuthorizedHuman
     var body: some View {
         HStack(spacing: 10) {
-            Circle().fill(human.isOnline ? Color.green : Color.secondary.opacity(0.4))
+            Circle().fill(human.isOnline ? Color.amux.sage : Color.amux.slate.opacity(0.4))
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 2) {
-                Text(human.displayName).font(.body)
+                Text(human.displayName).font(.body).foregroundStyle(Color.amux.onyx)
                 Text(human.permissionLevel.capitalized)
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(Color.amux.basalt)
             }
             Spacer()
             Text(human.isOnline ? "Online" : "Offline")
                 .font(.caption)
-                .foregroundStyle(human.isOnline ? .green : .secondary)
+                .foregroundStyle(human.isOnline ? Color.amux.sage : Color.amux.basalt)
         }
     }
 }
@@ -1176,7 +1176,7 @@ private struct AuthorizedMemberPickerSheet: View {
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: selectedIDs.contains(member.actorId) ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(selectedIDs.contains(member.actorId) ? Color.accentColor : .secondary)
+                                    .foregroundStyle(selectedIDs.contains(member.actorId) ? Color.amux.cinnabar : Color.amux.slate)
                                     .font(.title3)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(member.displayName).font(.body)

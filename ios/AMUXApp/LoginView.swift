@@ -1,4 +1,5 @@
 import SwiftUI
+import AMUXSharedUI
 import AMUXCore
 
 struct LoginView: View {
@@ -46,7 +47,7 @@ struct LoginView: View {
                 if let err = coordinator.errorMessage {
                     Text(err)
                         .font(.footnote)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.amux.cinnabarDeep)
                 }
 
                 // Primary action

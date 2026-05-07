@@ -137,13 +137,13 @@ public struct IdeaDetailView: View {
             archiveSection(item)
             if let err = ideaStore.errorMessage {
                 Section {
-                    Text(err).font(.footnote).foregroundStyle(.red)
+                    Text(err).font(.footnote).foregroundStyle(Color.amux.cinnabarDeep)
                 }
             }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color(.systemGroupedBackground))
+        .background(Color.amux.mist)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             composerCapsule
                 .padding(.horizontal, 16)

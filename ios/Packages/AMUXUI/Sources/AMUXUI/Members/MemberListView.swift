@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import AMUXCore
+import AMUXSharedUI
 
 // MARK: - MemberListView (a.k.a. ActorPicker)
 
@@ -138,8 +139,8 @@ public struct MemberListView: View {
         } label: {
             HStack {
                 Image(systemName: selectedIDs.contains(actor.actorId) ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selectedIDs.contains(actor.actorId) ? Color.accentColor
-                                     : locked ? Color.secondary.opacity(0.4) : Color.secondary)
+                    .foregroundStyle(selectedIDs.contains(actor.actorId) ? Color.amux.cinnabar
+                                     : locked ? Color.amux.slate.opacity(0.4) : Color.amux.slate)
                     .font(.title3)
                 ActorRow(actor: actor, isPrimary: isPrimary(actor), isLocked: locked)
             }
@@ -178,7 +179,7 @@ public struct PrimaryAgentSheet: View {
                         } label: {
                             HStack {
                                 Image(systemName: selectedID == agent.actorId ? "largecircle.fill.circle" : "circle")
-                                    .foregroundStyle(selectedID == agent.actorId ? Color.accentColor : .secondary)
+                                    .foregroundStyle(selectedID == agent.actorId ? Color.amux.cinnabar : Color.amux.slate)
                                     .font(.title3)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(agent.displayName).font(.body)
@@ -241,45 +242,51 @@ private struct ActorRow: View {
     }
 
     private var kindBadge: (String, Color) {
-        actor.isMember ? ("Human", .blue) : ("Agent", .purple)
+        // Both human and agent badges read in Basalt — the kind distinction
+        // is communicated through copy ("Human"/"Agent") and the avatar
+        // shape elsewhere; per "spare the vermillion", no extra color here.
+        actor.isMember ? ("Human", Color.amux.basalt) : ("Agent", Color.amux.basalt)
     }
 
     var body: some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(actor.isOnline ? Color.green : Color.secondary.opacity(0.4))
+                .fill(actor.isOnline ? Color.amux.sage : Color.amux.slate.opacity(0.4))
                 .frame(width: 8, height: 8)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(actor.displayName)
                         .font(.body)
-                        .foregroundStyle(isLocked ? .secondary : .primary)
+                        .foregroundStyle(isLocked ? Color.amux.basalt : Color.amux.onyx)
                     Text(kindBadge.0)
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(kindBadge.1.opacity(0.15), in: Capsule())
+                        .background(Color.amux.pebble, in: Capsule())
                         .foregroundStyle(kindBadge.1)
                     if isPrimary {
+                        // Primary agent earns the only Cinnabar mark in the
+                        // row — it's the one piece of state that materially
+                        // changes how the session behaves.
                         Image(systemName: "star.fill")
                             .font(.caption)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Color.amux.cinnabar)
                     }
                     if isLocked {
                         Image(systemName: "lock.fill")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.amux.slate)
                     }
                 }
                 Text(subtitle)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.amux.basalt)
             }
             Spacer()
             if actor.isOwner {
                 Image(systemName: "crown.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.amux.basalt)
                     .font(.caption)
             }
         }

@@ -1,4 +1,5 @@
 import SwiftUI
+import AMUXSharedUI
 import SwiftData
 import AMUXCore
 import os
@@ -104,7 +105,7 @@ public struct NewSessionSheet: View {
                     if let errorMessage {
                         Text(errorMessage)
                             .font(.subheadline)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.amux.cinnabarDeep)
                             .padding(.horizontal, 16)
                             .padding(.bottom, 8)
                     }

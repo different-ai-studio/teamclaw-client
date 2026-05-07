@@ -65,7 +65,7 @@ struct CreateIdeaSheet: View {
                     Section {
                         Text(errorMessage)
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.amux.cinnabarDeep)
                     }
                 }
             }
@@ -160,7 +160,7 @@ struct EditIdeaSheet: View {
                     Section {
                         Text(errorMessage)
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.amux.cinnabarDeep)
                     }
                 }
             }

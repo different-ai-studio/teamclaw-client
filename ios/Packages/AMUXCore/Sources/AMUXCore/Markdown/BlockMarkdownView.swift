@@ -44,7 +44,12 @@ public struct BlockMarkdownView: View {
                 .font(codeFont)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
+                // Hai's Pebble token inlined — AMUXCore can't import the
+                // higher-level AMUXSharedUI theme module without a cycle.
+                .background(
+                    Color(red: 0xE2 / 255, green: 0xDF / 255, blue: 0xD9 / 255),
+                    in: RoundedRectangle(cornerRadius: 8)
+                )
                 .textSelection(.enabled)
 
         case .blockQuote(let text):

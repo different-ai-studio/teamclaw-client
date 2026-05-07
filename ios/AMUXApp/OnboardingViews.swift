@@ -1,4 +1,5 @@
 import SwiftUI
+import AMUXSharedUI
 import AMUXCore
 import AMUXUI
 
@@ -33,7 +34,7 @@ struct CreateTeamView: View {
                 if let errorMessage = coordinator.errorMessage {
                     Text(errorMessage)
                         .font(.footnote)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.amux.cinnabarDeep)
                 }
 
                 Button {

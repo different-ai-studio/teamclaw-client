@@ -1,4 +1,5 @@
 import SwiftUI
+import AMUXSharedUI
 import AMUXCore
 
 /// Presented from Settings when the current session is anonymous. Lets the
@@ -42,7 +43,7 @@ struct UpgradeAccountSheet: View {
                     }
 
                     if let err = coordinator.errorMessage {
-                        Text(err).font(.footnote).foregroundStyle(.red)
+                        Text(err).font(.footnote).foregroundStyle(Color.amux.cinnabarDeep)
                     }
 
                     Button {

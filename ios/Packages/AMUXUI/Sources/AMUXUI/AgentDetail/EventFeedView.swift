@@ -230,15 +230,17 @@ struct ErrorBlockView: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.amux.cinnabarDeep)
             Text(message)
                 .font(.caption)
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.amux.cinnabarDeep)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
-        .liquidGlass(in: RoundedRectangle(cornerRadius: 12), tint: .red, interactive: false)
+        .liquidGlass(in: RoundedRectangle(cornerRadius: 12),
+                     tint: Color.amux.cinnabarDeep,
+                     interactive: false)
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
         .contextMenu {
@@ -256,7 +258,7 @@ struct TypingIndicatorView: View {
         HStack(spacing: 5) {
             ForEach(0..<3) { i in
                 Circle()
-                    .fill(Color.secondary)
+                    .fill(Color.amux.slate)
                     .frame(width: 8, height: 8)
                     .scaleEffect(dotScale(for: i))
                     .opacity(dotOpacity(for: i))

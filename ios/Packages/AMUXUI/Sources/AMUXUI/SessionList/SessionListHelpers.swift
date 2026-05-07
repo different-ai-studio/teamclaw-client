@@ -121,7 +121,7 @@ struct SessionListContent: View {
             } label: {
                 Label("Archive", systemImage: "archivebox.fill")
             }
-            .tint(.red)
+            .tint(Color.amux.cinnabarDeep)
 
             Button {
                 session.isPinned.toggle()
@@ -130,7 +130,7 @@ struct SessionListContent: View {
                 Label(session.isPinned ? "Unpin" : "Pin",
                       systemImage: session.isPinned ? "pin.slash.fill" : "pin.fill")
             }
-            .tint(.indigo)
+            .tint(Color.amux.basalt)
         }
     }
 

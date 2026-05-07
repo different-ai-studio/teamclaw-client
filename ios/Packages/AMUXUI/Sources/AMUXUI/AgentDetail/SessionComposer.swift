@@ -171,7 +171,7 @@ struct SessionComposer: View {
             } label: {
                 Image(systemName: "stop.fill")
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.amux.cinnabarDeep)
                     .frame(width: 32, height: 32)
                     .contentShape(Circle())
             }
@@ -184,7 +184,7 @@ struct SessionComposer: View {
             } label: {
                 Image(systemName: "mic.fill")
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.amux.cinnabarDeep)
                     .frame(width: 32, height: 32)
                     .contentShape(Circle())
             }
@@ -198,7 +198,7 @@ struct SessionComposer: View {
             } label: {
                 Image(systemName: "arrow.up")
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(hasPendingSlashCommand ? Color.white : Color.primary)
+                    .foregroundStyle(hasPendingSlashCommand ? Color.amux.mist : Color.amux.onyx)
                     .frame(width: 32, height: 32)
                     .contentShape(Circle())
             }

@@ -1,5 +1,6 @@
 import SwiftUI
 import AMUXCore
+import AMUXSharedUI
 
 struct ArchivedIdeasView: View {
     @Environment(\.dismiss) private var dismiss
@@ -25,7 +26,7 @@ struct ArchivedIdeasView: View {
                                     } label: {
                                         Label("Unarchive", systemImage: "tray.and.arrow.up")
                                     }
-                                    .tint(.blue)
+                                    .tint(Color.amux.cinnabar)
                                 }
                         }
                     }

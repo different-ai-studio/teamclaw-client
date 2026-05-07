@@ -1,4 +1,5 @@
 import SwiftUI
+import AMUXSharedUI
 import SwiftData
 import AMUXCore
 
@@ -56,7 +57,7 @@ public struct WorkspaceManagementView: View {
 
             if let errorMessage {
                 Text(errorMessage)
-                    .font(.caption).foregroundStyle(.red)
+                    .font(.caption).foregroundStyle(Color.amux.cinnabarDeep)
                     .padding(.horizontal, 16).padding(.bottom, 4)
             }
 

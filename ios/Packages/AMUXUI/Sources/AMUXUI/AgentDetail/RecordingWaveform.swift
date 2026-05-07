@@ -1,4 +1,5 @@
 import SwiftUI
+import AMUXSharedUI
 
 struct RecordingWaveform: View {
     /// 0...1 normalized current audio level.
@@ -10,14 +11,14 @@ struct RecordingWaveform: View {
         HStack(spacing: 4) {
             Image(systemName: "waveform")
                 .font(.subheadline)
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.amux.cinnabarDeep)
                 .symbolEffect(.variableColor.iterative.reversing)
             TimelineView(.animation) { context in
                 let t = context.date.timeIntervalSinceReferenceDate
                 HStack(spacing: 3) {
                     ForEach(0..<barCount, id: \.self) { i in
                         Capsule()
-                            .fill(Color.red.opacity(0.85))
+                            .fill(Color.amux.cinnabarDeep.opacity(0.85))
                             .frame(width: 3, height: barHeight(for: i, time: t))
                     }
                 }
@@ -25,7 +26,7 @@ struct RecordingWaveform: View {
             }
             Text("Recording…")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.amux.basalt)
                 .padding(.leading, 6)
             Spacer(minLength: 0)
         }

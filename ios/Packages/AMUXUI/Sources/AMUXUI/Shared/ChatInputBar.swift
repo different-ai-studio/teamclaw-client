@@ -1,4 +1,5 @@
 import SwiftUI
+import AMUXSharedUI
 
 // MARK: - ChatInputBar
 
@@ -130,9 +131,9 @@ public struct ChatInputBar: View {
         } label: {
             Image(systemName: "arrow.up")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.amux.mist)
                 .frame(width: 32, height: 32)
-                .background(canSend ? Color.blue : Color.secondary, in: Circle())
+                .background(canSend ? Color.amux.cinnabar : Color.amux.slate, in: Circle())
         }
         .disabled(!canSend)
         .accessibilityIdentifier("chatInput.send")

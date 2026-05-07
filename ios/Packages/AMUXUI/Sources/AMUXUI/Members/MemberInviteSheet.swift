@@ -1,4 +1,5 @@
 import SwiftUI
+import AMUXSharedUI
 import SwiftData
 import AMUXCore
 
@@ -53,7 +54,7 @@ public struct MemberInviteSheet: View {
                     }
                 } footer: {
                     if let errorMessage {
-                        Text(errorMessage).foregroundStyle(.red)
+                        Text(errorMessage).foregroundStyle(Color.amux.cinnabarDeep)
                     }
                 }
 

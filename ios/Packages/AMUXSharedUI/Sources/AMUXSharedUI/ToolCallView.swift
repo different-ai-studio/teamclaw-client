@@ -118,11 +118,11 @@ public struct ToolCallView: View {
         case "completed":
             Image(systemName: "checkmark.circle.fill")
                 .font(.caption2)
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.amux.sage)
         case "failed":
             Image(systemName: "xmark.circle.fill")
                 .font(.caption2)
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.amux.cinnabarDeep)
         default:
             EmptyView()
         }
@@ -230,11 +230,11 @@ public struct ToolRunSummaryBar: View {
                     if hasFailure {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Color.amux.cinnabar)
                     }
                     Image(systemName: "checkmark.circle.fill")
                         .font(.caption2)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.amux.sage)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)

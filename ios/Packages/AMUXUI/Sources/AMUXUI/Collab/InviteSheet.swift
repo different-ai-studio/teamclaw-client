@@ -1,4 +1,5 @@
 import SwiftUI
+import AMUXSharedUI
 import SwiftData
 import AMUXCore
 
@@ -25,7 +26,7 @@ public struct InviteSheet: View {
                     Spacer()
                     if selectedIds.contains(member.actorId) {
                         Image(systemName: "checkmark")
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(Color.amux.cinnabar)
                     }
                 }
                 .contentShape(Rectangle())
