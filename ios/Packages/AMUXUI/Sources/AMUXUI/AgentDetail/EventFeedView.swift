@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import AMUXCore
 import AMUXSharedUI
 
@@ -11,12 +12,45 @@ public struct EventBubbleView: View {
     let onDeny: ((String) -> Void)?
 
     @Environment(\.horizontalSizeClass) private var sizeClass
+    /// Resolves AgentEvent.senderActorID into a display name. Local user
+    /// renders as "You"; everyone else gets the matching CachedActor row's
+    /// displayName, falling back to the truncated actor id when the
+    /// directory hasn't synced yet.
+    @Query(sort: \CachedActor.displayName) private var cachedActors: [CachedActor]
 
     public init(event: AgentEvent, runtime: Runtime? = nil, onGrant: ((String) -> Void)? = nil, onDeny: ((String) -> Void)? = nil) {
         self.event = event
         self.runtime = runtime
         self.onGrant = onGrant
         self.onDeny = onDeny
+    }
+
+    /// True when this event was produced by an actor other than the
+    /// signed-in user. Drives the "You / @other" label and bubble alignment
+    /// for user-prompt rows.
+    private var isFromOtherUser: Bool {
+        guard let senderID = event.senderActorID, !senderID.isEmpty else { return false }
+        return senderID != currentActorID
+    }
+
+    private var currentActorID: String? {
+        // The detail surface lives inside RootTabView's scope, which
+        // installs the AppOnboardingCoordinator into the environment.
+        // We pull the active actor id directly from there so the bubble
+        // identity question — "did I send this?" — has a single source
+        // of truth that matches the rest of the app.
+        coordinator?.currentContext?.memberActorID
+    }
+
+    @Environment(AppOnboardingCoordinator.self) private var coordinator: AppOnboardingCoordinator?
+
+    private var senderDisplayName: String {
+        guard let senderID = event.senderActorID, !senderID.isEmpty else { return "You" }
+        if senderID == currentActorID { return "You" }
+        if let actor = cachedActors.first(where: { $0.actorId == senderID }) {
+            return actor.displayName
+        }
+        return String(senderID.prefix(8))
     }
 
     /// Display name for the model that produced this event (assistant reply
@@ -62,9 +96,22 @@ public struct EventBubbleView: View {
         }
     }
 
-    // MARK: - User Bubble (Cinnabar, right-aligned)
+    // MARK: - User Bubble
+    //
+    // Local user → right-aligned, Cinnabar-tinted glass with "You" label.
+    // Another collaborator → left-aligned plain glass with their display
+    // name. Mirrors the iMessage convention where outgoing and incoming
+    // bubbles read at opposite edges of the canvas.
 
     private var userBubble: some View {
+        if isFromOtherUser {
+            return AnyView(otherUserBubble)
+        } else {
+            return AnyView(selfUserBubble)
+        }
+    }
+
+    private var selfUserBubble: some View {
         VStack(alignment: .trailing, spacing: 2) {
             Text("You")
                 .font(.caption)
@@ -90,6 +137,32 @@ public struct EventBubbleView: View {
                     .contextMenu {
                         MessageContextMenu(text: event.text ?? "")
                     }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+    }
+
+    private var otherUserBubble: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(senderDisplayName)
+                .font(.caption)
+                .foregroundStyle(Color.amux.basalt)
+                .padding(.leading, 4)
+
+            HStack {
+                Text(event.text ?? "")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.amux.onyx)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .liquidGlass(in: RoundedRectangle(cornerRadius: 18), interactive: false)
+                    .frame(maxWidth: sizeClass == .regular ? 500 : 260, alignment: .leading)
+                    .contextMenu {
+                        MessageContextMenu(text: event.text ?? "")
+                    }
+                Spacer()
             }
         }
         .padding(.horizontal, 16)

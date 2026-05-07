@@ -388,6 +388,11 @@ public final class RuntimeDetailViewModel {
         if !initialPrompt.isEmpty && !events.contains(where: { $0.eventType == "user_prompt" }) {
             let promptEvent = AgentEvent(agentId: scope, sequence: 0, eventType: "user_prompt")
             promptEvent.text = initialPrompt
+            // Initial prompt comes from session.summary or runtime.currentPrompt
+            // — both written by the session creator at create-time. Stamp the
+            // creator so the chat row reads as theirs even before any live
+            // messages arrive.
+            promptEvent.senderActorID = session?.createdBy
             modelContext.insert(promptEvent)
             events.insert(promptEvent, at: 0)
             // insert-at-zero shifts every cached index; cheaper to rebuild
@@ -488,7 +493,7 @@ public final class RuntimeDetailViewModel {
         // so it's visible when the user returns
         if isStreaming, !streamingText.isEmpty, runtime != nil, let ctx = startModelContext {
             let seq = (events.last?.sequence ?? 0) + 1
-            let event = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "output")
+            let event = makeAgentSideEvent(sequence: seq, eventType: "output")
             event.text = streamingText
             event.isComplete = false
             event.model = streamingModel
@@ -542,6 +547,7 @@ public final class RuntimeDetailViewModel {
         let seq = (events.last?.sequence ?? 0) + 1
         let event = AgentEvent(agentId: scope, sequence: seq, eventType: "user_prompt")
         event.text = content
+        event.senderActorID = message.senderActorID.isEmpty ? nil : message.senderActorID
         event.timestamp = message.createdAt > 0
             ? Date(timeIntervalSince1970: TimeInterval(message.createdAt))
             : .now
@@ -550,6 +556,17 @@ public final class RuntimeDetailViewModel {
         try? modelContext.save()
         appendEvent(event)
         recomputeGroups()
+    }
+
+    /// Builds a fresh AgentEvent stamped with the agent actor that produced
+    /// it. ACP events come from the daemon's runtime, so the sender is the
+    /// session's primary agent — used by EventFeedView to render the
+    /// agent's display name above output / thinking bubbles instead of
+    /// always saying "You" or leaving them anonymous.
+    private func makeAgentSideEvent(sequence: Int, eventType: String) -> AgentEvent {
+        let event = makeAgentSideEvent(sequence: sequence, eventType: eventType)
+        event.senderActorID = session?.primaryAgentId
+        return event
     }
 
     /// Applies one ACP event to in-memory + SwiftData state. Returns `true`
@@ -575,7 +592,7 @@ public final class RuntimeDetailViewModel {
                     if let modelStamp { events[idx].model = modelStamp }
                     lastIncompleteOutputIndex = nil
                 } else {
-                    let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "output")
+                    let event = makeAgentSideEvent(sequence: sequence, eventType: "output")
                     event.text = o.text; event.isComplete = true
                     event.model = modelStamp
                     modelContext.insert(event); appendEvent(event)
@@ -603,14 +620,14 @@ public final class RuntimeDetailViewModel {
                 last.text = (last.text ?? "") + t.text
                 if let modelStamp { last.model = modelStamp }
             } else {
-                let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "thinking")
+                let event = makeAgentSideEvent(sequence: sequence, eventType: "thinking")
                 event.text = t.text
                 event.model = modelStamp
                 modelContext.insert(event); appendEvent(event)
             }
             dirty = true
         case .toolUse(let tu):
-            let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "tool_use")
+            let event = makeAgentSideEvent(sequence: sequence, eventType: "tool_use")
             event.toolName = tu.toolName; event.toolId = tu.toolID; event.text = tu.description_p
             modelContext.insert(event); appendEvent(event)
             dirty = true
@@ -619,17 +636,17 @@ public final class RuntimeDetailViewModel {
                 events[idx].success = tr.success
                 events[idx].isComplete = true
             } else {
-                let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "tool_result")
+                let event = makeAgentSideEvent(sequence: sequence, eventType: "tool_result")
                 event.toolId = tr.toolID; event.success = tr.success; event.text = tr.summary
                 modelContext.insert(event); appendEvent(event)
             }
             dirty = true
         case .error(let e):
-            let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "error")
+            let event = makeAgentSideEvent(sequence: sequence, eventType: "error")
             event.text = e.message; modelContext.insert(event); appendEvent(event)
             dirty = true
         case .permissionRequest(let pr):
-            let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "permission_request")
+            let event = makeAgentSideEvent(sequence: sequence, eventType: "permission_request")
             event.toolName = pr.toolName; event.toolId = pr.requestID; event.text = pr.description_p
             modelContext.insert(event); appendEvent(event)
             dirty = true
@@ -646,7 +663,7 @@ public final class RuntimeDetailViewModel {
             if let idx = todoUpdateIndex, idx < events.count, events[idx].eventType == "todo_update" {
                 events[idx].text = text
             } else {
-                let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "todo_update")
+                let event = makeAgentSideEvent(sequence: sequence, eventType: "todo_update")
                 event.text = text
                 modelContext.insert(event); appendEvent(event)
             }
@@ -656,7 +673,7 @@ public final class RuntimeDetailViewModel {
             dirty = true
             if sc.newStatus == .idle {
                 if isStreaming && !streamingText.isEmpty {
-                    let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "output")
+                    let event = makeAgentSideEvent(sequence: sequence, eventType: "output")
                     event.text = streamingText; event.isComplete = true
                     event.model = streamingModel
                     modelContext.insert(event); appendEvent(event)
@@ -701,7 +718,7 @@ public final class RuntimeDetailViewModel {
             // Confirmation: set runtime to active (triggers typing indicator)
             runtime?.status = Int(Amux_AgentStatus.active.rawValue)
         case .promptRejected(let pr):
-            let event = AgentEvent(agentId: eventScopeKey, sequence: sequence, eventType: "error")
+            let event = makeAgentSideEvent(sequence: sequence, eventType: "error")
             event.text = "Rejected: \(pr.reason)"
             appendEvent(event)
             recomputeGroups()
@@ -821,6 +838,7 @@ public final class RuntimeDetailViewModel {
             let event = AgentEvent(agentId: scope, sequence: 0, eventType: eventType)
             event.supabaseMessageId = record.id
             event.text = record.content
+            event.senderActorID = record.senderActorID.isEmpty ? nil : record.senderActorID
             event.timestamp = record.createdAt
             event.isComplete = true
             event.model = record.model
@@ -925,6 +943,7 @@ public final class RuntimeDetailViewModel {
             let seq = (events.last?.sequence ?? 0) + 1
             let userEvent = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "user_prompt")
             userEvent.text = text
+            userEvent.senderActorID = teamclawService.currentHumanActorId
             if let ctx = modelContext ?? startModelContext { ctx.insert(userEvent); try? ctx.save() }
             appendEvent(userEvent)
             recomputeGroups()
@@ -944,6 +963,7 @@ public final class RuntimeDetailViewModel {
             let seq = (events.last?.sequence ?? 0) + 1
             let userEvent = AgentEvent(agentId: eventScopeKey, sequence: seq, eventType: "user_prompt")
             userEvent.text = text
+            userEvent.senderActorID = teamclawService?.currentHumanActorId
             if let ctx = modelContext ?? syncModelContext { ctx.insert(userEvent); try? ctx.save() }
             appendEvent(userEvent)
             recomputeGroups()

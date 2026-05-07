@@ -552,7 +552,58 @@ public final class TeamclawService {
             throw SendMessageError.publishFailed(String(describing: error))
         }
         teamclawLogger.notice("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) publish OK")
+
+        // Persist the human prompt to Supabase so collaborators that
+        // cold-launch the session see a complete history. The daemon only
+        // writes agent replies (see session_manager::emit_agent_message
+        // gating on TurnAggregator::supabase_persistent), so without this
+        // write human-only sessions evaporate the moment a participant
+        // leaves the live subscription.
+        //
+        // Fire-and-forget: failures are logged but don't bubble up because
+        // the MQTT publish has already succeeded — the message reaches every
+        // currently-subscribed collaborator regardless of Supabase reachability.
+        Task { [teamId] in
+            await persistMessageToSupabase(
+                messageID: message.messageID,
+                teamID: teamId,
+                sessionID: sessionId,
+                senderActorID: actorId,
+                content: content,
+                sidPrefix: sidPrefix,
+                msgIdPrefix: msgIdPrefix
+            )
+        }
+
         return message.messageID
+    }
+
+    private func persistMessageToSupabase(
+        messageID: String,
+        teamID: String,
+        sessionID: String,
+        senderActorID: String,
+        content: String,
+        sidPrefix: String,
+        msgIdPrefix: String
+    ) async {
+        guard let repo = try? SupabaseMessagesRepository() else {
+            teamclawLogger.warning("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) supabase persist skipped: repo init failed")
+            return
+        }
+        do {
+            try await repo.insert(MessageInsertInput(
+                id: messageID,
+                teamID: teamID,
+                sessionID: sessionID,
+                senderActorID: senderActorID,
+                kind: "text",
+                content: content
+            ))
+            teamclawLogger.notice("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) supabase persist OK")
+        } catch {
+            teamclawLogger.warning("sendMessage[\(sidPrefix, privacy: .public)] msgId=\(msgIdPrefix, privacy: .public) supabase persist FAILED: \(String(describing: error), privacy: .public)")
+        }
     }
 
     public func makeCreateSessionRequest(

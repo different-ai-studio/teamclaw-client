@@ -22,6 +22,12 @@ public final class AgentEvent {
     /// later cold-resume of the same session doesn't insert a second copy.
     /// nil for events created from MQTT live deltas / daemon history.
     public var supabaseMessageId: String?
+    /// Actor id of the user/agent who produced this event. Set by every
+    /// insert path (local sendPrompt, live MQTT message, Supabase seed,
+    /// daemon ACP fanout) so the chat feed can render real sender names
+    /// instead of always saying "You". `nil` only for legacy rows
+    /// inserted before this column existed.
+    public var senderActorID: String?
 
     public init(agentId: String, sequence: Int, eventType: String) {
         self.id = UUID().uuidString
